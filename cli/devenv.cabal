@@ -1,0 +1,139 @@
+cabal-version:   3.4
+name:            devenv
+version:         0.1.0.0
+
+-- synopsis:
+-- description:
+license:         BSD-3-Clause
+author:          jhr
+maintainer:      CHANGEME
+
+-- copyright:
+build-type:      Simple
+extra-doc-files: CHANGELOG.md
+
+common shared
+  ghc-options:
+    -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns
+    -Wmissing-deriving-strategies -Wunused-foralls -Wunused-foralls
+    -Wno-missing-deriving-strategies -fprint-explicit-foralls
+    -fprint-explicit-kinds
+
+  default-extensions:
+    NoStarIsType
+    BangPatterns
+    ConstraintKinds
+    DataKinds
+    DefaultSignatures
+    DeriveAnyClass
+    DeriveDataTypeable
+    DeriveFoldable
+    DeriveFunctor
+    DeriveGeneric
+    DeriveLift
+    DeriveTraversable
+    DerivingStrategies
+    DerivingVia
+    ExistentialQuantification
+    ExplicitForAll
+    ExplicitNamespaces
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    GADTs
+    GeneralizedNewtypeDeriving
+    InstanceSigs
+    KindSignatures
+    LambdaCase
+    MultiParamTypeClasses
+    MultiWayIf
+    NamedFieldPuns
+    NumericUnderscores
+    OverloadedStrings
+    PostfixOperators
+    RankNTypes
+    RecordWildCards
+    ScopedTypeVariables
+    StandaloneDeriving
+    StandaloneKindSignatures
+    TupleSections
+    TypeApplications
+    TypeFamilies
+    TypeOperators
+    ViewPatterns
+
+  -- 9.2:
+  -- OverloadedRecordDot
+  -- NoFieldSelectors
+
+  -- other-modules:
+  -- other-extensions:
+  mixins:
+    base hiding (Prelude),
+    relude (Relude as Prelude, Relude.Container.One),
+    relude
+
+  build-depends:
+    , base    >=4.15 && <5
+    , relude  >=1.0
+
+  default-language:   Haskell2010
+
+common windows
+  other-modules: Windows
+
+common linux
+  other-modules: Linux
+
+common darwin
+  other-modules: Darwin
+
+executable devenv
+  import:         shared
+
+  if os(windows)
+    import:        windows
+    build-depends: Win32
+
+  -- ghc-options:   -optl-mwindows
+
+  if os(linux)
+    import: linux
+
+  if os(osx)
+    import: darwin
+
+  main-is:        Main.hs
+  hs-source-dirs: src
+  other-modules:
+    Devenv
+    Linux
+    Parser
+    Types
+    Util
+    Windows
+
+  build-depends:
+    , async
+    , attoparsec
+    , bytestring
+    , cleff
+    , directory             >=1.3.7.0
+    , monad-logger
+    , optparse-applicative
+    , stm
+    , template-haskell
+    , text
+    , time
+    , typed-process
+    , unliftio
+
+  --    , aeson
+  -- , retry
+  --    , path
+  --   , path-io
+  -- , free
+  -- , plucky
+  -- , microlens
+  -- , microlens-th
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N

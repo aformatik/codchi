@@ -1,0 +1,31 @@
+steps:
+  - trailing_whitespace: {}
+
+  - module_header:
+      indent: 4
+      sort: true
+      separate_lists: true
+      break_where: exports
+      open_bracket: next_line
+
+  - records:
+      equals: "indent 4"
+      first_field: "indent 4"
+      field_comment: 4
+      deriving: 2
+      via: "indent 2"
+      sort_deriving: true
+      break_single_constructors: false
+
+  - simple_align: {}
+
+  - imports:
+      align: file
+      # pad_module_names: false
+      # group_imports: true
+      # post_qualify: true
+
+  - language_pragmas: {}
+
+columns: 100
+cabal: true

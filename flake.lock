@@ -1,0 +1,99 @@
+{
+  "nodes": {
+    "docker-nixpkgs": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1678089139,
+        "narHash": "sha256-cK0RDcxR4eWMrdZIcqNVqnjo9k2LwVmNZO3qj1ctDXU=",
+        "owner": "nix-community",
+        "repo": "docker-nixpkgs",
+        "rev": "2205fb4968adf683324e6d0401b74b9d250d8f56",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "docker-nixpkgs",
+        "type": "github"
+      }
+    },
+    "flake-compat": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1673956053,
+        "narHash": "sha256-4gtG9iQuiKITOjNQQeQIpoIB6b16fm+504Ch3sNKLd8=",
+        "owner": "edolstra",
+        "repo": "flake-compat",
+        "rev": "35bb57c0c8d8b62bbfd284272c928ceb64ddbde9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "edolstra",
+        "repo": "flake-compat",
+        "type": "github"
+      }
+    },
+    "flake-utils": {
+      "locked": {
+        "lastModified": 1678901627,
+        "narHash": "sha256-U02riOqrKKzwjsxc/400XnElV+UtPUQWpANPlyazjH0=",
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "rev": "93a2b84fc4b70d9e089d029deacc3583435c2ed6",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "type": "github"
+      }
+    },
+    "nixos-wsl": {
+      "inputs": {
+        "flake-compat": "flake-compat",
+        "flake-utils": "flake-utils",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1683543410,
+        "narHash": "sha256-YCa1iZaKwVEQCAv0v6I7How4dRRY4qmxRAij7Z3Pazs=",
+        "owner": "htngr",
+        "repo": "NixOS-WSL",
+        "rev": "7f5c368e2f3c7f96cb65982023630eb17d133a98",
+        "type": "github"
+      },
+      "original": {
+        "owner": "htngr",
+        "ref": "no-store",
+        "repo": "NixOS-WSL",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1683928319,
+        "narHash": "sha256-maz0DRKixJVcNRMiAMWlJniiF8IuQ+WbfmlJJ8D+jfM=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "9656e85a15a0fe67847ee8cdb99a20d8df499962",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-22.11",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "docker-nixpkgs": "docker-nixpkgs",
+        "nixos-wsl": "nixos-wsl",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

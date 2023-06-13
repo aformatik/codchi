@@ -1,0 +1,13 @@
+diff -Naur systemd-stable-251.8.orig/src/core/dbus-unit.c systemd-stable-251.8/src/core/dbus-unit.c
+--- systemd-stable-251.8.orig/src/core/dbus-unit.c      2022-12-13 23:27:56.133926327 +0100
++++ systemd-stable-251.8/src/core/dbus-unit.c   2022-12-13 23:39:03.772622555 +0100
+@@ -1288,6 +1288,8 @@
+                  * “cgroup.procs” in a threaded domain cgroup contains the PIDs of all processes in
+                  * the subtree and is not readable in the subtree proper. */
+                 r = cg_read_pid(f, &pid);
++                if (r == -EIO)
++                        continue;
+                 if (IN_SET(r, 0, -EOPNOTSUPP))
+                         break;
+                 if (r < 0)
+
