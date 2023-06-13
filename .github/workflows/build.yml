@@ -1,0 +1,137 @@
+name: build
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    defaults:
+      run:
+        working-directory: cli
+    name: build_${{ matrix.ghc-version }}_${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+        ghc-version: ['9.2']
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up GHC ${{ matrix.ghc-version }}
+        uses: haskell/actions/setup@v2
+        id: setup
+        with:
+          ghc-version: ${{ matrix.ghc-version }}
+          # Defaults, added for clarity:
+          # cabal-version: 'latest'
+          # cabal-update: true
+
+      - name: Configure the build
+        run: |
+          cabal configure --enable-tests --enable-benchmarks --disable-documentation
+          cabal build --dry-run
+        # The last step generates dist-newstyle/cache/plan.json for the cache key.
+
+      - name: Restore cached dependencies
+        uses: actions/cache/restore@v3
+        id: cache
+        env:
+          key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-cabal-${{ steps.setup.outputs.cabal-version }}
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: ${{ env.key }}-plan-${{ hashFiles('**/plan.json') }}
+          restore-keys: ${{ env.key }}-
+
+      - name: Install dependencies
+        run: cabal build all --only-dependencies
+
+      # Cache dependencies already here, so that we do not have to rebuild them should the subsequent steps fail.
+      - name: Save cached dependencies
+        uses: actions/cache/save@v3
+        # Caches are immutable, trying to save with the same key would error.
+        if: ${{ steps.cache.outputs.cache-primary-key != steps.cache.outputs.cache-matched-key }}
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+      - name: Build
+        run: |
+          Set-PSDebug -Trace 1
+          cabal build all
+          mv "$((Get-ChildItem -Filter devenv.exe -Recurse).fullname)" ..
+
+      - name: Temporarily save artifacts
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v3
+        with:
+          name: devenv.exe
+          path: devenv.exe
+          retention-days: 1
+          if-no-files-found: error
+  msix:
+    name: Package MSIX package
+    runs-on: windows-latest
+    needs: build
+    permissions:
+      contents: write
+    env:
+      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'aformatik/nixos-devenv-packaging'
+      - name: Retrieve artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: devenv.exe
+          path: msix
+
+      - name: import windows certificate
+        run: |
+          New-Item -ItemType directory -Path certificate
+          Set-Content -Path certificate/tempCert.txt -Value $env:WINDOWS_CERTIFICATE
+          certutil -decode certificate/tempCert.txt certificate/certificate.pfx
+          Remove-Item -path certificate -include tempCert.txt
+          Import-PfxCertificate -FilePath certificate/certificate.pfx -CertStoreLocation Cert:\CurrentUser\My -Password (ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText)
+
+      - name: Parse Windows Version
+        uses: frabert/replace-string-action@v2
+        id: winver
+        with:
+          string: '${{ github.ref_name }}'
+          pattern: '^v(\d+).(\d+).(\d+)-?.*$'
+          replace-with: '$1.$2.$3.0'
+      - name: Insert version ${{ github.ref_name }} / ${{ steps.winver.outputs.replaced }}
+        env:
+          VERSION: ${{ github.ref_name }}
+          WINVER: ${{ steps.winver.outputs.replaced }}
+        shell: bash
+        run: |
+          for f in msix/{devenv.AppInstaller,AppxManifest.xml}; do
+              sed -i \
+                  "s/@VERSION@/$WINVER/g
+                   s/@VERSION_TAG@/$VERSION/g" \
+                  $f
+          done
+      - name: MakeAppx
+        run: |
+          & "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\makeappx.exe" pack /o /d .\msix\ /p devenv.msix
+
+      - name: sign devenv.msix
+        run: |
+          & "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\signtool.exe" sign -v -debug -n "nixos-devenv" -fd SHA256 -tr http://timestamp.digicert.com -td sha256 .\devenv.msix
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            devenv.msix
+            msix/devenv.AppInstaller
+            devenv.crt
