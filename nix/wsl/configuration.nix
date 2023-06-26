@@ -10,6 +10,7 @@
       useRemoteStore = true;
       tarball.includeConfig = false;
       # interop.register = true;
+      wslConf.user = lib.mkDefault config.wsl.defaultUser;
     };
 
     # nixpkgs.overlays = [

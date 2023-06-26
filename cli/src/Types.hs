@@ -18,6 +18,7 @@ module Types
     , UserError (..)
     , _DEVENV_APP_NAME
     , _DEVENV_CONTROLLER
+    , _DEVENV_CONTROLLER_DIR
     , _DEVENV_INSTANCE_PREFIX
     , _flakeMetadata
     , _flakeURL
@@ -29,9 +30,9 @@ module Types
     , mkNTPath
     , mkUnixPath
     , parse_
+    , rethrowPanic
     , toNTPath
     , toUnixPath
-    , rethrowPanic
     ) where
 
 import           Cleff
@@ -44,9 +45,10 @@ import qualified Data.Text            as T
 import qualified Relude.Unsafe        as Unsafe
 import           Util
 
-_DEVENV_INSTANCE_PREFIX, _DEVENV_CONTROLLER, _DEVENV_APP_NAME :: IsString s => Semigroup s => s
+_DEVENV_INSTANCE_PREFIX, _DEVENV_CONTROLLER_DIR, _DEVENV_CONTROLLER, _DEVENV_APP_NAME :: IsString s => Semigroup s => s
 _DEVENV_APP_NAME = "devenv"
 _DEVENV_CONTROLLER = _DEVENV_APP_NAME <> "_controller"
+_DEVENV_CONTROLLER_DIR = "controller"
 _DEVENV_INSTANCE_PREFIX = _DEVENV_APP_NAME <> "_instance_"
 
 type NixExpr = Text

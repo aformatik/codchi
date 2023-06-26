@@ -2,7 +2,7 @@
   description = "Development Environment as Code";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     docker-nixpkgs = { url = "github:nix-community/docker-nixpkgs"; flake = false; };
     # nixos-wsl.url = "path:/home/afo/docs/contrib/NixOS-WSL";
@@ -92,6 +92,7 @@
           # fourmolu
           stylish-haskell
           pkgs.zlib
+          pkgs.helix
         ];
       };
 

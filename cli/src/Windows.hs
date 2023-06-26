@@ -72,11 +72,6 @@ newtype ShellException
   deriving (Show)
   deriving anyclass (Exception)
 
--- -- | UTF16 / UTF8 Decoding error
--- data DecodeException = DecodeException Shell String
---   deriving (Show)
---   deriving anyclass (Exception)
-
 -- | Somethings wrong with controller
 newtype ControllerException
     = ControllerException String
@@ -86,98 +81,98 @@ newtype ControllerException
 
 runDevevIO :: Interpreter Devenv (Logger : IOE : Errors [DriverException, UserError, Panic])
 runDevevIO = interpret $ \case
-        GetStatus -> getControllerStatus >>= \case
-            WSLNotInstalledOrNeedsUpdate -> throwError $ DriverException $
-                ControllerException "WSL is not installed or needs an update"
-            ControllerNotInstalled       -> return DevenvNotInstalled
-            ControllerInstalled status   -> return $ DevenvInstalled status
+    GetStatus -> getControllerStatus >>= \case
+        WSLNotInstalledOrNeedsUpdate -> throwError $ DriverException $
+            ControllerException "WSL is not installed or needs an update"
+        ControllerNotInstalled       -> return DevenvNotInstalled
+        ControllerInstalled status   -> return $ DevenvInstalled status
 
-        InitCtrl ->
-            liftIO (getXdgDirectoryList XdgDataDirs >>= flip findFile "devenv\\controller.tar.gz") >>= \case
-                Nothing ->
-                    throwError $ Panic $ UnrecoverableError "Couldn't find rootfs for devenv controller"
-                Just rootfs -> do
-                    ctrlDir <- liftIO $ getOrCreateXdgDir XdgState _DEVENV_CONTROLLER
-                    let ctrlFile = toNTPath $ 
-                            ctrlDir `joinPaths` fromPathSegments ["controller.tar.gz"]
-                    liftIO $ copyFile rootfs (toString ctrlFile)
+    InitCtrl ->
+        liftIO (getXdgDirectoryList XdgDataDirs >>= flip findFile "devenv\\controller.tar.gz") >>= \case
+            Nothing ->
+                throwError $ Panic $ UnrecoverableError "Couldn't find rootfs for devenv controller"
+            Just rootfs -> do
+                ctrlDir <- liftIO $ getOrCreateXdgDir XdgState _DEVENV_CONTROLLER_DIR
+                let ctrlFile = toNTPath $ 
+                        ctrlDir `joinPaths` fromPathSegments ["controller.tar.gz"]
+                liftIO $ copyFile rootfs (toString ctrlFile)
 
-                    void $ rethrowAll $ readProcess_ $
-                        wsl'exeCmd [ "--import"
-                                   , _DEVENV_CONTROLLER
-                                   , toNTPath ctrlDir
-                                   , ctrlFile
-                                   ]
+                void $ rethrowAll $ readProcess_ $
+                    wsl'exeCmd [ "--import"
+                               , _DEVENV_CONTROLLER
+                               , toNTPath ctrlDir
+                               , ctrlFile
+                               ]
 
 
-        Start alreadyRunning -> runDevevIO $ rethrowAll $ mainLoop alreadyRunning
+    Start alreadyRunning -> runDevevIO $ rethrowAll $ mainLoop alreadyRunning
 
-        ListInstances -> do
-            instances <- listWSLInstances
-            return
-                [ DevenvInstance devenvName _wslStatus
-                | WSLInstance{..} <- instances
-                , devenvName <- maybeToList $
-                    rightToMaybe . parse =<< Text.stripPrefix _DEVENV_INSTANCE_PREFIX _wslName
-                ]
+    ListInstances -> do
+        instances <- listWSLInstances
+        return
+            [ DevenvInstance devenvName _wslStatus
+            | WSLInstance{..} <- instances
+            , devenvName <- maybeToList $
+                rightToMaybe . parse =<< Text.stripPrefix _DEVENV_INSTANCE_PREFIX _wslName
+            ]
 
-        RunCtrlNixCmd printLog cmd -> rethrowAll $ do
-            let printWSL Win _   = pass
-                printWSL WSL txt = printOutIO txt
-                rp | printLog  = readProcessWith printWSL printWSL
-                   | otherwise = readProcess
-            result <- rp $ controllerCmd cmd
+    RunCtrlNixCmd printLog cmd -> rethrowAll $ do
+        let printWSL Win _   = pass
+            printWSL WSL txt = printOutIO txt
+            rp | printLog  = readProcessWith printWSL printWSL
+               | otherwise = readProcess
+        result <- rp $ controllerCmd cmd
 
-            case result of
-                Left err ->
-                    case Text.splitOn "error: " err of
-                        [_, e] | not (Text.null e) -> return $ Left e
-                        _                          -> throwError $ ShellException err
-                Right out -> return $ Right out
+        case result of
+            Left err ->
+                case Text.splitOn "error: " err of
+                    [_, e] | not (Text.null e) -> return $ Left e
+                    _                          -> throwError $ ShellException err
+            Right out -> return $ Right out
 
-        RunInstanceCmd printLog inst cmd -> rethrowAll $ do
-            let printWSL Win _   = pass
-                printWSL WSL txt = printOutIO txt
-                rp | printLog  = readProcessWith printWSL printWSL
-                   | otherwise = readProcess
-            result <- rp $ wslCmd (getInstanceNameWithPrefix inst) cmd
+    RunInstanceCmd printLog inst cmd -> rethrowAll $ do
+        let printWSL Win _   = pass
+            printWSL WSL txt = printOutIO txt
+            rp | printLog  = readProcessWith printWSL printWSL
+               | otherwise = readProcess
+        result <- rp $ wslCmd (getInstanceNameWithPrefix inst) cmd
 
-            case result of
-                Left err  -> return $ Left err
-                Right out -> return $ Right out
+        case result of
+            Left err  -> return $ Left err
+            Right out -> return $ Right out
 
-        InstallRootfs name rootfsPath -> do
+    InstallRootfs name rootfsPath -> do
 
-            instanceDir <- liftIO $
-                getOrCreateXdgDir XdgState $
-                    "instances" `joinPaths` mkNTPath (getInstanceName name)
+        instanceDir <- liftIO $
+            getOrCreateXdgDir XdgState $
+                "instances" `joinPaths` mkNTPath (getInstanceName name)
 
-            putTextLn $ "Installing " <> show (getInstanceName name) <> " from " <> toText rootfsPath
+        putTextLn $ "Installing " <> show (getInstanceName name) <> " from " <> toText rootfsPath
 
-            void $ rethrowAll $ readProcess_ $
-                wsl'exeCmd [ "--import"
-                           , getInstanceNameWithPrefix name
-                           , toNTPath instanceDir
-                           , toText rootfsPath
-                           ]
+        void $ rethrowAll $ readProcess_ $
+            wsl'exeCmd [ "--import"
+                       , getInstanceNameWithPrefix name
+                       , toNTPath instanceDir
+                       , toText rootfsPath
+                       ]
 
-        UninstallInstance name -> do
-            putTextLn $ "Uninstalling " <> getInstanceName name
-            void $ rethrowAll $ readProcess_ $
-                wsl'exeCmd [ "--unregister" , getInstanceNameWithPrefix name ]
+    UninstallInstance name -> do
+        putTextLn $ "Uninstalling " <> getInstanceName name
+        void $ rethrowAll $ readProcess_ $
+            wsl'exeCmd [ "--unregister" , getInstanceNameWithPrefix name ]
 
-        RunInstance i -> do
-            Proc.runProcess_ $ Proc.setStdin (Proc.useHandleOpen stdin)
-                             $ Proc.setStdout (Proc.useHandleOpen stdout)
-                             $ Proc.setStderr (Proc.useHandleOpen stderr)
-                             $ wsl'exeCmd [ "-d", getInstanceNameWithPrefix $ _name i ]
+    RunInstance i -> do
+        Proc.runProcess_ $ Proc.setStdin (Proc.useHandleOpen stdin)
+                         $ Proc.setStdout (Proc.useHandleOpen stdout)
+                         $ Proc.setStderr (Proc.useHandleOpen stderr)
+                         $ wsl'exeCmd [ "-d", getInstanceNameWithPrefix $ _name i ]
 
-        GetDevenvModule -> return "devenv-wsl"
-        GetPath dirType s -> toString . toNTPath . (`joinPaths` s)
-            <$> case dirType of
-                DirCtrl   -> return $ getWSLInstanceDir _DEVENV_CONTROLLER
-                DirState  -> getOrCreateXdgDir XdgState ""
-                DirConfig -> getOrCreateXdgDir XdgConfig ""
+    GetDevenvModule -> return "devenv-wsl"
+    GetPath dirType s -> toString . toNTPath . (`joinPaths` s)
+        <$> case dirType of
+            DirCtrl   -> return $ getWSLInstanceDir _DEVENV_CONTROLLER
+            DirState  -> getOrCreateXdgDir XdgState ""
+            DirConfig -> getOrCreateXdgDir XdgConfig ""
 
 mainLoop :: [IOE, Error ShellException, Error Panic, Logger, Devenv] :>> es => Bool -> Eff es ()
 mainLoop _alreadyRunning = do
