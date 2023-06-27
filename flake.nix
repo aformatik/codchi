@@ -2,11 +2,11 @@
   description = "Development Environment as Code";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
 
     docker-nixpkgs = { url = "github:nix-community/docker-nixpkgs"; flake = false; };
     # nixos-wsl.url = "path:/home/afo/docs/contrib/NixOS-WSL";
-    nixos-wsl.url = "github:htngr/NixOS-WSL/no-store";
+    nixos-wsl.url = "github:aformatik/NixOS-WSL";
     nixos-wsl.inputs.nixpkgs.follows = "nixpkgs";
   };
 
@@ -64,7 +64,7 @@
           root = ./cli;
           cabal2nixOptions = "--benchmark";
         };
-        controller-rootfs = pkgs.callPackage ./nix/nix-static.nix { };
+        controller-rootfs = pkgs.callPackage ./nix/wsl/controller.nix { };
 
         # wsld = pkgs.callPackage ./nix/wsl/wsld.nix { };
 

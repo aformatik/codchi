@@ -1,4 +1,4 @@
-[![build](https://github.com/aformatik/NixOS-Devenv/actions/workflows/build.yml/badge.svg)](https://github.com/aformatik/NixOS-Devenv/actions/workflows/build.yml)
+[![build](https://github.com/aformatik/NixOS-Devenv/actions/workflows/windows.yml/badge.svg)](https://github.com/aformatik/NixOS-Devenv/actions/workflows/windows.yml)
 
 # Installation
 

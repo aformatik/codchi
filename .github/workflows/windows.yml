@@ -1,4 +1,4 @@
-name: build
+name: build-windows
 on:
   push:
     tags:
@@ -8,32 +8,22 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build-windows:
     defaults:
       run:
         working-directory: cli
-    name: build_${{ matrix.ghc-version }}_${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest]
-        ghc-version: ['9.2']
-
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v3
-
-      - name: Set up GHC ${{ matrix.ghc-version }}
-        uses: haskell/actions/setup@v2
+      - uses: haskell/actions/setup@v2
         id: setup
         with:
-          ghc-version: ${{ matrix.ghc-version }}
+          ghc-version: 9.2
           # Defaults, added for clarity:
           # cabal-version: 'latest'
           # cabal-update: true
 
-      - name: Configure the build
-        run: |
+      - run: |
           cabal configure --enable-tests --enable-benchmarks --disable-documentation
           cabal build --dry-run
         # The last step generates dist-newstyle/cache/plan.json for the cache key.
@@ -45,15 +35,14 @@ jobs:
           key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-cabal-${{ steps.setup.outputs.cabal-version }}
         with:
           path: ${{ steps.setup.outputs.cabal-store }}
-          key: ${{ env.key }}-plan-${{ hashFiles('**/plan.json') }}
-          restore-keys: ${{ env.key }}-
+          key: ${{ env.key }}
+          restore-keys: ${{ env.key }}
 
       - name: Install dependencies
         run: cabal build all --only-dependencies
 
       # Cache dependencies already here, so that we do not have to rebuild them should the subsequent steps fail.
-      - name: Save cached dependencies
-        uses: actions/cache/save@v3
+      - uses: actions/cache/save@v3
         # Caches are immutable, trying to save with the same key would error.
         if: ${{ steps.cache.outputs.cache-primary-key != steps.cache.outputs.cache-matched-key }}
         with:
@@ -67,7 +56,6 @@ jobs:
           mv "$((Get-ChildItem -Filter devenv.exe -Recurse).fullname)" ..
 
       - name: Temporarily save artifacts
-        if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v3
         with:
           name: devenv.exe
@@ -81,6 +69,7 @@ jobs:
     - uses: cachix/install-nix-action@v22
       with:
         github_access_token: ${{ secrets.GITHUB_TOKEN }}
+    - uses: DeterminateSystems/magic-nix-cache-action@main
     - uses: cachix/cachix-action@v12
       with:
         name: nixos-devenv

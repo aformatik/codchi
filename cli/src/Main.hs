@@ -79,7 +79,7 @@ devenv = \case
             writeFileText instanceFlake $ mkNixFlake name (addNamesFromURL flakes) devenvModule
 
         let flakePath = "/instances/" <> getInstanceName name
-            drvPath = "nixosConfigurations.default.config.system.build.systemd-tarball"
+            drvPath = "nixosConfigurations.default.config.system.build.devenv.tarball"
             updateCmd = "nix flake update " <> flakePath
             -- impure because we need pkgs.replaceDependency
             buildCmd = "nix build --impure --print-out-paths --no-link " <> flakePath <> "#" <> drvPath
@@ -91,7 +91,7 @@ devenv = \case
                 =<< runCtrlNixCmd True buildCmd
 
         rootfsFile <- getPath DirCtrl $
-            unStorePath drv `joinPaths` fromPathSegments ["tarball", "nixos-wsl-x86_64-linux.tar.gz" ]
+            unStorePath drv `joinPaths` fromPathSegments ["tarball", "devenv-x86_64-linux.tar"]
 
         unlessM (liftIO $ doesFileExist rootfsFile) $
             throwError $ Panic $ NixError $
@@ -170,8 +170,10 @@ mkNixFlake instanceName inputs devenvModule = unlines
     , "    __devenv.url = \"gitlab:afojhr/nixos-devenv\";"
     , forEachUnline uniqueInputs $ \fl ->
       "    " <> _flakeMetadata fl <> ".url = \"" <> _flakeURL fl <> "\";"
-    , optionalStr (listToMaybe inputs) $ \fl ->
-      "    nixpkgs.follows = \"" <> _flakeMetadata fl <> "/nixpkgs\";"
+    -- TODO optionally follow nixpkgs of user flake
+    -- , optionalStr (listToMaybe inputs) $ \fl ->
+    --   "    nixpkgs.follows = \"" <> _flakeMetadata fl <> "/nixpkgs\";"
+    , "    nixpkgs.follows = \"devenv/nixpkgs\";"
     , "  };"
     , "  outputs = inputs: {"
     , "    nixosConfigurations.default = inputs.nixpkgs.lib.nixosSystem {"
@@ -189,7 +191,7 @@ mkNixFlake instanceName inputs devenvModule = unlines
 
     where
         forEachUnline xs f = unlines $ map f xs
-        optionalStr may f = maybe mempty f may
+        -- optionalStr may f = maybe mempty f may
 
         uniqueInputs = nubBy (\a b -> _flakeMetadata a == _flakeMetadata b) inputs
 

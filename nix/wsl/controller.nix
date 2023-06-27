@@ -70,8 +70,8 @@ runCommandLocal "controller-rootfs"
     (concatStringsSep "\n")
   ]}
 
-  echo 'substituters = https://cache.nixos.org/ https://nixos-devenv.cachix.org' > etc/nix/nix.conf
-  echo 'trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nixos-devenv.cachix.org-1:TfcIbSCGLCufAt9UCxzBTi3ekrzgI3HAHX73VWpByoE=' > etc/nix/nix.conf
+  echo 'substituters = https://cache.nixos.org/ https://nixos-devenv.cachix.org' >> etc/nix/nix.conf
+  echo 'trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nixos-devenv.cachix.org-1:TfcIbSCGLCufAt9UCxzBTi3ekrzgI3HAHX73VWpByoE=' >> etc/nix/nix.conf
 
   tar --sort=name --mtime='@1' --owner=0 --group=0 --numeric-owner -c * | ${compressCommand} > $out/rootfs.tar${extension}
 ''

@@ -83,7 +83,10 @@ runDevevIO :: Interpreter Devenv (Logger : IOE : Errors [DriverException, UserEr
 runDevevIO = interpret $ \case
     GetStatus -> getControllerStatus >>= \case
         WSLNotInstalledOrNeedsUpdate -> throwError $ DriverException $
-            ControllerException "WSL is not installed or needs an update"
+            ControllerException $ "WSL is not installed or needs an update.\r\n" <>
+                "Please run 'wsl --install --web-download --no-distribution' or " <>
+                "download the latest version from 'https://github.com/microsoft/WSL/releases'.\r\n" <>
+                "This will require admin privileges and also restarting your computer."
         ControllerNotInstalled       -> return DevenvNotInstalled
         ControllerInstalled status   -> return $ DevenvInstalled status
 
@@ -451,17 +454,17 @@ getControllerStatus =
         -- in later versions)
         Left _ -> return WSLNotInstalledOrNeedsUpdate
         Right _ -> readProcess "wsl.exe -l -v" >>= \case
-                -- WSL outputs an error message to stdout if no distribution is
-                -- installed... We assume that if there is another error, there
-                -- will be an error message
-                Left err | Text.null err -> return ControllerNotInstalled
-                Left err -> throwError $ Panic $ UnrecoverableError $ logTraceId "wsl -l -v"  err
                 Right out -> do
                     instances <- either (throwError . Panic . ParseException) return $
                         parse @[WSLInstance] out
                     case find ((== _DEVENV_CONTROLLER) . _wslName) instances of
                         Nothing     -> return ControllerNotInstalled
                         Just status -> return $ ControllerInstalled (_wslStatus status)
+                -- WSL outputs an error message to stdout if no distribution is
+                -- installed... We assume that if there is another error, there
+                -- will be an error message
+                Left err | Text.null err -> return ControllerNotInstalled
+                Left err -> throwError $ Panic $ UnrecoverableError $ logTraceId "wsl -l -v" err
 
 
 getWSLInstanceDir :: Text -> Path Abs

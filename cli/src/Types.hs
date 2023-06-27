@@ -70,6 +70,7 @@ data DevenvFlake meta = DevenvFlake
     { _flakeURL      :: Text
     , _moduleName    :: Text
     , _flakeMetadata :: meta
+        -- ^ Can be input name in flake.nix
     }
   deriving (Eq, Show)
 

@@ -1,20 +1,12 @@
 { inputs, ... }:
-{ config, pkgs, lib, ... }: {
+{ config, pkgs, ... }: {
 
-  imports = [ inputs.nixos-wsl.nixosModules.wsl ];
+  imports = [ 
+    inputs.nixos-wsl.nixosModules.default
+    ./tarball.nix
+  ];
 
   config = {
-    wsl = {
-      enable = true;
-      nativeSystemd = true;
-      useRemoteStore = true;
-      tarball.includeConfig = false;
-      # interop.register = true;
-      wslConf.user = lib.mkDefault config.wsl.defaultUser;
-    };
-
-    # nixpkgs.overlays = [
-    # ];
 
     systemd.package = pkgs.systemd.overrideAttrs ({ patches, ... }: {
       patches = patches ++ [
