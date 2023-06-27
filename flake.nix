@@ -15,9 +15,7 @@
       system = "x86_64-linux";
       pkgs = import nixpkgs {
         inherit system;
-        overlays = [
-          (import "${inputs.docker-nixpkgs}/overlay.nix")
-        ];
+        overlays = [ ];
         config.allowBroken = true;
       };
 
@@ -38,7 +36,7 @@
       exampleSystems = mapAttrs
         (_: module: nixosSystem {
           inherit system;
-          modules = [ self.nixosModules.devenv-wsl module ];
+          modules = [ self.nixosModules.devenv-wsl module { devenv.instance.name = "example"; } ];
         })
         exampleModules;
     in
@@ -58,13 +56,13 @@
       nixosConfigurations = exampleSystems;
       templates = exampleTemplates;
 
-      packages.${system} = {
+      packages.${system} = rec {
         default = pkgs.haskellPackages.developPackage {
           name = "CHANGEME";
           root = ./cli;
           cabal2nixOptions = "--benchmark";
         };
-        controller-rootfs = pkgs.callPackage ./nix/wsl/controller.nix { };
+        controller-rootfs = pkgs.callPackage ./nix/controller { };
 
         # wsld = pkgs.callPackage ./nix/wsl/wsld.nix { };
 
@@ -72,6 +70,8 @@
           let
             buildInputs = map (drv: "${drv}") [
               nixosConfigurations.base.config.system.build.toplevel
+              controller-rootfs.passthru.createContents
+              controller-rootfs
             ];
           in
           pkgs.runCommandLocal "populate-cache" { } ''
@@ -95,6 +95,8 @@
           pkgs.helix
         ];
       };
+
+      passthru.${system} = { inherit pkgs; };
 
     };
 }

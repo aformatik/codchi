@@ -6,15 +6,21 @@
   ];
 
   options.devenv = {
-    user = lib.mkOption {
+    defaultUser = lib.mkOption {
       type = lib.types.str;
+      internal = true;
       default = "nixos";
-      description = "The name of the default user";
+    };
+    instance = {
+      name = lib.mkOption {
+        type = lib.types.str;
+        internal = true;
+      };
     };
   };
 
   config = {
-    users.users.${config.devenv.user} = {
+    users.users.${config.devenv.defaultUser} = {
       isNormalUser = true;
       uid = 1000;
       extraGroups = [ "wheel" ];

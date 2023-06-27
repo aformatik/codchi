@@ -4,7 +4,6 @@ module Windows
     ( runDevevIO
     ) where
 
-
 #ifdef mingw32_HOST_OS
 import           Graphics.Win32
 import           System.Win32.Console.CtrlHandler
@@ -30,15 +29,16 @@ import           Data.Char                        (isSpace)
 import qualified Data.Text                        as Text
 import qualified Data.Text.Lazy                   as LText
 
+import           Control.Concurrent               (threadDelay)
 import           Control.Concurrent.Async
 import           Control.Concurrent.STM           (dupTChan, newTChan, tryReadTChan, writeTChan)
 import           Control.Monad.Logger             (LogLevel (..), logWithoutLoc)
 import           Data.ByteString.Builder.Extra    (defaultChunkSize)
 import           System.Directory
+import qualified System.IO.Utf8                   as Utf8
 import qualified System.Process.Typed             as Proc
 import           System.Process.Typed             (ExitCode (..), ProcessConfig)
 import           UnliftIO                         (bracket, catch, hClose, throwIO)
-import Control.Concurrent (threadDelay)
 
 data WSLInstance = WSLInstance
     { _wslName   :: !Text
@@ -96,7 +96,7 @@ runDevevIO = interpret $ \case
                 throwError $ Panic $ UnrecoverableError "Couldn't find rootfs for devenv controller"
             Just rootfs -> do
                 ctrlDir <- liftIO $ getOrCreateXdgDir XdgState _DEVENV_CONTROLLER_DIR
-                let ctrlFile = toNTPath $ 
+                let ctrlFile = toNTPath $
                         ctrlDir `joinPaths` fromPathSegments ["controller.tar.gz"]
                 liftIO $ copyFile rootfs (toString ctrlFile)
 
@@ -243,9 +243,9 @@ mainLoop _alreadyRunning = do
             void $ readProcess $ controllerCmd "pkill nix-daemon || true"
             let doLog lvl _ txt = runTChanLoggingT $ logWithoutLoc "devenv_controller" lvl txt
             fix $ \loop -> do
-                runProcessWith (doLog LevelInfo) (doLog LevelWarn) 
+                runProcessWith (doLog LevelInfo) (doLog LevelWarn)
                     $ Proc.setStdin Proc.closed
-                    $ controllerCmd "/bin/serve"
+                    $ controllerCmd "/bin/devenv-serve"
                 whenNothingM_ (atomically $ tryReadTChan myCancelChan) $ do
                     doLog LevelWarn Win ("Devenv controller exited unexpectedly (please see logs). Restarting..." :: Text)
                     loop
@@ -309,13 +309,15 @@ controllerCmd :: Text -> ProcessConfig () () ()
 controllerCmd = wslCmd _DEVENV_CONTROLLER
 
 wslCmd :: Text -> Text -> ProcessConfig () () ()
-wslCmd name cmd = wsl'exeCmd
+wslCmd name cmd = wsl'exeCmd $
     [ "-d", name
     , "--shell-type", "login"
     , "--user", "root"
     -- , "--cd", "/root"
     , "bash", "-ic"
-    , show $ "printf " <> _MAGIC_UTF8_SEQ <> " | tee /dev/stderr ; " <> cmd
+    ]
+    <> (["-x" | logLevel <= LevelDebug ]) <>
+    [ show $ "printf " <> _MAGIC_UTF8_SEQ <> " | tee /dev/stderr ; " <> cmd
     ]
 
 wsl'exeCmd :: [Text] -> ProcessConfig () () ()
@@ -396,7 +398,7 @@ readProcessWith outLogger errLogger proc = do
 loggingTextOutput :: (OutputType -> Text -> IO ()) -> Proc.StreamSpec 'Proc.STOutput (STM LText)
 loggingTextOutput logger = Proc.mkPipeStreamSpec loggingTextOutputFromHandle where
     loggingTextOutputFromHandle :: ProcessConfig () () () -> Handle -> IO (STM LText, IO ())
-    loggingTextOutputFromHandle pc h = do
+    loggingTextOutputFromHandle pc h = Utf8.withHandle h $ do
         mvar <- newEmptyTMVarIO
 
         void $ async $ do
@@ -535,6 +537,7 @@ withRegKey aquire = bracket aquire regCloseKey
 
 
 -- fake functions for HLS under linux
+
 #ifndef mingw32_HOST_OS
 
 type DWORD = Word32

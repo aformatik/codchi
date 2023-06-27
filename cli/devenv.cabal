@@ -1,15 +1,16 @@
-cabal-version:   3.4
-name:            devenv
-version:         0.0.4.0
+cabal-version: 3.4
+name:          devenv
+version:       0.0.4.0
 
 -- synopsis:
 -- description:
-license:         BSD-3-Clause
-author:          jhr
-maintainer:      CHANGEME
+license:       BSD-3-Clause
+author:        jhr
+maintainer:    CHANGEME
 
 -- copyright:
-build-type:      Simple
+build-type:    Simple
+
 -- extra-doc-files: CHANGELOG.md
 
 common shared
@@ -127,5 +128,6 @@ executable devenv
     , time
     , typed-process
     , unliftio
+    , with-utf8
 
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N

@@ -1,51 +1,71 @@
 { config, pkgs, lib, ... }:
 let
-  systemdWrapper = pkgs.writeScript "sytemd-wrapper" ''
-    #!/bin/sh
-    set -ex
-
-    if [ ! -d ${mnt.root}/wsl/nix/store ] || [ ! -d ${mnt.root}/wsl/nix/var/nix/daemon-socket ] ; then
-      echo "Remote store is not mounted on ${mnt.root}/wsl/nix" >&2
-      exit 1
-    fi
-    if [ ! -S ${mnt.root}/wsl/nix/var/nix/daemon-socket/socket ] ; then
-      echo "Remote nix-daemon is not running." >&2
-      exit 1
-    fi
-
-    mnt() {
-      /bin/mount --bind "${mnt.root}/wsl/$1" "/$1"
-    }
-    mnt_ro() {
-      /bin/mount --bind --ro "${mnt.root}/wsl/$1" "/$1"
-    }
-
-    echo "Mounting remote /nix/store..."
-    /bin/mkdir -p /nix/store || true
-    /bin/mkdir -p /nix/var/nix/{daemon-socket,db,gc-socket,gcroots} || true
-    mnt_ro nix/store
-    mnt_ro nix/var/nix/db
-    mnt_ro nix/var/nix/gcroots
-    mnt nix/var/nix/gc-socket
-    mnt nix/var/nix/daemon-socket
-
-    echo "Starting systemd..."
-    exec ${pkgs.wslNativeUtils}/bin/systemd-shim "$@"
-  '';
-
-
-  staticFiles = [
-    { inherit (config.environment.etc."wsl.conf") source; target = "/etc/wsl.conf"; }
-    { source = systemdWrapper; target = "/sbin/init"; }
-    { source = "${pkgs.pkgsStatic.busybox}/bin/busybox"; target = "/bin/mount"; }
-    { source = "${pkgs.pkgsStatic.busybox}/bin/busybox"; target = "/bin/mkdir"; }
-    { source = "${pkgs.pkgsStatic.bash}/bin/bash"; target = "/bin/sh"; }
-  ];
-
   cfg = config.wsl;
   mnt = cfg.wslConf.automount;
 
-  inherit (lib) mkForce stringAfter pipe concatStringsSep;
+  contents = {
+    "/bin/" = with pkgs.pkgsStatic; toString (map (pkg: "${pkg}/bin/*") [ busybox bash ]);
+
+    "/etc/wsl.conf" = config.environment.etc."wsl.conf".source;
+
+    "/sbin/init" = pkgs.writeScript "sytemd-wrapper" ''
+      #!/bin/bash
+      set -e
+      set -o pipefail
+      # this logs everything to dmesg
+      set -x
+
+      PATH="$PATH:/bin"
+
+      if [ ! -d ${mnt.root}/wsl/nix/store ] || [ ! -d ${mnt.root}/wsl/nix/var/nix/daemon-socket ] ; then
+        echo "Remote store is not mounted on ${mnt.root}/wsl/nix" >&2
+        exit 1
+      fi
+      if [ ! -S ${mnt.root}/wsl/nix/var/nix/daemon-socket/socket ] ; then
+        echo "Remote nix-daemon is not running." >&2
+        exit 1
+      fi
+
+      mnt() {
+        echo "Mounting remote /$1..."
+        mkdir -p "/$1" || true
+        mount --bind "${mnt.root}/wsl/$1" "/$1"
+
+        trap "umount -f \"/$1\"" EXIT
+      }
+
+      mnt nix/store
+
+      for file in $(ls "${mnt.root}/wsl/nix/var/nix/"); do
+        MNT_DIR="${mnt.root}/wsl/nix/var/nix/$file" 
+        DIR="/nix/var/nix/$file" 
+        if [ -d "$MNT_DIR" ] && [ "$file" != "profiles" ]; then
+          mnt "$DIR"
+        fi
+      done
+
+      echo "Mounting profile for ${config.devenv.instance.name}..."
+      mkdir -p /nix/var/nix/profiles || true
+      mount --bind "${mnt.root}/wsl/nix/var/nix/profiles/per-devenv/${config.devenv.instance.name}" "/nix/var/nix/profiles"
+      trap "umount -f /nix/var/nix/profiles" EXIT
+
+      echo "Starting systemd..."
+      exec ${pkgs.wslNativeUtils}/bin/systemd-shim "$@"
+    '';
+  };
+
+  tarball = pkgs.callPackage ../make-tarball.nix {
+
+    fileName = "devenv-${pkgs.hostPlatform.system}";
+
+    inherit contents;
+
+    compressCommand = "cat";
+    compressionExtension = "";
+  };
+
+  inherit (lib) mkForce stringAfter;
+
 in
 {
 
@@ -54,8 +74,10 @@ in
     nativeSystemd = true;
     startMenuLaunchers = false;
     wslConf.automount.enabled = true;
+    inherit (config.devenv) defaultUser;
   };
 
+  environment.variables.NIX_REMOTE = "daemon";
   environment.etc."wsl.conf".enable = mkForce false;
   systemd.services.nix-daemon.enable = mkForce false;
 
@@ -63,10 +85,11 @@ in
     populateBin = mkForce (stringAfter [ "etc" ] ''
       echo "setting up files for WSL..."
       ln -sf /init /bin/wslpath
-      ${pipe staticFiles [
-        (map ({source, target}: "cp -af ${source} ${target}"))
-        (concatStringsSep "\n")
-      ]}
+
+      pushd /
+      ${tarball.passthru.createContents}/bin/create-contents
+      popd
+
     '');
 
     # disable unneeded upstream NixOS-WSL scripts
@@ -78,18 +101,9 @@ in
     update-entry-point.text = mkForce "";
   };
 
-  system.build.devenv.tarball = pkgs.callPackage "${pkgs.path}/nixos/lib/make-system-tarball.nix" {
-
-    contents = staticFiles;
-
-    fileName = "devenv-${pkgs.hostPlatform.system}";
-
-    # Build NixOS configuration, but dont add it to tarball since we mount the
-    # builders' store into the new configuration
-    extraInputs = [ config.system.build.toplevel ];
-
-    compressCommand = "cat";
-    compressionExtension = "";
-  };
-
+  system.build.devenv.tarball = pkgs.runCommandLocal "devenv-tarball" {} ''
+    cp -a ${tarball} $out
+    chmod +w $out
+    echo ${config.system.build.toplevel} > $out/system-store-path
+  '';
 }

@@ -8,11 +8,11 @@
 
   config = {
 
-    systemd.package = pkgs.systemd.overrideAttrs ({ patches, ... }: {
-      patches = patches ++ [
-        ./systemd-systemctl-status-wsl.patch
-      ];
-    });
+    # systemd.package = pkgs.systemd.overrideAttrs ({ patches, ... }: {
+    #   patches = patches ++ [
+    #     ./systemd-systemctl-status-wsl.patch
+    #   ];
+    # });
 
     environment = {
       sessionVariables = {

@@ -27,6 +27,7 @@ import           Devenv
 import           Parser                   (Command (..), parseCmd)
 import           Types
 import           Util
+import Main.Utf8 (withUtf8)
 
 findInstance :: Devenv :> es => InstanceName -> Eff es (Maybe DevenvInstance)
 findInstance name = find ((== name) . _name) <$> listInstances
@@ -51,6 +52,11 @@ devenv = \case
 
     CommandStart            -> do
         let doStart status = do
+                printLnOut "Updating controller..."
+                let cmd = "cd / && nix run --refresh github:aformatik/nixos-devenv#controller-rootfs.passthru.createContents"
+                _ <- either (throwError . NixError) return . logTraceShowId "controller update"
+                        =<< runCtrlNixCmd True cmd
+
                 printLnOut "Starting controller..."
                 start (status == Running)
         getStatus >>= \case
@@ -78,26 +84,27 @@ devenv = \case
             createDirectoryIfMissing True instanceDir
             writeFileText instanceFlake $ mkNixFlake name (addNamesFromURL flakes) devenvModule
 
-        let flakePath = "/instances/" <> getInstanceName name
-            drvPath = "nixosConfigurations.default.config.system.build.devenv.tarball"
-            updateCmd = "nix flake update " <> flakePath
-            -- impure because we need pkgs.replaceDependency
-            buildCmd = "nix build --impure --print-out-paths --no-link " <> flakePath <> "#" <> drvPath
+        let cmd = "/bin/devenv-install " <> getInstanceName name
 
-        _ <- either (throwError . NixError) return =<< runCtrlNixCmd True updateCmd
-        drv <- either
+        tarballPath <- either
             (throwError . NixError)
             (rethrowPanic @ParseException . parse_ @StorePath)
-                =<< runCtrlNixCmd True buildCmd
+                =<< runCtrlNixCmd True cmd
 
         rootfsFile <- getPath DirCtrl $
-            unStorePath drv `joinPaths` fromPathSegments ["tarball", "devenv-x86_64-linux.tar"]
+            unStorePath tarballPath `joinPaths` fromPathSegments ["devenv-x86_64-linux.tar"]
 
         unlessM (liftIO $ doesFileExist rootfsFile) $
             throwError $ Panic $ NixError $
                 "Nix build didn't build " <> toText rootfsFile <> " as expected."
 
         installRootfs name rootfsFile
+
+        printLnOut "Activating system..."
+        let installCmd = "/nix/var/nix/profiles/system/bin/switch-to-configuration switch"
+        _ <- either (throwError . NixError) return
+            =<< runInstanceCmd True name installCmd
+
         printLnOut $ "Successfully installed " <> getInstanceName name
 
     CommandUninstall name   -> do
@@ -117,32 +124,20 @@ devenv = \case
             printErrExit (ExitFailure 1) $
                 "Devenv instance " <> getInstanceName name <> " does not exists"
 
-        let flakePath = "/instances/" <> getInstanceName name
-            updateCmd = "nix flake update " <> flakePath
-            drvPath   = "nixosConfigurations.default.config.system.build.toplevel"
-            -- impure because we need pkgs.replaceDependency
-            buildCmd  = "nix build --impure --print-out-paths --no-link " <> flakePath <> "#" <> drvPath
-
-        _ <- either (throwError . NixError) return =<< runCtrlNixCmd True updateCmd
+        let cmd = "/bin/devenv-install " <> getInstanceName name
         printLnOut "Building new system..."
-        drv <- either
+        _ <- either
             (throwError . NixError)
-            (rethrowPanic @ParseException . parse_ @StorePath)
+            return
             . logTraceShowId "store path"
-                =<< runCtrlNixCmd True buildCmd
+                =<< runCtrlNixCmd True cmd
 
         printLnOut "Updating system..."
 
-        let switcherPath = fromPathSegments @Abs [] `joinPaths`
-                           unStorePath drv `joinPaths`
-                           fromPathSegments ["bin", "switch-to-configuration"]
-            installCmd = toUnixPath switcherPath <> " switch"
+        let installCmd = "/nix/var/nix/profiles/system/bin/switch-to-configuration switch"
 
         _ <- either (throwError . NixError) return
             =<< runInstanceCmd True name installCmd
-
-        _ <- either (throwError . NixError) return
-            =<< runInstanceCmd True name "nix-env -p /nix/var/nix/profiles/system --set /run/current-system"
 
         printLnOut "System update successfull!"
 
@@ -162,25 +157,30 @@ isCtrlRunning =
         DevenvInstalled status -> status == Running
         _                      -> False
 
+-- install :: Devenv :> es => Bool -> Eff es ()
+-- install firstInstall = do
+--     pass
+
 mkNixFlake :: InstanceName -> [DevenvFlake Text] -> Text -> Text
 mkNixFlake instanceName inputs devenvModule = unlines
     [ "{"
     , "  description = \"Devenv flake for " <> getInstanceName instanceName <> "\";"
     , "  inputs = {"
-    , "    __devenv.url = \"gitlab:afojhr/nixos-devenv\";"
+    , "    nixos-devenv__base.url = \"github:aformatik/NixOS-Devenv\";"
     , forEachUnline uniqueInputs $ \fl ->
       "    " <> _flakeMetadata fl <> ".url = \"" <> _flakeURL fl <> "\";"
     -- TODO optionally follow nixpkgs of user flake
     -- , optionalStr (listToMaybe inputs) $ \fl ->
     --   "    nixpkgs.follows = \"" <> _flakeMetadata fl <> "/nixpkgs\";"
-    , "    nixpkgs.follows = \"devenv/nixpkgs\";"
+    , "    nixpkgs.follows = \"nixos-devenv__base/nixpkgs\";"
     , "  };"
     , "  outputs = inputs: {"
     , "    nixosConfigurations.default = inputs.nixpkgs.lib.nixosSystem {"
     , "      system = \"x86_64-linux\";"
     -- , "      specialArgs = { inherit inputs; };"
     , "      modules = ["
-    , "        inputs.__devenv.nixosModules." <> devenvModule
+    , "        { devenv.instance.name = \"" <> getInstanceName instanceName <> "\"; }"
+    , "        inputs.nixos-devenv__base.nixosModules." <> devenvModule
     , forEachUnline inputs $ \fl ->
       "        inputs." <> _flakeMetadata fl <> ".nixosModules." <> _moduleName fl
     , "      ];"
@@ -206,7 +206,7 @@ showTable sep t = unlines (map mkLine t) where
 
 
 main :: IO ()
-main = do
+main = withUtf8 $ do
 
     logFile <- runDevenv $ getPath DirState (fromPathSegments [_DEVENV_APP_NAME <> ".log"])
 
