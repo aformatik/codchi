@@ -30,3 +30,5 @@ result-*
 tmp
 
 controller.tar.gz
+
+cli/licenses.md

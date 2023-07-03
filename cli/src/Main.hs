@@ -24,10 +24,10 @@ import           Control.Concurrent.STM   (TChan, dupTChan, readTChan, writeTCha
 import           Control.Monad.Logger     (LogLine, MonadLogger, monadLoggerLog, runFileLoggingT,
                                            runStdoutLoggingT)
 import           Devenv
+import           Main.Utf8                (withUtf8)
 import           Parser                   (Command (..), parseCmd)
 import           Types
 import           Util
-import Main.Utf8 (withUtf8)
 
 findInstance :: Devenv :> es => InstanceName -> Eff es (Maybe DevenvInstance)
 findInstance name = find ((== name) . _name) <$> listInstances
@@ -100,10 +100,13 @@ devenv = \case
 
         installRootfs name rootfsFile
 
-        printLnOut "Activating system..."
-        let installCmd = "/nix/var/nix/profiles/system/bin/switch-to-configuration switch"
-        _ <- either (throwError . NixError) return
-            =<< runInstanceCmd True name installCmd
+        -- printLnOut "Activating system..."
+        -- let installCmd = "/nix/var/nix/profiles/system/bin/switch-to-configuration switch"
+        -- _ <- either (throwError . NixError) return
+        --     =<< runInstanceCmd True name installCmd
+
+        printLnOut "Creating shortcuts..."
+        updateShortcuts name =<< getPath DirCtrl =<< getInstanceSWSharePath name
 
         printLnOut $ "Successfully installed " <> getInstanceName name
 
@@ -139,17 +142,20 @@ devenv = \case
         _ <- either (throwError . NixError) return
             =<< runInstanceCmd True name installCmd
 
+        printLnOut "Creating shortcuts..."
+        updateShortcuts name =<< getPath DirCtrl =<< getInstanceSWSharePath name
+
         printLnOut "System update successfull!"
 
 
-    CommandRun name         -> do
+    CommandRun showTerm name args    -> do
         unlessM isCtrlRunning $
             printErrExit (ExitFailure 1) "Devenv controller is not running..."
 
         findInstance name >>= \case
             Nothing -> printErrExit (ExitFailure 1) $
                 "Devenv instance " <> getInstanceName name <> " does not exists"
-            Just i -> runInstance i
+            Just i -> runInInstance i showTerm args
 
 isCtrlRunning :: Devenv :> es => Eff es Bool
 isCtrlRunning =
@@ -203,6 +209,18 @@ showTable sep t = unlines (map mkLine t) where
 
     mkLine = Text.intercalate sep
            . zipWith (`Text.justifyLeft` ' ') colWidths
+
+getInstanceSWSharePath
+    :: Errors [NixError, Panic] :>> es
+    => Devenv :> es 
+    => InstanceName -> Eff es (Path Rel)
+getInstanceSWSharePath name = do
+    let cmd = "readlink -f \"/nix/var/nix/profiles/per-devenv/" <> getInstanceName name <> "/system/sw/share\""
+    either
+        (throwError . NixError)
+        (rethrowPanic @ParseException . fmap unStorePath . parse_ @StorePath)
+            =<< runCtrlNixCmd False cmd
+
 
 
 main :: IO ()

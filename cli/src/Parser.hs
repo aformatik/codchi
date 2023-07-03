@@ -11,7 +11,7 @@ data Command
     | CommandStart
     | CommandInstall InstanceName [DevenvFlake ()]
     | CommandUninstall InstanceName
-    | CommandRun InstanceName
+    | CommandRun Bool InstanceName [Text]
     | CommandUpdate InstanceName
   deriving (Eq, Show)
 
@@ -21,7 +21,7 @@ cmdP = subparser
     <> command "start"      (info startP     (progDesc "Start devenv controller"))
     <> command "install"    (info installP   (progDesc "Install devenv instance"))
     <> command "uninstall"  (info uninstallP (progDesc "Uninstall devenv instance"))
-    <> command "run"        (info runP       (progDesc "Run devenv instance"))
+    <> command "run"        (info runP       (progDesc "Run command in devenv instance"))
     <> command "update"     (info updateP    (progDesc "Update devenv instance"))
 
 
@@ -29,7 +29,10 @@ cmdP = subparser
         statusP    = pure CommandStatus
         startP     = pure CommandStart
         uninstallP = CommandUninstall <$> argument parseable (metavar "NAME")
-        runP       = CommandRun       <$> argument parseable (metavar "NAME")
+        runP       = CommandRun
+                  <$> (not <$> switch (long "no-terminal" <> help "Whether to hide stdin / stdout"))
+                  <*> argument parseable (metavar "NAME")
+                  <*> many (argument str (metavar "CMD [ARGS...]"))
         updateP    = CommandUpdate    <$> argument parseable (metavar "NAME")
 
         installP = CommandInstall

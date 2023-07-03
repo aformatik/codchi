@@ -1,7 +1,10 @@
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
+{-# HLINT ignore "Use unwords" #-}
+
 module Windows
-    ( runDevevIO
+    ( refreshIconCache
+    , runDevevIO
     ) where
 
 #ifdef mingw32_HOST_OS
@@ -9,10 +12,13 @@ import           Graphics.Win32
 import           System.Win32.Console.CtrlHandler
 import           System.Win32.DLL                 (getModuleHandle)
 import           System.Win32.Registry
+import           System.Win32.Shell
+import           System.Win32.Shortcut
 #else
 import           Foreign                          (ForeignPtr, Ptr, nullPtr)
-import           Foreign.C                        (CIntPtr, CWchar)
+import           Foreign.C                        (CInt, CIntPtr, CWchar)
 #endif
+
 
 import           Devenv
 import           Types
@@ -34,11 +40,11 @@ import           Control.Concurrent.Async
 import           Control.Concurrent.STM           (dupTChan, newTChan, tryReadTChan, writeTChan)
 import           Control.Monad.Logger             (LogLevel (..), logWithoutLoc)
 import           Data.ByteString.Builder.Extra    (defaultChunkSize)
-import           System.Directory
 import qualified System.IO.Utf8                   as Utf8
 import qualified System.Process.Typed             as Proc
 import           System.Process.Typed             (ExitCode (..), ProcessConfig)
 import           UnliftIO                         (bracket, catch, hClose, throwIO)
+import           UnliftIO.Directory
 
 data WSLInstance = WSLInstance
     { _wslName   :: !Text
@@ -108,6 +114,7 @@ runDevevIO = interpret $ \case
                                ]
 
 
+
     Start alreadyRunning -> runDevevIO $ rethrowAll $ mainLoop alreadyRunning
 
     ListInstances -> do
@@ -164,11 +171,27 @@ runDevevIO = interpret $ \case
         void $ rethrowAll $ readProcess_ $
             wsl'exeCmd [ "--unregister" , getInstanceNameWithPrefix name ]
 
-    RunInstance i -> do
-        Proc.runProcess_ $ Proc.setStdin (Proc.useHandleOpen stdin)
-                         $ Proc.setStdout (Proc.useHandleOpen stdout)
-                         $ Proc.setStderr (Proc.useHandleOpen stderr)
-                         $ wsl'exeCmd [ "-d", getInstanceNameWithPrefix $ _name i ]
+    RunInInstance i showTerm args -> do
+        liftIO $ do
+            consoleWindow <- getConsoleWindow
+            case consoleWindow of
+                Just hwnd | not showTerm -> failIfFalse_ "hide console window" $ showWindow hwnd sW_HIDE
+                _ -> pass
+        let wrapIO | showTerm  = Proc.setStdin (Proc.useHandleOpen stdin)
+                               . Proc.setStdout (Proc.useHandleOpen stdout)
+                               . Proc.setStderr (Proc.useHandleOpen stderr)
+                   | otherwise = Proc.setStdin Proc.nullStream
+                               . Proc.setStdout Proc.nullStream
+                               . Proc.setStderr Proc.nullStream
+
+        Proc.runProcess_
+            $ wrapIO
+            $ wsl'exeCmd
+            $ [ "-d", getInstanceNameWithPrefix $ _name i
+              , "--shell-type", "login"
+              ] <> args
+
+    UpdateShortcuts name swSharePath -> runDevevIO $ rethrowAll $ Windows.updateShortcuts name swSharePath
 
     GetDevenvModule -> return "devenv-wsl"
     GetPath dirType s -> toString . toNTPath . (`joinPaths` s)
@@ -263,6 +286,80 @@ runProcessSilent = Proc.runProcess
            . Proc.setStdout Proc.nullStream
            . Proc.setStderr Proc.nullStream
 
+updateShortcuts :: [IOE, Error ShellException, Error Panic, Logger, Devenv] :>> es
+                => InstanceName
+                -> FilePath
+                -> Eff es ()
+updateShortcuts name swSharePath = do
+    icosFolder <- toString . toNTPath
+              <$> getOrCreateXdgDir XdgState (fromPathSegments [ "icos", getInstanceName name ])
+
+    -- cleanup start menu entries
+    mapM_ (removeFile . (\f -> icosFolder <> "\\" <> f)) =<< listDirectory icosFolder
+
+    desktopEntries <-
+        let parseDesktopEntryAndIco app = do
+                de <- parseDesktopEntry . decodeUtf8
+                   <$> readFileBS (swSharePath <> "\\wsl\\applications\\" <> toString app <> ".desktop")
+
+                case de of
+                    Left err -> throwError $ Panic $ UnrecoverableError $
+                        "Could not parse desktop entry for " <> app <> ":\n" <> err
+                    Right (DesktopEntry {deName,deTerminal,deExec}) -> do
+                        let iconInCtrl = swSharePath <> "\\wsl\\icos\\" <> toString app <> ".ico"
+                            iconInWin  = icosFolder <> "\\" <> toString deName <> ".ico"
+                        deIcon <- doesFileExist iconInCtrl >>= \case 
+                            True -> do
+                                copyFile iconInCtrl iconInWin
+                                return $ Just iconInWin
+                            False -> do
+                                log LevelWarn $ "Could not find .ico for " <> app
+                                return Nothing
+                        return $ DesktopEntry {..}
+
+
+         in mapM parseDesktopEntryAndIco
+         .  mapMaybe (Text.stripSuffix ".desktop" . toText)
+        =<< listDirectory (swSharePath <> "\\wsl\\applications")
+
+    startMenuFolder <- liftIO $ do
+        startMenu <- getFolderPath cSIDL_PROGRAMS
+        let instanceFolder = startMenu `joinPaths` fromPathSegments [ _DEVENV_APP_NAME, getInstanceName name ]
+        createDirectoryIfMissing True (toString $ toNTPath instanceFolder)
+        return $ toString $ toNTPath instanceFolder
+
+    -- cleanup start menu entries
+    mapM_ (removeFile . (\f -> startMenuFolder <> "\\" <> f)) =<< listDirectory startMenuFolder
+
+    -- create shortcuts
+    -- currentDir <- getCurrentDirectory
+    homeDir <- getHomeDirectory
+    either (throwError . Panic . UnrecoverableError . show) return
+        =<< liftIO (runExceptT $ do
+                ExceptT initialize
+                forM_ desktopEntries $ \(DesktopEntry {..}) -> do
+                    let lnk = Shortcut
+                            { targetPath = _DEVENV_APP_NAME <> ".exe"
+                            , arguments = intercalate " " $
+                                [ "run" ] <>
+                                [ "--no-terminal" | not deTerminal ] <>
+                                [ toString $ getInstanceName name
+                                , "--"
+                                , toString deExec
+                                ]
+                            , workingDirectory = homeDir
+                            , showCmd = if deTerminal then ShowNormal else ShowMinimized
+                            , description = ""
+                            , iconLocation = (fromMaybe "" deIcon, 0)
+                            , hotkey = 0
+                            }
+                        lnkPath = startMenuFolder <> "\\" <> toString deName <> ".lnk"
+                    ExceptT $ writeShortcut lnk lnkPath
+                liftIO uninitialize
+            )
+    liftIO refreshIconCache
+
+
 
 -- retryDuring :: MonadIO m => Integer -> Int -> m (Maybe e) -> m (Maybe e)
 -- retryDuring timeFrame maxTries act
@@ -279,6 +376,13 @@ runProcessSilent = Proc.runProcess
 --                                                                 then loop (n+1) firstTryTime
 --                                                                 else return $ Just err
 --                     | otherwise -> loop 0 curTime
+
+-- https://tarma.com/support/im9/using/symbols/functions/csidls.htm
+cSIDL_PROGRAMS :: CSIDL
+cSIDL_PROGRAMS = 2
+
+getFolderPath :: CSIDL -> IO (Path Abs)
+getFolderPath csidl = fromString <$> sHGetFolderPath nullPtr csidl nullPtr 0
 
 getOrCreateXdgDir :: MonadIO m => XdgDirectory -> Path Rel -> m (Path Abs)
 getOrCreateXdgDir xdg dir = liftIO $ do
@@ -480,6 +584,7 @@ _MAGIC_UTF8_SEQ = "this_is_for_recognizing_utf8"
 --     _ | _MAGIC_UTF8_SEQ `Text.isInfixOf` txt -> ("", txt)
 
 
+-- https://otter-o.hatenadiary.org/entry/20090217/1234861028
 runWinLoop :: MonadIO m => IO () -> m ()
 runWinLoop cleanup = liftIO $ do
     withConsoleCtrlHandler (\_ -> cleanup >> exitSuccess >> pure True) $ do
@@ -536,9 +641,35 @@ withRegKey :: IO HKEY -> (HKEY -> IO c) -> IO c
 withRegKey aquire = bracket aquire regCloseKey
 
 
+#ifdef mingw32_HOST_OS
+foreign import ccall "shlobj_core.h SHChangeNotify"
+    c_SHChangeNotify :: LONG -> UINT32 -> LPVOID -> LPVOID -> IO ()
+
+refreshIconCache :: IO ()
+refreshIconCache = c_SHChangeNotify 0x8000000 0x1000 nullPtr nullPtr
+
+foreign import ccall "windows.h FreeConsole"
+    c_FreeConsole :: IO BOOL
+
+freeConsole :: IO ()
+freeConsole = failIfFalse_ "FreeConsole" c_FreeConsole
+
+foreign import ccall "windows.h GetConsoleWindow"
+    c_GetConsoleWindow :: IO HWND
+
+getConsoleWindow :: IO (Maybe HWND)
+getConsoleWindow = do
+    hwnd <- c_GetConsoleWindow
+    return $ if hwnd /= nullPtr
+        then Just hwnd
+        else Nothing
+
+#else
+
 -- fake functions for HLS under linux
 
-#ifndef mingw32_HOST_OS
+noop :: a
+noop = error "Not implemented on linux"
 
 type DWORD = Word32
 type WindowStyle = DWORD
@@ -552,55 +683,95 @@ type LPTSTR = Ptr CWchar
 type WindowClosure = HWND -> DWORD -> Word -> CIntPtr -> IO CIntPtr
 type REGSAM = Word32
 type HKEY = ForeignPtr ()
+type CSIDL = CInt
 
 wM_CLOSE :: DWORD
-wM_CLOSE = error "Not implemented on linux"
+wM_CLOSE = noop
 -- wM_DESTROY :: DWORD
--- wM_DESTROY = error "Not implemented on linux"
+-- wM_DESTROY = noop
+
+failIfFalse_ :: String -> IO Bool -> IO ()
+failIfFalse_ = noop
 
 withConsoleCtrlHandler :: (DWORD -> IO Bool) -> IO a -> IO a
-withConsoleCtrlHandler = error "Not implemented on linux"
+withConsoleCtrlHandler = noop
 
 getMessage :: LPMSG -> Maybe HWND -> IO Bool
-getMessage = error "Not implemented on linux"
+getMessage = noop
 allocaMessage :: (LPMSG -> IO a) -> IO a
-allocaMessage = error "Not implemented on linux"
+allocaMessage = noop
 translateMessage :: LPMSG -> IO Bool
-translateMessage = error "Not implemented on linux"
+translateMessage = noop
 dispatchMessage :: LPMSG -> IO LONG
-dispatchMessage = error "Not implemented on linux"
+dispatchMessage = noop
 defWindowProc :: Maybe HWND -> DWORD -> Word -> CIntPtr -> IO CIntPtr
-defWindowProc = error "Not implemented on linux"
+defWindowProc = noop
 -- postQuitMessage :: Int -> IO ()
--- postQuitMessage = error "Not implemented on linux"
+-- postQuitMessage = noop
 
 mkClassName :: String -> a
-mkClassName = error "Not implemented on linux"
+mkClassName = noop
 registerClass :: (Word32, HINSTANCE, Maybe HANDLE, Maybe HANDLE, Maybe HANDLE, Maybe LPTSTR, LPTSTR) -> IO (Maybe Word16)
-registerClass = error "Not implemented on linux"
+registerClass = noop
 createWindow
   :: LPTSTR -> String -> WindowStyle ->
      Maybe Int -> Maybe Int -> Maybe Int -> Maybe Int ->
      Maybe HWND -> Maybe HMENU -> HINSTANCE -> WindowClosure ->
      IO HWND
-createWindow = error "Not implemented on linux"
--- showWindow :: HWND -> DWORD -> IO Bool
--- showWindow = error "Not implemented on linux"
+createWindow = noop
+
+type ShowWindowControl = DWORD
+sW_HIDE :: ShowWindowControl
+sW_HIDE = noop
+showWindow :: HWND -> ShowWindowControl -> IO Bool
+showWindow = noop
 
 getModuleHandle :: Maybe String -> IO HINSTANCE
-getModuleHandle = error "Not implemented on linux"
+getModuleHandle = noop
 
 hKEY_LOCAL_MACHINE :: HKEY
-hKEY_LOCAL_MACHINE = error "Not implemented on linux"
+hKEY_LOCAL_MACHINE = noop
 kEY_READ :: REGSAM
-kEY_READ = error "Not implemented on linux"
+kEY_READ = noop
 regOpenKeyEx :: HKEY -> String -> REGSAM -> IO HKEY
-regOpenKeyEx = error "Not implemented on linux"
+regOpenKeyEx = noop
 regCloseKey :: HKEY -> IO ()
-regCloseKey = error "Not implemented on linux"
+regCloseKey = noop
 regEnumKeys :: HKEY -> IO [String]
-regEnumKeys = error "Not implemented on linux"
+regEnumKeys = noop
 regEnumKeyVals :: HKEY -> IO [(String,String,DWORD)]
-regEnumKeyVals = error "Not implemented on linux"
+regEnumKeyVals = noop
 
+type SHGetFolderPathFlags = DWORD
+sHGetFolderPath :: HWND -> CSIDL -> HANDLE -> SHGetFolderPathFlags -> IO String
+sHGetFolderPath = noop
+
+-- win32-shortcut
+
+data ShowCmd = ShowNormal | ShowMaximized | ShowMinimized deriving (Show)
+data Shortcut = Shortcut
+    { targetPath       :: FilePath
+    , arguments        :: String
+    , workingDirectory :: FilePath
+    , showCmd          :: ShowCmd
+    , description      :: String
+    , iconLocation     :: (FilePath, Int)
+    , hotkey           :: DWORD
+    }
+  deriving (Show)
+
+type ShortcutError = Void
+initialize :: IO (Either ShortcutError ())
+initialize = noop
+uninitialize :: IO ()
+uninitialize = noop
+writeShortcut :: Shortcut -> FilePath -> IO (Either ShortcutError ())
+writeShortcut = noop
+refreshIconCache :: IO ()
+refreshIconCache = noop
+
+-- freeConsole :: IO ()
+-- freeConsole = noop
+getConsoleWindow :: IO (Maybe HWND)
+getConsoleWindow = noop
 #endif

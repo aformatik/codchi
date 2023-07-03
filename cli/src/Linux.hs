@@ -8,4 +8,4 @@ import Types
 
 runDevevIO :: Interpreter Devenv (Logger : IOE : Errors [DriverException, UserError, Panic])
 runDevevIO = interpretIO $ \case
-    _ -> error "not implemented"
+    _ -> return undefined -- error "not implemented"

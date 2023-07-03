@@ -86,9 +86,12 @@
 
           haskell-language-server
           ghcid
+          # (with pkgs.haskell.lib.compose; pipe cabal-plan [
+          #   (appendConfigureFlags [ "-f license-report" "-f exe" ])
+            # doJailbreak
+          # ])
 
           cabal-fmt
-          cabal-plan
           # fourmolu
           stylish-haskell
           pkgs.zlib

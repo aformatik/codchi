@@ -3,16 +3,16 @@
 module Devenv where
 
 import Cleff
-import Cleff.Error            (Error, runError)
-import Control.Concurrent.STM (TChan, newBroadcastTChanIO, writeTChan)
-import Control.Monad.Logger   (LogLevel (..), LogLine, LoggingT, ToLogStr, logWithoutLoc,
-                               runLoggingT)
-import Data.ByteString        (hPut)
-import Data.Char              (toLower)
-import System.Exit            (ExitCode (..))
+import Cleff.Error                         (Error, runError)
+import Control.Concurrent.STM              (TChan, newBroadcastTChanIO, writeTChan)
+import Control.Monad.Logger                (LogLevel (..), LogLine, LoggingT, ToLogStr,
+                                            logWithoutLoc, runLoggingT)
+import Data.ByteString                     (hPut)
+import Data.Char                           (toLower)
+import System.Exit                         (ExitCode (..))
 import System.IO.Unsafe
 import Types
-import Util                   (EffectInterpreter (..))
+import Util                                (EffectInterpreter (..))
 
 type Interpreter e m = forall es a. m :>> es => Eff (e : es) a -> Eff es a
 
@@ -26,12 +26,16 @@ data Devenv :: Effect where
     Start :: Bool -> Devenv m ()
     InstallRootfs :: InstanceName -> FilePath -> Devenv m ()
     UninstallInstance :: InstanceName -> Devenv m ()
-    RunInstance :: DevenvInstance -> Devenv m ()
+    RunInInstance :: DevenvInstance -> Bool -> [Text] -> Devenv m ()
+    --
+    -- | path to $currentSystem/sw/share
+    UpdateShortcuts :: InstanceName -> FilePath -> Devenv m ()
     --
     RunCtrlNixCmd :: Bool -> Text -> Devenv m (Either Text Text)
     RunInstanceCmd :: Bool -> InstanceName -> Text -> Devenv m (Either Text Text)
     GetPath :: DirectoryType -> Path Rel -> Devenv m FilePath
     --
+    -- | NixOS module in flake.nix for devenv driver (e.g. devenv-wsl)
     GetDevenvModule :: Devenv m Text
 makeEffect ''Devenv
 

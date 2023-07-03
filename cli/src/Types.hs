@@ -4,6 +4,7 @@ module Types
     , DevenvStatus (..)
     , DriverException (..)
       -- , FlakeURL (unFlakeURL)
+    , DesktopEntry (..)
     , DevenvFlake
     , InstanceName (getInstanceName)
     , InstanceStatus (..)
@@ -29,6 +30,7 @@ module Types
     , joinPaths
     , mkNTPath
     , mkUnixPath
+    , parseDesktopEntry
     , parse_
     , rethrowPanic
     , toNTPath
@@ -37,8 +39,11 @@ module Types
 
 import           Cleff
 import           Cleff.Error          (Error, throwError)
-import           Data.Attoparsec.Text as P (char, endOfInput, inClass, isEndOfLine, skipWhile,
-                                            string, takeWhile, takeWhile1, (<?>))
+import           Control.Arrow        (left)
+import           Data.Attoparsec.Text as P (char, eitherP, endOfInput, endOfLine, inClass,
+                                            isEndOfLine, many', parseOnly, sepBy, skipWhile, string,
+                                            takeWhile, takeWhile1, (<?>))
+import           Data.Char            (isSpace)
 import           Data.Data
 import qualified Data.Map.Strict      as Map
 import qualified Data.Text            as T
@@ -209,3 +214,41 @@ class Joinable t u | t -> u where
 
 instance Joinable Abs Rel where
 instance Joinable Rel Rel where
+
+data DesktopEntry icon = DesktopEntry
+    { deName     :: Text
+    , deIcon     :: icon
+    , deExec     :: Text
+    , deTerminal :: Bool
+    }
+  deriving (Show)
+
+parseDesktopEntry :: Text -> Either Text (DesktopEntry ())
+parseDesktopEntry txt =
+    let p = do
+            let header = P.string "[Desktop Entry]" >> P.skipWhile isSpace
+                comment = P.skipWhile isSpace
+                       >> P.char '#'
+                       >> P.skipWhile (not . P.isEndOfLine)
+                attr = (,)
+                    <$> (P.takeWhile1 (/= '=') <* P.char '=')
+                    <*> (T.strip <$> P.takeWhile1 (\c -> not (P.isEndOfLine c) && c /= '#'))
+                     <* P.skipWhile (not . P.isEndOfLine)
+            void $ P.sepBy comment P.endOfLine
+            header
+            rights <$> P.sepBy (P.eitherP comment attr) P.endOfLine
+    in do
+        deAttrs <- left toText $ P.parseOnly p txt
+
+        let getAttr attrName = snd <$> find ((== attrName) . fst) deAttrs
+
+        deName <- "Missing 'Name' entry" `maybeToRight` getAttr "Name"
+        -- first try 'TryExec' since it doesn't include %F / %U
+        deExec <- maybeToRight "Missing 'Exec' entry" $
+            getAttr "TryExec" <|> getAttr "Exec"
+        let deIcon     = ()
+            deTerminal = case getAttr "Terminal" of
+                Just "true" -> True
+                _           -> False
+
+        return $ DesktopEntry {..}

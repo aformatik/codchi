@@ -94,9 +94,12 @@ executable devenv
 
   if os(windows)
     import:        windows
-    build-depends: Win32
+    -- /SUBSYSTEM:WINDOWS
+    -- ghc-options:   -optl-mwindows
+    build-depends:
+      , Win32
+      , Win32-shortcut
 
-  -- ghc-options:   -optl-mwindows
 
   if os(linux)
     import: linux

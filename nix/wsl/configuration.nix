@@ -8,12 +8,6 @@
 
   config = {
 
-    # systemd.package = pkgs.systemd.overrideAttrs ({ patches, ... }: {
-    #   patches = patches ++ [
-    #     ./systemd-systemctl-status-wsl.patch
-    #   ];
-    # });
-
     environment = {
       sessionVariables = {
         # Allow OpenGL in WSL
@@ -27,6 +21,28 @@
         export DISPLAY=$(ip route | awk '/^default/{print $3; exit}'):0
         unset WAYLAND_DISPLAY
       '';
+
+      extraSetup = let
+        collectShortcuts = pkgs.writeScript "collect-shortcuts" ''
+          set -ex
+          set -o pipefail
+
+          pushd $out/share
+
+          mkdir -p wsl/{icos,applications}
+
+          for app in applications/*.desktop; do
+            NAME="$(grep Icon "$app" | sed 's/Icon=//')"
+            ICON="$(find -L icons/ -name "$NAME.*" | sort -rV | head -n1)"
+            if [ ! -z "$ICON" ]; then
+              ${pkgs.imagemagick}/bin/convert -background transparent "$ICON" "wsl/icos/$NAME.ico"
+            fi
+            cp "$app" wsl/applications
+          done
+
+          popd
+        '';
+      in toString collectShortcuts;
     };
 
   };
