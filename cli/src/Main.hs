@@ -3,11 +3,11 @@
 module Main where
 
 #if defined(mingw32_HOST_OS)
-import           Windows                  (runDevevIO)
+import           Windows                  (runCodchiLIO)
 #elif (darwin_HOST_OS)
-import           Darwin                   (runDevevIO)
+import           Darwin                   (runCodchiLIO)
 #else
-import           Linux                    (runDevevIO)
+import           Linux                    (runCodchiLIO)
 #endif
 
 import           Data.List                (maximum, nubBy)
@@ -23,68 +23,68 @@ import           Control.Concurrent.Async (concurrently, wait, withAsync)
 import           Control.Concurrent.STM   (TChan, dupTChan, readTChan, writeTChan)
 import           Control.Monad.Logger     (LogLine, MonadLogger, monadLoggerLog, runFileLoggingT,
                                            runStdoutLoggingT)
-import           Devenv
+import           Dsl
 import           Main.Utf8                (withUtf8)
 import           Parser                   (Command (..), parseCmd)
 import           Types
 import           Util
 
-findInstance :: Devenv :> es => InstanceName -> Eff es (Maybe DevenvInstance)
+findInstance :: CodchiL :> es => InstanceName -> Eff es (Maybe CodchiInstance)
 findInstance name = find ((== name) . _name) <$> listInstances
 
-devenv :: [Logger, Devenv, IOE] :>> es
+cli :: [Logger, CodchiL, IOE] :>> es
        => Errors '[NixError, Panic] :>> es
        => Command -> Eff es ()
-devenv = \case
+cli = \case
     CommandStatus            ->
         getStatus >>= \case
-            DevenvNotInstalled -> printErrExit (ExitFailure 1)
-                "The devenv controller is not installed. Please run 'devenv start' to install it."
-            DevenvInstalled status -> do
+            CodchiNotInstalled -> printErrExit (ExitFailure 1) $
+                "The cudchi controller is not installed. Please run '" <> _APP_NAME <> " start' to install it."
+            CodchiInstalled status -> do
                 printLnOut $ "Controller Status: " <> show status
 
                 instances <- listInstances
                 if not (null instances)
                     then printLnOut $ showTable "\t"
                              $ [ "NAME", "STATUS" ]
-                             : [ [getInstanceName _name, show _status] | DevenvInstance{..} <- instances ]
-                    else printLnOut "No devenv instances found!"
+                             : [ [getInstanceName _name, show _status] | CodchiInstance{..} <- instances ]
+                    else printLnOut "No code machines found!"
 
     CommandStart            -> do
         let doStart status = do
                 printLnOut "Updating controller..."
-                let cmd = "cd / && nix run --refresh github:aformatik/nixos-devenv#controller-rootfs.passthru.createContents"
+                let cmd = "cd / && nix run --refresh github:aformatik/codchi#controller-rootfs.passthru.createContents"
                 _ <- either (throwError . NixError) return . logTraceShowId "controller update"
                         =<< runCtrlNixCmd True cmd
 
                 printLnOut "Starting controller..."
                 start (status == Running)
         getStatus >>= \case
-            DevenvInstalled status -> doStart status
-            DevenvNotInstalled -> do
+            CodchiInstalled status -> doStart status
+            CodchiNotInstalled -> do
                 initCtrl
                 getStatus >>= \case
-                    DevenvNotInstalled -> throwError $ Panic $
-                        UnrecoverableError "Couldn't install devenv controller!"
-                    DevenvInstalled status -> doStart status
+                    CodchiNotInstalled -> throwError $ Panic $
+                        UnrecoverableError "Couldn't install controller!"
+                    CodchiInstalled status -> doStart status
 
     CommandInstall name flakes -> do
         whenJustM (findInstance name) $ \_ ->
             printErrExit (ExitFailure 1) $
-                "Devenv instance " <> getInstanceName name <> " already exists"
+                "Code machine " <> getInstanceName name <> " already exists"
 
         instanceDir <- getPath DirCtrl $
             fromPathSegments ["instances", getInstanceName name]
         instanceFlake <- getPath DirCtrl $
             fromPathSegments ["instances", getInstanceName name, "flake.nix"]
 
-        devenvModule <- getDevenvModule
+        driverModule <- getDriverModule
 
         liftIO $ do
             createDirectoryIfMissing True instanceDir
-            writeFileText instanceFlake $ mkNixFlake name (addNamesFromURL flakes) devenvModule
+            writeFileText instanceFlake $ mkNixFlake name (addNamesFromURL flakes) driverModule
 
-        let cmd = "/bin/devenv-install " <> getInstanceName name
+        let cmd = "/bin/ctrl-install " <> getInstanceName name
 
         tarballPath <- either
             (throwError . NixError)
@@ -92,7 +92,7 @@ devenv = \case
                 =<< runCtrlNixCmd True cmd
 
         rootfsFile <- getPath DirCtrl $
-            unStorePath tarballPath `joinPaths` fromPathSegments ["devenv-x86_64-linux.tar"]
+            unStorePath tarballPath `joinPaths` fromPathSegments ["rootfs.tar"]
 
         unlessM (liftIO $ doesFileExist rootfsFile) $
             throwError $ Panic $ NixError $
@@ -113,7 +113,7 @@ devenv = \case
     CommandUninstall name   -> do
         whenNothingM_ (findInstance name) $
             printErrExit (ExitFailure 1) $
-                "Devenv instance " <> getInstanceName name <> " does not exists"
+                "Code machine " <> getInstanceName name <> " does not exists"
 
         uninstallInstance name
         void $ either (throwError . NixError) return
@@ -121,13 +121,13 @@ devenv = \case
 
     CommandUpdate name -> do
         unlessM isCtrlRunning $
-            printErrExit (ExitFailure 1) "Devenv controller is not running..."
+            printErrExit (ExitFailure 1) "Codchi controller is not running..."
 
         whenNothingM_ (findInstance name) $
             printErrExit (ExitFailure 1) $
-                "Devenv instance " <> getInstanceName name <> " does not exists"
+                "Code machine " <> getInstanceName name <> " does not exists"
 
-        let cmd = "/bin/devenv-install " <> getInstanceName name
+        let cmd = "/bin/ctrl-install " <> getInstanceName name
         printLnOut "Building new system..."
         _ <- either
             (throwError . NixError)
@@ -150,43 +150,44 @@ devenv = \case
 
     CommandRun showTerm name args    -> do
         unlessM isCtrlRunning $
-            printErrExit (ExitFailure 1) "Devenv controller is not running..."
+            printErrExit (ExitFailure 1) "Codchi controller is not running..."
 
         findInstance name >>= \case
             Nothing -> printErrExit (ExitFailure 1) $
-                "Devenv instance " <> getInstanceName name <> " does not exists"
+                "Code machine " <> getInstanceName name <> " does not exists"
             Just i -> runInInstance i showTerm args
 
-isCtrlRunning :: Devenv :> es => Eff es Bool
+isCtrlRunning :: CodchiL :> es => Eff es Bool
 isCtrlRunning =
     getStatus <&> \case
-        DevenvInstalled status -> status == Running
+        CodchiInstalled status -> status == Running
         _                      -> False
 
--- install :: Devenv :> es => Bool -> Eff es ()
+-- install :: Codchi :> es => Bool -> Eff es ()
 -- install firstInstall = do
 --     pass
 
-mkNixFlake :: InstanceName -> [DevenvFlake Text] -> Text -> Text
-mkNixFlake instanceName inputs devenvModule = unlines
+mkNixFlake :: InstanceName -> [CodchiFlake Text] -> Text -> Text
+mkNixFlake instanceName inputs driverModule = unlines
     [ "{"
-    , "  description = \"Devenv flake for " <> getInstanceName instanceName <> "\";"
+    , "  description = \"Automatically generated flake for code machine " <>
+           getInstanceName instanceName <> ". DO NOT EDIT MANUALLY!\";"
     , "  inputs = {"
-    , "    nixos-devenv__base.url = \"github:aformatik/NixOS-Devenv\";"
+    , "    codchi-upstream.url = \"github:aformatik/codchi\";"
     , forEachUnline uniqueInputs $ \fl ->
       "    " <> _flakeMetadata fl <> ".url = \"" <> _flakeURL fl <> "\";"
     -- TODO optionally follow nixpkgs of user flake
     -- , optionalStr (listToMaybe inputs) $ \fl ->
     --   "    nixpkgs.follows = \"" <> _flakeMetadata fl <> "/nixpkgs\";"
-    , "    nixpkgs.follows = \"nixos-devenv__base/nixpkgs\";"
+    , "    nixpkgs.follows = \"codchi-upstream/nixpkgs\";"
     , "  };"
     , "  outputs = inputs: {"
     , "    nixosConfigurations.default = inputs.nixpkgs.lib.nixosSystem {"
     , "      system = \"x86_64-linux\";"
     -- , "      specialArgs = { inherit inputs; };"
     , "      modules = ["
-    , "        { devenv.instance.name = \"" <> getInstanceName instanceName <> "\"; }"
-    , "        inputs.nixos-devenv__base.nixosModules." <> devenvModule
+    , "        { codchi.instance.name = \"" <> getInstanceName instanceName <> "\"; }"
+    , "        inputs.codchi-upstream.nixosModules." <> driverModule
     , forEachUnline inputs $ \fl ->
       "        inputs." <> _flakeMetadata fl <> ".nixosModules." <> _moduleName fl
     , "      ];"
@@ -212,10 +213,10 @@ showTable sep t = unlines (map mkLine t) where
 
 getInstanceSWSharePath
     :: Errors [NixError, Panic] :>> es
-    => Devenv :> es 
+    => CodchiL :> es 
     => InstanceName -> Eff es (Path Rel)
 getInstanceSWSharePath name = do
-    let cmd = "readlink -f \"/nix/var/nix/profiles/per-devenv/" <> getInstanceName name <> "/system/sw/share\""
+    let cmd = "readlink -f \"/nix/var/nix/profiles/per-instance/" <> getInstanceName name <> "/system/sw/share\""
     either
         (throwError . NixError)
         (rethrowPanic @ParseException . fmap unStorePath . parse_ @StorePath)
@@ -226,21 +227,21 @@ getInstanceSWSharePath name = do
 main :: IO ()
 main = withUtf8 $ do
 
-    logFile <- runDevenv $ getPath DirState (fromPathSegments [_DEVENV_APP_NAME <> ".log"])
+    logFile <- runCodchiL $ getPath DirState (fromPathSegments [_APP_NAME <> ".log"])
 
     let stdoutSink = runStdoutLoggingT . unTChanLoggingT =<< atomically (dupTChan logChan)
         fileSink = runFileLoggingT logFile . unTChanLoggingT =<< atomically (dupTChan logChan)
 
     withAsync (stdoutSink `concurrently` fileSink) $ \action -> do
-        runDevenv . devenv =<< parseCmd
+        runCodchiL . cli =<< parseCmd
         atomically $ writeTChan logChan Nothing
         void $ wait action
 
     where
-        runDevenv = runIOE
+        runCodchiL = runIOE
                   . interpretLogger
                   . pluckEffects @IOE @(Errors '[Panic, DriverException, NixError, UserError])
-                  . runDevevIO
+                  . runCodchiLIO
 
 unTChanLoggingT :: (MonadLogger m, MonadIO m) => TChan (Maybe LogLine) -> m ()
 unTChanLoggingT chan = fix $ \loop ->

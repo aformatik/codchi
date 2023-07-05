@@ -44,9 +44,9 @@ let
         fi
       done
 
-      echo "Mounting profile for ${config.devenv.instance.name}..."
+      echo "Mounting profile for ${config.codchi.instance.name}..."
       mkdir -p /nix/var/nix/profiles || true
-      mount --bind "${mnt.root}/wsl/nix/var/nix/profiles/per-devenv/${config.devenv.instance.name}" "/nix/var/nix/profiles"
+      mount --bind "${mnt.root}/wsl/nix/var/nix/profiles/per-instance/${config.codchi.instance.name}" "/nix/var/nix/profiles"
       trap "umount -f /nix/var/nix/profiles" EXIT
 
       echo "Starting systemd..."
@@ -56,7 +56,7 @@ let
 
   tarball = pkgs.callPackage ../make-tarball.nix {
 
-    fileName = "devenv-${pkgs.hostPlatform.system}";
+    fileName = "rootfs";
 
     inherit contents;
 
@@ -74,7 +74,7 @@ in
     nativeSystemd = true;
     startMenuLaunchers = false;
     wslConf.automount.enabled = true;
-    inherit (config.devenv) defaultUser;
+    inherit (config.codchi) defaultUser;
   };
 
   environment.variables.NIX_REMOTE = "daemon";
@@ -101,7 +101,7 @@ in
     update-entry-point.text = mkForce "";
   };
 
-  system.build.devenv.tarball = pkgs.runCommandLocal "devenv-tarball" {} ''
+  system.build.wsl-tarball = pkgs.runCommandLocal "wsl-tarball" {} ''
     cp -a ${tarball} $out
     chmod +w $out
     echo ${config.system.build.toplevel} > $out/system-store-path

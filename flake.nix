@@ -30,13 +30,13 @@
       exampleTemplates = mapAttrs
         (name: path: {
           inherit path;
-          description = "devenv module for ${name}";
+          description = "NixOS module for ${name}";
         })
         examples;
       exampleSystems = mapAttrs
         (_: module: nixosSystem {
           inherit system;
-          modules = [ self.nixosModules.devenv-wsl module { devenv.instance.name = "example"; } ];
+          modules = [ self.nixosModules.driver-wsl module { codchi.instance.name = "example"; } ];
         })
         exampleModules;
     in
@@ -46,11 +46,11 @@
 
       nixosModules =
         let
-          devenv = import ./modules/devenv.nix;
-          wsl = import ./nix/wsl/configuration.nix { inherit inputs; };
+          codchi = import ./nix/modules;
+          wsl = import ./nix/wsl { inherit inputs; };
         in
         exampleModules // {
-          devenv-wsl = { imports = [ devenv wsl ]; };
+          driver-wsl = { imports = [ codchi wsl ]; };
         };
 
       nixosConfigurations = exampleSystems;

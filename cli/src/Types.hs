@@ -1,11 +1,11 @@
 module Types
     ( Abs
-    , DevenvInstance (..)
-    , DevenvStatus (..)
+    , CodchiInstance (..)
+    , CodchiStatus (..)
     , DriverException (..)
       -- , FlakeURL (unFlakeURL)
+    , CodchiFlake
     , DesktopEntry (..)
-    , DevenvFlake
     , InstanceName (getInstanceName)
     , InstanceStatus (..)
     , NixError (..)
@@ -17,10 +17,10 @@ module Types
     , StorePath (unStorePath)
     , UnrecoverableError (..)
     , UserError (..)
-    , _DEVENV_APP_NAME
-    , _DEVENV_CONTROLLER
-    , _DEVENV_CONTROLLER_DIR
-    , _DEVENV_INSTANCE_PREFIX
+    , _APP_NAME
+    , _CONTROLLER
+    , _CONTROLLER_DIR
+    , _INSTANCE_PREFIX
     , _flakeMetadata
     , _flakeURL
     , _moduleName
@@ -41,7 +41,7 @@ import           Cleff
 import           Cleff.Error          (Error, throwError)
 import           Control.Arrow        (left)
 import           Data.Attoparsec.Text as P (char, eitherP, endOfInput, endOfLine, inClass,
-                                            isEndOfLine, many', parseOnly, sepBy, skipWhile, string,
+                                            isEndOfLine, parseOnly, sepBy, skipWhile, string,
                                             takeWhile, takeWhile1, (<?>))
 import           Data.Char            (isSpace)
 import           Data.Data
@@ -50,11 +50,11 @@ import qualified Data.Text            as T
 import qualified Relude.Unsafe        as Unsafe
 import           Util
 
-_DEVENV_INSTANCE_PREFIX, _DEVENV_CONTROLLER_DIR, _DEVENV_CONTROLLER, _DEVENV_APP_NAME :: IsString s => Semigroup s => s
-_DEVENV_APP_NAME = "devenv"
-_DEVENV_CONTROLLER = _DEVENV_APP_NAME <> "_controller"
-_DEVENV_CONTROLLER_DIR = "controller"
-_DEVENV_INSTANCE_PREFIX = _DEVENV_APP_NAME <> "_instance_"
+_INSTANCE_PREFIX, _CONTROLLER_DIR, _CONTROLLER, _APP_NAME :: IsString s => Semigroup s => s
+_APP_NAME = "codchi"
+_CONTROLLER = _APP_NAME <> "-controller"
+_CONTROLLER_DIR = "controller"
+_INSTANCE_PREFIX = _APP_NAME <> "-instance-"
 
 type NixExpr = Text
 
@@ -63,7 +63,7 @@ newtype InstanceName
   deriving (Eq, Show)
 
 getInstanceNameWithPrefix :: InstanceName -> Text
-getInstanceNameWithPrefix (InstanceName n) = _DEVENV_INSTANCE_PREFIX <> n
+getInstanceNameWithPrefix (InstanceName n) = _INSTANCE_PREFIX <> n
 
 instance Parseable InstanceName where
     parser = InstanceName
@@ -71,7 +71,7 @@ instance Parseable InstanceName where
           <?> "Instance name must match pattern " <> show pat
         where pat = "a-zA-Z0-9_-"
 
-data DevenvFlake meta = DevenvFlake
+data CodchiFlake meta = CodchiFlake
     { _flakeURL      :: Text
     , _moduleName    :: Text
     , _flakeMetadata :: meta
@@ -79,8 +79,8 @@ data DevenvFlake meta = DevenvFlake
     }
   deriving (Eq, Show)
 
-instance Parseable (DevenvFlake ()) where
-    parser = DevenvFlake
+instance Parseable (CodchiFlake ()) where
+    parser = CodchiFlake
           <$> (P.takeWhile1 (inClass flakePat) <?> "flake url must match " <> show flakePat)
           <*  P.char '#'
           <*> (P.takeWhile1 (inClass modulePat) <?> "module name must match " <> show modulePat)
@@ -90,7 +90,7 @@ instance Parseable (DevenvFlake ()) where
             flakePat = "a-zA-Z0-9/:?=%&_-"
             modulePat = "a-zA-Z0-9_-"
 
-addNamesFromURL :: [DevenvFlake ()] -> [DevenvFlake Text]
+addNamesFromURL :: [CodchiFlake ()] -> [CodchiFlake Text]
 addNamesFromURL flakes = map addName flakes where
     lastMaybe xs | null xs   = Nothing
                  | otherwise = Just $ Unsafe.last xs
@@ -101,7 +101,7 @@ addNamesFromURL flakes = map addName flakes where
             $ zipWith
                 (\flake i -> (_flakeURL flake, urlToName i $ _flakeURL flake))
                 flakes [1..]
-    addName DevenvFlake{..} = DevenvFlake{_flakeMetadata = indexed Map.! _flakeURL, ..}
+    addName CodchiFlake{..} = CodchiFlake{_flakeMetadata = indexed Map.! _flakeURL, ..}
     -- firstInput = urlToName 1 . _flakeURL <$> listToMaybe inputs
 
 newtype StorePath
@@ -121,15 +121,15 @@ instance Parseable StorePath where
 
 data InstanceStatus = Running | Stopped deriving (Eq, Show)
 
-data DevenvInstance = DevenvInstance
+data CodchiInstance = CodchiInstance
     { _name   :: !InstanceName
     , _status :: !InstanceStatus
     }
   deriving (Show)
 
-data DevenvStatus
-    = DevenvInstalled InstanceStatus
-    | DevenvNotInstalled
+data CodchiStatus
+    = CodchiInstalled InstanceStatus
+    | CodchiNotInstalled
   deriving (Show)
 
 newtype UserError
