@@ -1,6 +1,6 @@
 cabal-version: 3.4
-name:          devenv
-version:       0.0.4.0
+name:          codchi
+version:       0.1.0.0
 
 -- synopsis:
 -- description:
@@ -89,7 +89,7 @@ common linux
 common darwin
   other-modules: Darwin
 
-executable devenv
+executable codchi
   import:         shared
 
   if os(windows)
@@ -110,7 +110,7 @@ executable devenv
   main-is:        Main.hs
   hs-source-dirs: src
   other-modules:
-    Devenv
+    Dsl
     Linux
     Parser
     Types

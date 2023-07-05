@@ -33,7 +33,7 @@
 
           for app in applications/*.desktop; do
             NAME="$(grep Icon "$app" | sed 's/Icon=//')"
-            ICON="$(find -L icons/ -name "$NAME.*" | sort -rV | head -n1)"
+            ICON="$(find -L icons/ pixmaps/ -name "$NAME.*" | sort -rV | head -n1)"
             if [ ! -z "$ICON" ]; then
               ${pkgs.imagemagick}/bin/convert -background transparent "$ICON" "wsl/icos/$NAME.ico"
             fi

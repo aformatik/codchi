@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE UndecidableInstances #-}
-module Devenv where
+module Dsl where
 
 import Cleff
 import Cleff.Error                         (Error, runError)
@@ -18,26 +18,26 @@ type Interpreter e m = forall es a. m :>> es => Eff (e : es) a -> Eff es a
 
 data DirectoryType = DirState | DirConfig | DirCtrl
 
-data Devenv :: Effect where
-    GetStatus :: Devenv m DevenvStatus
-    ListInstances :: Devenv m [DevenvInstance]
+data CodchiL :: Effect where
+    GetStatus :: CodchiL m CodchiStatus
+    ListInstances :: CodchiL m [CodchiInstance]
     --
-    InitCtrl :: Devenv m ()
-    Start :: Bool -> Devenv m ()
-    InstallRootfs :: InstanceName -> FilePath -> Devenv m ()
-    UninstallInstance :: InstanceName -> Devenv m ()
-    RunInInstance :: DevenvInstance -> Bool -> [Text] -> Devenv m ()
+    InitCtrl :: CodchiL m ()
+    Start :: Bool -> CodchiL m ()
+    InstallRootfs :: InstanceName -> FilePath -> CodchiL m ()
+    UninstallInstance :: InstanceName -> CodchiL m ()
+    RunInInstance :: CodchiInstance -> Bool -> [Text] -> CodchiL m ()
     --
     -- | path to $currentSystem/sw/share
-    UpdateShortcuts :: InstanceName -> FilePath -> Devenv m ()
+    UpdateShortcuts :: InstanceName -> FilePath -> CodchiL m ()
     --
-    RunCtrlNixCmd :: Bool -> Text -> Devenv m (Either Text Text)
-    RunInstanceCmd :: Bool -> InstanceName -> Text -> Devenv m (Either Text Text)
-    GetPath :: DirectoryType -> Path Rel -> Devenv m FilePath
+    RunCtrlNixCmd :: Bool -> Text -> CodchiL m (Either Text Text)
+    RunInstanceCmd :: Bool -> InstanceName -> Text -> CodchiL m (Either Text Text)
+    GetPath :: DirectoryType -> Path Rel -> CodchiL m FilePath
     --
-    -- | NixOS module in flake.nix for devenv driver (e.g. devenv-wsl)
-    GetDevenvModule :: Devenv m Text
-makeEffect ''Devenv
+    -- | NixOS module in flake.nix for driver (e.g. driver-wsl)
+    GetDriverModule :: CodchiL m Text
+makeEffect ''CodchiL
 
 data Logger :: Effect where
     Log :: LogLevel -> Text -> Logger m ()
