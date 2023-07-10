@@ -53,13 +53,17 @@ jobs:
         run: |
           Set-PSDebug -Trace 1
           cabal build all
-          mv "$((Get-ChildItem -Filter devenv.exe -Recurse).fullname)" ..
-
+          mv "$((Get-ChildItem -Filter codchi.exe -Recurse).fullname)" ..
+      - name: Compress binaries
+        uses: svenstaro/upx-action@v2
+        with:
+          files: |
+            codchi.exe
       - name: Temporarily save artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: devenv.exe
-          path: devenv.exe
+          name: codchi.exe
+          path: codchi.exe
           retention-days: 1
           if-no-files-found: error
   nix:
@@ -76,7 +80,7 @@ jobs:
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
     - run: |
         nix build .#controller-rootfs
-        cp  result/rootfs.tar.gz controller.tar.gz
+        cp  result/controller.tar.gz controller.tar.gz
     - name: Temporarily save artifacts
       uses: actions/upload-artifact@v3
       with:
@@ -88,7 +92,7 @@ jobs:
     name: Package MSIX package
     runs-on: windows-latest
     needs: 
-      - build
+      - build-windows
       - nix
     permissions:
       contents: write
@@ -98,18 +102,18 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          repository: 'aformatik/nixos-devenv-packaging'
+          repository: 'aformatik/codchi-packaging'
 
-      - name: Retrieve devenv.exe
+      - name: Retrieve codchi.exe
         uses: actions/download-artifact@v3
         with:
-          name: devenv.exe
+          name: codchi.exe
           path: msix
       - name: Retrieve controller.tar.gz
         uses: actions/download-artifact@v3
         with:
           name: controller.tar.gz
-          path: msix/VFS/CommonAppData/devenv
+          path: msix/VFS/Common AppData/codchi
 
       - name: import windows certificate
         run: |
@@ -132,7 +136,7 @@ jobs:
           WINVER: ${{ steps.winver.outputs.replaced }}
         shell: bash
         run: |
-          for f in msix/{devenv.AppInstaller,AppxManifest.xml}; do
+          for f in msix/{codchi.AppInstaller,AppxManifest.xml}; do
               sed -i \
                   "s/@VERSION@/$WINVER/g
                    s/@VERSION_TAG@/$VERSION/g" \
@@ -140,16 +144,16 @@ jobs:
           done
       - name: MakeAppx
         run: |
-          & "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\makeappx.exe" pack /o /d .\msix\ /p devenv.msix
+          & "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\makeappx.exe" pack /o /d .\msix\ /p codchi.msix
 
-      - name: sign devenv.msix
+      - name: sign codchi.msix
         run: |
-          & "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\signtool.exe" sign -v -debug -n "nixos-devenv" -fd SHA256 -tr http://timestamp.digicert.com -td sha256 .\devenv.msix
+          & "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\signtool.exe" sign -v -debug -n "nixos-devenv" -fd SHA256 -tr http://timestamp.digicert.com -td sha256 .\codchi.msix
 
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            devenv.msix
-            msix/devenv.AppInstaller
-            devenv.crt
+            codchi.msix
+            msix/codchi.AppInstaller
+            codchi.crt

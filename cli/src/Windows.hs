@@ -1,6 +1,5 @@
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
-{-# HLINT ignore "Use unwords" #-}
 
 module Windows
     ( runCodchiLIO
@@ -42,7 +41,7 @@ import           Data.ByteString.Builder.Extra    (defaultChunkSize)
 import qualified System.IO.Utf8                   as Utf8
 import qualified System.Process.Typed             as Proc
 import           System.Process.Typed             (ExitCode (..), ProcessConfig)
-import           UnliftIO                         (bracket, catch, hClose, throwIO)
+import           UnliftIO                         (bracket, catch, hClose, throwIO, finally)
 import           UnliftIO.Directory
 
 data WSLInstance = WSLInstance
@@ -96,23 +95,24 @@ runCodchiLIO = interpret $ \case
         ControllerInstalled status   -> return $ CodchiInstalled status
 
     InitCtrl ->
-        liftIO (getXdgDirectoryList XdgDataDirs >>= flip findFile "codchi\\controller.tar.gz") >>= \case
+        liftIO (flip findFile "codchi\\controller.tar.gz" =<< getXdgDirectoryList XdgDataDirs) >>= \case
             Nothing ->
                 throwError $ Panic $ UnrecoverableError "Couldn't find root filesystem for Codchi controller"
             Just rootfs -> do
-                ctrlDir <- liftIO $ getOrCreateXdgDir XdgState _CONTROLLER_DIR
-                let ctrlFile = toNTPath $
+                ctrlDir <- getOrCreateXdgDir XdgState _CONTROLLER_DIR
+                let ctrlFile = logTraceId "controller dir" $ toNTPath $
                         ctrlDir `joinPaths` fromPathSegments ["controller.tar.gz"]
-                liftIO $ copyFile rootfs (toString ctrlFile)
+                copyFile rootfs (toString ctrlFile)
 
-                void $ rethrowAll $ readProcess_ $
-                    wsl'exeCmd [ "--import"
-                               , _CONTROLLER
-                               , toNTPath ctrlDir
-                               , ctrlFile
-                               ]
+                let wslImport = void $ rethrowAll $ readProcess_ $
+                        wsl'exeCmd [ "--import"
+                                   , _CONTROLLER
+                                   , toNTPath ctrlDir
+                                   , ctrlFile
+                                   ]
+                    cleanup = removeFile $ toString ctrlFile
 
-
+                wslImport `finally` cleanup
 
     Start alreadyRunning -> runCodchiLIO $ rethrowAll $ mainLoop alreadyRunning
 
@@ -195,7 +195,10 @@ runCodchiLIO = interpret $ \case
     GetDriverModule -> return "driver-wsl"
     GetPath dirType s -> toString . toNTPath . (`joinPaths` s)
         <$> case dirType of
-            DirCtrl   -> return $ getWSLInstanceDir _CONTROLLER
+            DirCtrl   -> do
+                let dir = getWSLInstanceDir _CONTROLLER
+                createDirectoryIfMissing True $ toString $ toNTPath dir
+                return dir
             DirState  -> getOrCreateXdgDir XdgState ""
             DirConfig -> getOrCreateXdgDir XdgConfig ""
 
@@ -235,7 +238,9 @@ mainLoop _alreadyRunning = do
                     threadDelay 1_000_000
                     loop
 
-    void $ liftIO $ async $  subprog "codchi_pulseaudio.exe" "C:\\Program Files (x86)\\PulseAudio\\bin\\codchi_pulseaudio.exe"
+    void $ liftIO $ do
+        winFolder <- toNTPath <$> getFolderPath cSIDL_PROGRAM_FILESx86
+        async $ subprog "codchi_pulseaudio.exe" (winFolder <> "\\PulseAudio\\bin\\codchi_pulseaudio.exe")
             [ "--log-target=file:" <> toText pulseaudioLogFile
             , "--log-time"
             , "--log-level=" <> show pulseaudioLogLevel
@@ -244,7 +249,9 @@ mainLoop _alreadyRunning = do
             -- , "--system"
             , "--exit-idle-time=-1"
             ]
-    void $ liftIO $ async $ subprog "codchi_vcxsrv.exe" "C:\\Program Files\\VcXsrv\\codchi_vcxsrv.exe"
+    void $ liftIO $ do
+        winFolder <- toNTPath <$> getFolderPath cSIDL_PROGRAM_FILES
+        async $ subprog "codchi_vcxsrv.exe" (winFolder <> "\\VcXsrv\\codchi_vcxsrv.exe")
             [ "-ac"             -- disable access control
             , "-noreset"        -- dont restart after last client exits
             , "-wgl"            -- native opengl
@@ -379,6 +386,8 @@ updateShortcuts name swSharePath = do
 -- https://tarma.com/support/im9/using/symbols/functions/csidls.htm
 cSIDL_PROGRAMS :: CSIDL
 cSIDL_PROGRAMS = 2
+cSIDL_PROGRAM_FILESx86 :: CSIDL
+cSIDL_PROGRAM_FILESx86 = 42
 
 getFolderPath :: CSIDL -> IO (Path Abs)
 getFolderPath csidl = fromString <$> sHGetFolderPath nullPtr csidl nullPtr 0
@@ -387,7 +396,7 @@ getOrCreateXdgDir :: MonadIO m => XdgDirectory -> Path Rel -> m (Path Abs)
 getOrCreateXdgDir xdg dir = liftIO $ do
     path <- fromString <$> getXdgDirectory xdg _APP_NAME
     let innerPath = path `joinPaths` dir
-    createDirectoryIfMissing True (toString $ toNTPath innerPath)
+    createDirectoryIfMissing True (logTraceId "create-dir" $ toString $ toNTPath innerPath)
     return innerPath
 
 instance IsString (Path x) where
@@ -647,11 +656,11 @@ foreign import ccall "shlobj_core.h SHChangeNotify"
 refreshIconCache :: IO ()
 refreshIconCache = c_SHChangeNotify 0x8000000 0x1000 nullPtr nullPtr
 
-foreign import ccall "windows.h FreeConsole"
-    c_FreeConsole :: IO BOOL
+-- foreign import ccall "windows.h FreeConsole"
+--     c_FreeConsole :: IO BOOL
 
-freeConsole :: IO ()
-freeConsole = failIfFalse_ "FreeConsole" c_FreeConsole
+-- freeConsole :: IO ()
+-- freeConsole = failIfFalse_ "FreeConsole" c_FreeConsole
 
 foreign import ccall "windows.h GetConsoleWindow"
     c_GetConsoleWindow :: IO HWND
@@ -741,6 +750,8 @@ regEnumKeys = noop
 regEnumKeyVals :: HKEY -> IO [(String,String,DWORD)]
 regEnumKeyVals = noop
 
+cSIDL_PROGRAM_FILES :: CSIDL
+cSIDL_PROGRAM_FILES = 38
 type SHGetFolderPathFlags = DWORD
 sHGetFolderPath :: HWND -> CSIDL -> HANDLE -> SHGetFolderPathFlags -> IO String
 sHGetFolderPath = noop
