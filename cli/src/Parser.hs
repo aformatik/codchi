@@ -47,4 +47,4 @@ parseCmd :: IO Command
 parseCmd = execParser opts where
     opts = info (cmdP <**> helper)
          $ fullDesc
-        <> header "CODe maCHInes - Declerative, Reproducible, Cross Platform Development Environments as Code"
+        <> header "CODe maCHInes - Declarative, Reproducible, Cross Platform Development Environments as Code"

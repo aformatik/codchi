@@ -64,8 +64,6 @@
         };
         controller-rootfs = pkgs.callPackage ./nix/controller { };
 
-        # wsld = pkgs.callPackage ./nix/wsl/wsld.nix { };
-
         populate-cache =
           let
             buildInputs = map (drv: "${drv}") [
