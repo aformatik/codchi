@@ -1,13 +1,13 @@
-{ config, options, lib, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 let
   inherit (lib) mkOption mkEnableOption mkMerge mkIf literalExpression types;
 
-  jdkPath = "/home/${config.devenv.user}/.jdks";
-  cfg = config.devenv.java;
+  jdkPath = "/home/${config.codchi.defaultUser}/.jdks";
+  cfg = config.codchi.java;
 in
 {
 
-  options.devenv.java = {
+  options.codchi.java = {
     enable = mkEnableOption "java" // {
       description = ''
         Adds Java and IDEs to the development environment.
@@ -22,8 +22,8 @@ in
       type = types.attrsOf types.package;
       description = ''
         List of JDKs which should be symlinked to ~/.jdks (for IDEs).
-        In addition to the JDKs in nixpkgs devenv adds openjdk20 and
-        temurin-bin-20 to `pkgs`.
+        In addition to the JDKs in nixpkgs codchi provides openjdk20 and
+        temurin-bin-20 in `pkgs`.
       '';
       example = literalExpression ''{
         openjdk19 = pkgs.jdk19;

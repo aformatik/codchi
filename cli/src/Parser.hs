@@ -9,7 +9,7 @@ import Util                 (Parseable, parser)
 data Command
     = CommandStatus
     | CommandStart
-    | CommandInstall InstanceName [DevenvFlake ()]
+    | CommandInstall InstanceName [CodchiFlake ()]
     | CommandUninstall InstanceName
     | CommandRun Bool InstanceName [Text]
     | CommandUpdate InstanceName
@@ -17,12 +17,12 @@ data Command
 
 cmdP :: Parser Command
 cmdP = subparser
-     $ command "status"     (info statusP    (progDesc "Show devenv status"))
-    <> command "start"      (info startP     (progDesc "Start devenv controller"))
-    <> command "install"    (info installP   (progDesc "Install devenv instance"))
-    <> command "uninstall"  (info uninstallP (progDesc "Uninstall devenv instance"))
-    <> command "run"        (info runP       (progDesc "Run command in devenv instance"))
-    <> command "update"     (info updateP    (progDesc "Update devenv instance"))
+     $ command "status"     (info statusP    (progDesc "Show codchi status"))
+    <> command "start"      (info startP     (progDesc "Start codchi controller"))
+    <> command "install"    (info installP   (progDesc "Install a code machine"))
+    <> command "uninstall"  (info uninstallP (progDesc "Uninstall a code machine"))
+    <> command "run"        (info runP       (progDesc "Run command in a code machine"))
+    <> command "update"     (info updateP    (progDesc "Update a code machine"))
 
 
     where
@@ -47,4 +47,4 @@ parseCmd :: IO Command
 parseCmd = execParser opts where
     opts = info (cmdP <**> helper)
          $ fullDesc
-        <> header "devenv - cross platform development environment from code"
+        <> header "CODe maCHInes - Declerative, Reproducible, Cross Platform Development Environments as Code"

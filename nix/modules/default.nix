@@ -5,7 +5,7 @@
     ./java.nix
   ];
 
-  options.devenv = {
+  options.codchi = {
     defaultUser = lib.mkOption {
       type = lib.types.str;
       internal = true;
@@ -20,7 +20,7 @@
   };
 
   config = {
-    users.users.${config.devenv.defaultUser} = {
+    users.users.${config.codchi.defaultUser} = {
       isNormalUser = true;
       uid = 1000;
       extraGroups = [ "wheel" ];

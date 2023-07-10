@@ -3,8 +3,7 @@
 {-# HLINT ignore "Use unwords" #-}
 
 module Windows
-    ( refreshIconCache
-    , runDevevIO
+    ( runCodchiLIO
     ) where
 
 #ifdef mingw32_HOST_OS
@@ -20,7 +19,7 @@ import           Foreign.C                        (CInt, CIntPtr, CWchar)
 #endif
 
 
-import           Devenv
+import           Dsl
 import           Types
 import           Util
 
@@ -85,45 +84,45 @@ newtype ControllerException
   deriving anyclass (Exception)
 
 
-runDevevIO :: Interpreter Devenv (Logger : IOE : Errors [DriverException, UserError, Panic])
-runDevevIO = interpret $ \case
+runCodchiLIO :: Interpreter CodchiL (Logger : IOE : Errors [DriverException, UserError, Panic])
+runCodchiLIO = interpret $ \case
     GetStatus -> getControllerStatus >>= \case
         WSLNotInstalledOrNeedsUpdate -> throwError $ DriverException $
             ControllerException $ "WSL is not installed or needs an update.\r\n" <>
                 "Please run 'wsl --install --web-download --no-distribution' or " <>
                 "download the latest version from 'https://github.com/microsoft/WSL/releases'.\r\n" <>
                 "This will require admin privileges and also restarting your computer."
-        ControllerNotInstalled       -> return DevenvNotInstalled
-        ControllerInstalled status   -> return $ DevenvInstalled status
+        ControllerNotInstalled       -> return CodchiNotInstalled
+        ControllerInstalled status   -> return $ CodchiInstalled status
 
     InitCtrl ->
-        liftIO (getXdgDirectoryList XdgDataDirs >>= flip findFile "devenv\\controller.tar.gz") >>= \case
+        liftIO (getXdgDirectoryList XdgDataDirs >>= flip findFile "codchi\\controller.tar.gz") >>= \case
             Nothing ->
-                throwError $ Panic $ UnrecoverableError "Couldn't find rootfs for devenv controller"
+                throwError $ Panic $ UnrecoverableError "Couldn't find root filesystem for Codchi controller"
             Just rootfs -> do
-                ctrlDir <- liftIO $ getOrCreateXdgDir XdgState _DEVENV_CONTROLLER_DIR
+                ctrlDir <- liftIO $ getOrCreateXdgDir XdgState _CONTROLLER_DIR
                 let ctrlFile = toNTPath $
                         ctrlDir `joinPaths` fromPathSegments ["controller.tar.gz"]
                 liftIO $ copyFile rootfs (toString ctrlFile)
 
                 void $ rethrowAll $ readProcess_ $
                     wsl'exeCmd [ "--import"
-                               , _DEVENV_CONTROLLER
+                               , _CONTROLLER
                                , toNTPath ctrlDir
                                , ctrlFile
                                ]
 
 
 
-    Start alreadyRunning -> runDevevIO $ rethrowAll $ mainLoop alreadyRunning
+    Start alreadyRunning -> runCodchiLIO $ rethrowAll $ mainLoop alreadyRunning
 
     ListInstances -> do
         instances <- listWSLInstances
         return
-            [ DevenvInstance devenvName _wslStatus
+            [ CodchiInstance instanceName _wslStatus
             | WSLInstance{..} <- instances
-            , devenvName <- maybeToList $
-                rightToMaybe . parse =<< Text.stripPrefix _DEVENV_INSTANCE_PREFIX _wslName
+            , instanceName <- maybeToList $
+                rightToMaybe . parse =<< Text.stripPrefix _INSTANCE_PREFIX _wslName
             ]
 
     RunCtrlNixCmd printLog cmd -> rethrowAll $ do
@@ -191,16 +190,16 @@ runDevevIO = interpret $ \case
               , "--shell-type", "login"
               ] <> args
 
-    UpdateShortcuts name swSharePath -> runDevevIO $ rethrowAll $ Windows.updateShortcuts name swSharePath
+    UpdateShortcuts name swSharePath -> runCodchiLIO $ rethrowAll $ Windows.updateShortcuts name swSharePath
 
-    GetDevenvModule -> return "devenv-wsl"
+    GetDriverModule -> return "driver-wsl"
     GetPath dirType s -> toString . toNTPath . (`joinPaths` s)
         <$> case dirType of
-            DirCtrl   -> return $ getWSLInstanceDir _DEVENV_CONTROLLER
+            DirCtrl   -> return $ getWSLInstanceDir _CONTROLLER
             DirState  -> getOrCreateXdgDir XdgState ""
             DirConfig -> getOrCreateXdgDir XdgConfig ""
 
-mainLoop :: [IOE, Error ShellException, Error Panic, Logger, Devenv] :>> es => Bool -> Eff es ()
+mainLoop :: [IOE, Error ShellException, Error Panic, Logger, CodchiL] :>> es => Bool -> Eff es ()
 mainLoop _alreadyRunning = do
     pulseaudioLogFile <- getPath DirState $ fromPathSegments [ "pulseaudio.log" ]
     let pulseaudioLogLevel = case logLevel of
@@ -236,7 +235,7 @@ mainLoop _alreadyRunning = do
                     threadDelay 1_000_000
                     loop
 
-    void $ liftIO $ async $  subprog "devenv_pulseaudio.exe" "C:\\Program Files (x86)\\PulseAudio\\bin\\devenv_pulseaudio.exe"
+    void $ liftIO $ async $  subprog "codchi_pulseaudio.exe" "C:\\Program Files (x86)\\PulseAudio\\bin\\codchi_pulseaudio.exe"
             [ "--log-target=file:" <> toText pulseaudioLogFile
             , "--log-time"
             , "--log-level=" <> show pulseaudioLogLevel
@@ -245,7 +244,7 @@ mainLoop _alreadyRunning = do
             -- , "--system"
             , "--exit-idle-time=-1"
             ]
-    void $ liftIO $ async $ subprog "devenv_vcxsrv.exe" "C:\\Program Files\\VcXsrv\\devenv_vcxsrv.exe"
+    void $ liftIO $ async $ subprog "codchi_vcxsrv.exe" "C:\\Program Files\\VcXsrv\\codchi_vcxsrv.exe"
             [ "-ac"             -- disable access control
             , "-noreset"        -- dont restart after last client exits
             , "-wgl"            -- native opengl
@@ -264,21 +263,21 @@ mainLoop _alreadyRunning = do
     void $ liftIO $ async $ do
             myCancelChan <- atomically $ dupTChan cancelChan
             void $ readProcess $ controllerCmd "pkill nix-daemon || true"
-            let doLog lvl _ txt = runTChanLoggingT $ logWithoutLoc "devenv_controller" lvl txt
+            let doLog lvl _ txt = runTChanLoggingT $ logWithoutLoc "controller" lvl txt
             fix $ \loop -> do
                 runProcessWith (doLog LevelInfo) (doLog LevelWarn)
                     $ Proc.setStdin Proc.closed
-                    $ controllerCmd "/bin/devenv-serve"
+                    $ controllerCmd "/bin/ctrl-serve"
                 whenNothingM_ (atomically $ tryReadTChan myCancelChan) $ do
-                    doLog LevelWarn Win ("Devenv controller exited unexpectedly (please see logs). Restarting..." :: Text)
+                    doLog LevelWarn Win ("Codchi controller exited unexpectedly (please see logs). Restarting..." :: Text)
                     loop
 
     runWinLoop $ do
-        putTextLn "Stopping devenv..."
+        putTextLn "Stopping controller..."
         atomically $ writeTChan cancelChan ()
         void $ runProcessSilent $ controllerCmd "pkill nix-daemon || true"
-        -- void $ runProcessSilent $ shellProc "taskkill.exe" [ "/F", "/IM", "devenv_pulseaudio.exe" ]
-        void $ runProcessSilent $ shellProc "taskkill.exe" [ "/F", "/IM", "devenv_vcxsrv.exe" ]
+        -- void $ runProcessSilent $ shellProc "taskkill.exe" [ "/F", "/IM", "codchi_pulseaudio.exe" ]
+        void $ runProcessSilent $ shellProc "taskkill.exe" [ "/F", "/IM", "codchi_vcxsrv.exe" ]
 
 
 runProcessSilent :: MonadIO m => ProcessConfig stdin stdout stderr -> m ExitCode
@@ -286,7 +285,7 @@ runProcessSilent = Proc.runProcess
            . Proc.setStdout Proc.nullStream
            . Proc.setStderr Proc.nullStream
 
-updateShortcuts :: [IOE, Error ShellException, Error Panic, Logger, Devenv] :>> es
+updateShortcuts :: [IOE, Error ShellException, Error Panic, Logger, CodchiL] :>> es
                 => InstanceName
                 -> FilePath
                 -> Eff es ()
@@ -308,7 +307,7 @@ updateShortcuts name swSharePath = do
                     Right (DesktopEntry {deName,deTerminal,deExec}) -> do
                         let iconInCtrl = swSharePath <> "\\wsl\\icos\\" <> toString app <> ".ico"
                             iconInWin  = icosFolder <> "\\" <> toString deName <> ".ico"
-                        deIcon <- doesFileExist iconInCtrl >>= \case 
+                        deIcon <- doesFileExist iconInCtrl >>= \case
                             True -> do
                                 copyFile iconInCtrl iconInWin
                                 return $ Just iconInWin
@@ -324,7 +323,7 @@ updateShortcuts name swSharePath = do
 
     startMenuFolder <- liftIO $ do
         startMenu <- getFolderPath cSIDL_PROGRAMS
-        let instanceFolder = startMenu `joinPaths` fromPathSegments [ _DEVENV_APP_NAME, getInstanceName name ]
+        let instanceFolder = startMenu `joinPaths` fromPathSegments [ _APP_NAME <> " - " <> getInstanceName name ]
         createDirectoryIfMissing True (toString $ toNTPath instanceFolder)
         return $ toString $ toNTPath instanceFolder
 
@@ -339,7 +338,7 @@ updateShortcuts name swSharePath = do
                 ExceptT initialize
                 forM_ desktopEntries $ \(DesktopEntry {..}) -> do
                     let lnk = Shortcut
-                            { targetPath = _DEVENV_APP_NAME <> ".exe"
+                            { targetPath = _APP_NAME <> ".exe"
                             , arguments = intercalate " " $
                                 [ "run" ] <>
                                 [ "--no-terminal" | not deTerminal ] <>
@@ -386,7 +385,7 @@ getFolderPath csidl = fromString <$> sHGetFolderPath nullPtr csidl nullPtr 0
 
 getOrCreateXdgDir :: MonadIO m => XdgDirectory -> Path Rel -> m (Path Abs)
 getOrCreateXdgDir xdg dir = liftIO $ do
-    path <- fromString <$> getXdgDirectory xdg _DEVENV_APP_NAME
+    path <- fromString <$> getXdgDirectory xdg _APP_NAME
     let innerPath = path `joinPaths` dir
     createDirectoryIfMissing True (toString $ toNTPath innerPath)
     return innerPath
@@ -410,7 +409,7 @@ rethrowAll
 rethrowAll = pluckEffects @catchAllErr @errs
 
 controllerCmd :: Text -> ProcessConfig () () ()
-controllerCmd = wslCmd _DEVENV_CONTROLLER
+controllerCmd = wslCmd _CONTROLLER
 
 wslCmd :: Text -> Text -> ProcessConfig () () ()
 wslCmd name cmd = wsl'exeCmd $
@@ -438,7 +437,7 @@ shellProc cmd args = logTraceShowId "shellProc" $
 listWSLInstances :: [Error DriverException, IOE] :>> es => Eff es [WSLInstance]
 listWSLInstances = rethrowAll $ parseProcess_ @[WSLInstance] $ wsl'exeCmd [ "-l", "-v" ]
 
-data WinDevenvStatus
+data WinCodchiStatus
     = WSLNotInstalledOrNeedsUpdate
     | ControllerNotInstalled
     | ControllerInstalled InstanceStatus
@@ -553,7 +552,7 @@ parseProcess_
 parseProcess_ = either (throwError . ParseException) return <=< parseProcess
 
 
-getControllerStatus :: [Error Panic, IOE] :>> es => Eff es WinDevenvStatus
+getControllerStatus :: [Error Panic, IOE] :>> es => Eff es WinCodchiStatus
 getControllerStatus =
     readProcess "wsl.exe --version" >>= \case
         -- WSL is not activated or needs an update (--version is only available
@@ -563,7 +562,7 @@ getControllerStatus =
                 Right out -> do
                     instances <- either (throwError . Panic . ParseException) return $
                         parse @[WSLInstance] out
-                    case find ((== _DEVENV_CONTROLLER) . _wslName) instances of
+                    case find ((== _CONTROLLER) . _wslName) instances of
                         Nothing     -> return ControllerNotInstalled
                         Just status -> return $ ControllerInstalled (_wslStatus status)
                 -- WSL outputs an error message to stdout if no distribution is
@@ -593,13 +592,13 @@ runWinLoop cleanup = liftIO $ do
 
     where
         createMessageWindow wndProc = do
-            let clsName = mkClassName _DEVENV_APP_NAME
+            let clsName = mkClassName _APP_NAME
             hinst <- getModuleHandle Nothing
             whenNothingM_ (registerClass (0, hinst, Nothing, Nothing, Nothing, Nothing, clsName)) $
                 error "Couldn't register window class"
             createWindow
                 clsName
-                _DEVENV_APP_NAME
+                _APP_NAME
                 0
                 Nothing
                 Nothing

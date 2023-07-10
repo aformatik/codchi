@@ -2,10 +2,10 @@ module Linux where
 
 
 import Cleff
-import Devenv
+import Dsl
 import Util
 import Types
 
-runDevevIO :: Interpreter Devenv (Logger : IOE : Errors [DriverException, UserError, Panic])
-runDevevIO = interpretIO $ \case
+runCodchiLIO :: Interpreter CodchiL (Logger : IOE : Errors [DriverException, UserError, Panic])
+runCodchiLIO = interpretIO $ \case
     _ -> return undefined -- error "not implemented"
