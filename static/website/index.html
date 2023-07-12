@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en" 
+    class="min-h-full scroll-smooth antialiased
+           bg-gradient-to-b from-gray-950 via-gray-900 to-blue-950">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>{{ title }}</title>
+    <meta name="description" content="{{ description }}" />
+
+    <link href="public/favicon.ico" rel="icon" type="image/x-icon" />
+    <link href="public/style.css" rel="stylesheet">
+
+    <script src="//cdn.jsdelivr.net/npm/@marcreichel/alpine-typewriter/dist/alpine-typewriter.min.js" defer></script>
+    <script src="//unpkg.com/alpinejs" defer></script>
+    <link rel="preconnect" href="//rsms.me/">
+    <link rel="stylesheet" href="//rsms.me/inter/inter.css">
+
+    <!-- <base href="/" /> -->
+    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="og:locale" content="de_DE" />
+    <meta name="og:type" content="website" />
+    <meta name="og:url" content="{{ baseUrl }}" />
+    <meta name="og:site_name" content="{{ title }}" />
+    <meta name="og:description" content="{{ description }}" />
+</head>
+
+
+<body class="flex flex-col min-h-[100vh]">
+
+<header class="fixed top-0 left-0 right-0 sm:h-20 z-50
+               backdrop-blur ring-1 ring-slate-200/10">
+    <div class="container mx-auto max-w-7xl
+                py-4 px-4 sm:px-6 lg:px-8
+                flex md:gap-x-12 justify-between
+                text-slate-200">
+        <a href="" class="flex items-center gap-x-4">
+            <img class="h-12 w-auto" src="public/logo.webp" alt="{{title}} logo">
+            <h1 class="text-3xl font-medium tracking-tighter">{{title}}</h1>
+        </a>
+
+        <a class="flex items-center gap-x-2 font-medium text-2xl tracking-tighter 
+                  border-2 border-slate-200 rounded px-2 py-2
+                  "
+            target="_blank"
+            href="https://github.com/aformatik/codchi">
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="h-8 w-8 fill-[currentColor]"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.463 2 11.97c0 4.404 2.865 8.14 6.839 9.458.5.092.682-.216.682-.48 0-.236-.008-.864-.013-1.695-2.782.602-3.369-1.337-3.369-1.337-.454-1.151-1.11-1.458-1.11-1.458-.908-.618.069-.606.069-.606 1.003.07 1.531 1.027 1.531 1.027.892 1.524 2.341 1.084 2.91.828.092-.643.35-1.083.636-1.332-2.22-.251-4.555-1.107-4.555-4.927 0-1.088.39-1.979 1.029-2.675-.103-.252-.446-1.266.098-2.638 0 0 .84-.268 2.75 1.022A9.607 9.607 0 0 1 12 6.82c.85.004 1.705.114 2.504.336 1.909-1.29 2.747-1.022 2.747-1.022.546 1.372.202 2.386.1 2.638.64.696 1.028 1.587 1.028 2.675 0 3.83-2.339 4.673-4.566 4.92.359.307.678.915.678 1.846 0 1.332-.012 2.407-.012 2.734 0 .267.18.577.688.48 3.97-1.32 6.833-5.054 6.833-9.458C22 6.463 17.522 2 12 2Z"></path></svg>
+            Get Started
+        </a>
+    </div>
+</header>
+
+<div class="container mx-auto max-w-7xl min-h-full mt-20 px-4
+    justify-center">
+
+    <h1 class="mx-auto max-w-4xl my-20
+        font-display text-5xl font-medium tracking-tight text-center
+        text-slate-200 md:text-7xl">
+        <span class="relative whitespace-nowrap text-sky-400"
+            x-data="{ texts: ['Declarative', 'Reproducible'] }" 
+            x-typewriter="texts" x-typewriter.cursor="texts">Declarative</span>
+        <br class="lg:hidden">
+        Development
+        <br class="md:hidden">
+        Environments
+        <br class="lg:hidden">
+        as Code
+    </h1>
+
+    <div class="relative mx-auto 
+        lg:w-[75%] lg:h-[550px]
+        w-full h-[620px]">
+        <div class="absolute w-1/2 h-1/2 inset-0 m-auto z-0
+            bg-[conic-gradient(var(--tw-gradient-stops))] from-sky-400 via-blue-800 to-sky-500
+            blur-[10rem] opacity-70
+            "></div>
+        <img src="public/intellij.png"
+             class="absolute ring-1 ring-slate-200/10 rounded-lg
+                    lg:top-1/4 lg:w-1/2 lg:translate-x-10 lg:left-auto lg:right-0 lg:translate-y-0
+                    bottom-0 left-0 right-0 mx-auto w-[375px] -translate-y-16 max-w-min">
+        <img src="public/win-start-menu-simple.png"
+             class="backdrop-blur-xl ring-1 ring-slate-200/10 rounded-lg
+                    absolute lg:translate-x-10
+                    lg:top-1/2 lg:right-1/3 lg:w-1/3 lg:left-auto
+                    bottom-0 left-0 right-0 mx-auto w-[250px]">
+        <img src="public/configuration.nix.png"
+             class="backdrop-blur-xl ring-1 ring-slate-200/10 rounded-lg
+                    absolute
+                    top-0 lg:left-0 lg:w-1/2 lg:mx-0 lg:h-auto
+                    w-[300px] left-0 right-0 mx-auto
+                    ">
+        <div class="absolute text-slate-200 w-10
+                    -scale-y-100 rotate
+                    lg:top-[10%] lg:right-1/3 lg:hidden
+                    top-[30%] left-0 right-0 mx-auto">
+            <svg fill="currentColor" version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 388.057 388.058" xml:space="preserve"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <g> <path d="M313.231,364.922c-14.688-38.556-28.764-77.112-45.288-115.056c-11.016-25.704-23.256-60.589-43.452-82.009 c16.524-3.06,31.824-7.344,46.513-15.3c3.672-1.836,4.896-6.732,2.447-10.404c-16.523-29.988-32.436-60.588-50.796-89.352 C212.25,36.277,190.831-2.891,166.351,0.169c-23.256,3.06-38.557,41.616-47.736,58.752c-15.912,31.824-27.54,65.484-43.452,96.696 c-1.224,2.448-0.612,4.284,0.612,6.12c-1.836,2.448-1.225,6.732,1.836,8.568c12.24,6.732,25.092,7.956,38.556,7.344 c6.12,0,15.912,0,23.868-2.448c-19.584,66.096-23.868,135.252-38.556,202.573c-1.225,6.731,5.508,12.852,11.628,9.18 c25.704-15.912,64.26-62.424,96.084-53.856c33.048,9.181,62.424,29.376,93.636,41.616 C308.947,377.162,315.067,370.43,313.231,364.922z M201.847,314.738c-27.54-2.448-56.305,26.315-80.784,45.899 c12.24-63.647,17.748-128.52,30.6-191.556c0-1.224,0-2.448-0.612-3.672c0.612-1.836,0-3.672-1.836-4.896 c-8.567-4.896-20.195,1.224-29.376,2.448c-11.628,1.224-22.644,0-33.659-3.06c11.628-20.196,19.584-42.84,29.376-63.648 c12.239-25.704,25.092-63.036,48.96-80.784c19.584-14.688,74.664,93.636,91.8,126.684c-14.688,6.12-29.376,9.18-45.288,11.628 c-3.672,0.612-4.896,3.06-5.508,5.508c-2.448,2.448-4.284,6.12-1.836,9.18c41.004,53.856,63.647,119.952,86.904,183.601 C263.047,337.382,233.059,317.186,201.847,314.738z"></path> </g> </g></svg>
+        </div>
+        <div class="absolute text-slate-200 w-[10%] h-[10%]
+                    lg:top-1/2 lg:right-2/3
+                    hidden lg:block">
+            <svg fill="currentColor" version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="-41.53 -41.53 498.32 498.32" xml:space="preserve" stroke-width="0.00415262" transform="matrix(1, 0, 0, 1, 0, 0)rotate(0)"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_iconCarrier"> <g> <path d="M414.937,374.984c-7.956-24.479-20.196-47.736-30.601-70.992c-1.224-3.06-6.12-3.06-7.956-1.224 c-10.403,11.016-22.031,22.032-28.764,35.496h-0.612c-74.664,5.508-146.88-58.141-198.288-104.652 c-59.364-53.244-113.22-118.116-134.64-195.84c-1.224-9.792-2.448-20.196-2.448-30.6c0-4.896-6.732-4.896-7.344,0 c0,1.836,0,3.672,0,5.508C1.836,12.68,0,14.516,0,17.576c0.612,6.732,2.448,13.464,3.672,20.196 C8.568,203.624,173.808,363.356,335.376,373.76c-5.508,9.792-10.403,20.195-16.523,29.988c-3.061,4.283,1.836,8.567,6.12,7.955 c30.6-4.283,58.14-18.972,86.292-29.987C413.712,381.104,416.16,378.656,414.937,374.984z M332.928,399.464 c3.673-7.956,6.12-15.912,10.404-23.868c1.225-3.061-0.612-5.508-2.448-6.12c0-1.836-1.224-3.061-3.06-3.672 c-146.268-24.48-264.996-124.236-309.06-259.489c28.764,53.244,72.828,99.756,116.28,138.924 c31.824,28.765,65.484,54.468,102.204,75.888c28.764,16.524,64.872,31.824,97.92,21.421l0,0c-1.836,4.896,5.508,7.344,7.956,3.672 c7.956-10.404,15.912-20.196,24.48-29.376c8.567,18.972,17.748,37.943,24.479,57.527 C379.44,382.94,356.796,393.956,332.928,399.464z"></path> </g> </g></svg>
+        </div>
+        <div class="absolute text-slate-200 w-[10%] h-[10%]
+                    -scale-y-100 rotate-[70deg]
+                    lg:top-[10%] lg:right-1/3
+                    hidden lg:block">
+            <svg fill="currentColor" version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="-41.53 -41.53 498.32 498.32" xml:space="preserve" stroke-width="0.00415262" transform="matrix(1, 0, 0, 1, 0, 0)rotate(0)"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_iconCarrier"> <g> <path d="M414.937,374.984c-7.956-24.479-20.196-47.736-30.601-70.992c-1.224-3.06-6.12-3.06-7.956-1.224 c-10.403,11.016-22.031,22.032-28.764,35.496h-0.612c-74.664,5.508-146.88-58.141-198.288-104.652 c-59.364-53.244-113.22-118.116-134.64-195.84c-1.224-9.792-2.448-20.196-2.448-30.6c0-4.896-6.732-4.896-7.344,0 c0,1.836,0,3.672,0,5.508C1.836,12.68,0,14.516,0,17.576c0.612,6.732,2.448,13.464,3.672,20.196 C8.568,203.624,173.808,363.356,335.376,373.76c-5.508,9.792-10.403,20.195-16.523,29.988c-3.061,4.283,1.836,8.567,6.12,7.955 c30.6-4.283,58.14-18.972,86.292-29.987C413.712,381.104,416.16,378.656,414.937,374.984z M332.928,399.464 c3.673-7.956,6.12-15.912,10.404-23.868c1.225-3.061-0.612-5.508-2.448-6.12c0-1.836-1.224-3.061-3.06-3.672 c-146.268-24.48-264.996-124.236-309.06-259.489c28.764,53.244,72.828,99.756,116.28,138.924 c31.824,28.765,65.484,54.468,102.204,75.888c28.764,16.524,64.872,31.824,97.92,21.421l0,0c-1.836,4.896,5.508,7.344,7.956,3.672 c7.956-10.404,15.912-20.196,24.48-29.376c8.567,18.972,17.748,37.943,24.479,57.527 C379.44,382.94,356.796,393.956,332.928,399.464z"></path> </g> </g></svg>
+        </div>
+
+    </div>
+</div>
+
+<div class="container mx-auto max-w-7xl mt-60 px-4 relative">
+    <div class="absolute w-2/3 h-1/3 inset-0 m-auto z-0
+        bg-[conic-gradient(var(--tw-gradient-stops))] from-sky-400 via-blue-800 to-sky-500
+        blur-[5rem] opacity-50
+        "></div>
+    <h2 class="font-display text-3xl font-medium tracking-tight text-center
+        text-slate-200 md:text-5xl">
+        Exciting Features are on their way...
+    </h2>
+    <form class="flex mx-auto w-full my-16 gap-x-4 sm:w-3/4 md:w-1/2"
+        action="https://app.convertkit.com/forms/5336154/subscriptions" method="post" target="_blank">
+        <input name="email_address" type="email" required autocomplete="email" aria-label="Email address" placeholder="Email address"
+        class="w-3/4 rounded z-10">
+        <button type="submit" 
+            class="bg-sky-400 p-2 font-display font-medium rounded
+                   w-1/4 z-10">
+            Keep me updated
+        </button>
+    </form>
+</div>
+
+<footer class="h-8 mt-20
+               backdrop-blur ring-1 ring-slate-200/10">
+    <div class="container mx-auto max-w-7xl
+                py-2 px-4 sm:px-6 lg:px-8
+                flex md:gap-x-12 justify-between
+                text-slate-400 text-sm">
+        <a class="text-slate-200"
+           href="https://www.aformatik.de/">Copyright &copy; 2023 aformatik</a>
+        <div class="flex gap-x-3">
+            <a href="https://www.aformatik.de/service/impressum">Impressum</a>
+            <a href="https://www.aformatik.de/service/datenschutz">Datenschutz</a>
+        </div>
+    </div>
+</footer>
+</body>
+
+</html>
