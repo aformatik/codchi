@@ -2,6 +2,11 @@ name: nix
 
 on:
   push:
+    paths:
+      - flake.nix
+      - flake.lock
+      - 'nix/**'
+      - 'examples/**'
 
 permissions:
   contents: read

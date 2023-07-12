@@ -13,9 +13,7 @@
 
 1. Make sure that WSL2 is installed and up to date. For install instructions visit the [official site](https://learn.microsoft.com/en-us/windows/wsl/install). You need WSL2 1.2.5.0 or newer. Check yours' with `wsl.exe --version`. Update with `wsl.exe --update --web-download`.
 2. Import [Cert.crt](https://github.com/aformatik/codchi/releases/latest/download/codchi.crt) to `LocalMachine/Trusted People` (see [Arch-WSL docs](https://wsldl-pg.github.io/ArchW-docs/Install-Certificate/)). Requires *Admin Privileges*.
-3. Install [codchi.appinstaller](https://github.com/aformatik/codchi/releases/latest/download/codchi.AppInstaller)
-   (if the app installer fails, install the [latest codchi.msix](https://github.com/aformatik/codchi/releases/latest/download/codchi.msix) manually.)
-
+3. Install [codchi.msix](https://github.com/aformatik/codchi/releases/latest/download/codchi.msix). Subsequent updates should be downloaded automatically by windows.
 
 #### Linux
 Coming soon.

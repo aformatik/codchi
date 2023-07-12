@@ -39,7 +39,7 @@ cli = \case
     CommandStatus            ->
         getStatus >>= \case
             CodchiNotInstalled -> printErrExit (ExitFailure 1) $
-                "The cudchi controller is not installed. Please run '" <> _APP_NAME <> " start' to install it."
+                "The codchi controller is not installed. Please run '" <> _APP_NAME <> " start' to install it."
             CodchiInstalled status -> do
                 printLnOut $ "Controller Status: " <> show status
 
