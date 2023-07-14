@@ -1,9 +1,20 @@
 { pkgs, ... }: {
 
-  codchi.java = {
+  programs.java = {
     enable = true;
+
+    # default JDK which is added to $PATH and $JAVA_HOME
     package = pkgs.jdk17;
-    jdks = { inherit (pkgs) jdk17 jdk20; };
-    tools = [ pkgs.maven pkgs.jetbrains.idea-community ];
+
+    # JDKs which are linked to ~/.jdks where IntelliJ can find them.
+    packages = {
+      jdk17 = pkgs.jdk17;
+      jdk19 = pkgs.jdk19;
+    };
   };
+
+  environment.systemPackages = [
+    pkgs.maven
+    pkgs.jetbrains.idea-community
+  ];
 }
