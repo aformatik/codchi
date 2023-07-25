@@ -1,21 +1,5 @@
 {
   "nodes": {
-    "docker-nixpkgs": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1678089139,
-        "narHash": "sha256-cK0RDcxR4eWMrdZIcqNVqnjo9k2LwVmNZO3qj1ctDXU=",
-        "owner": "nix-community",
-        "repo": "docker-nixpkgs",
-        "rev": "2205fb4968adf683324e6d0401b74b9d250d8f56",
-        "type": "github"
-      },
-      "original": {
-        "owner": "nix-community",
-        "repo": "docker-nixpkgs",
-        "type": "github"
-      }
-    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -90,7 +74,6 @@
     },
     "root": {
       "inputs": {
-        "docker-nixpkgs": "docker-nixpkgs",
         "nixos-wsl": "nixos-wsl",
         "nixpkgs": "nixpkgs"
       }

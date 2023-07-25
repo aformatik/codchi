@@ -1,40 +1,30 @@
 cabal-version: 3.4
 name:          codchi
 version:       0.1.0.0
-
--- synopsis:
--- description:
-license:       MPL-2.0
-author:        htngr
-maintainer:    CHANGEME
-
--- copyright:
+license:       MPL-2.0 
+author:        aformatik
 build-type:    Simple
-
--- extra-doc-files: CHANGELOG.md
 
 common shared
   ghc-options:
-    -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns
-    -Wmissing-deriving-strategies -Wunused-foralls -Wunused-foralls
-    -Wno-missing-deriving-strategies -fprint-explicit-foralls
-    -fprint-explicit-kinds
+    -Wall -Wcompat -Widentities -Wincomplete-record-updates
+    -Wincomplete-uni-patterns -Wpartial-fields
+
+  -- -Wredundant-constraints
 
   default-extensions:
-    NoStarIsType
-    BangPatterns
+    NoFieldSelectors
     ConstraintKinds
     DataKinds
     DefaultSignatures
-    DeriveAnyClass
     DeriveDataTypeable
     DeriveFoldable
     DeriveFunctor
     DeriveGeneric
-    DeriveLift
     DeriveTraversable
     DerivingStrategies
-    DerivingVia
+    DoAndIfThenElse
+    DuplicateRecordFields
     ExistentialQuantification
     ExplicitForAll
     ExplicitNamespaces
@@ -50,25 +40,21 @@ common shared
     MultiWayIf
     NamedFieldPuns
     NumericUnderscores
+    OverloadedRecordDot
     OverloadedStrings
+    PartialTypeSignatures
     PostfixOperators
     RankNTypes
-    RecordWildCards
     ScopedTypeVariables
     StandaloneDeriving
     StandaloneKindSignatures
     TupleSections
     TypeApplications
     TypeFamilies
-    TypeOperators
+    TypeSynonymInstances
     ViewPatterns
 
-  -- 9.2:
-  -- OverloadedRecordDot
-  -- NoFieldSelectors
-
-  -- other-modules:
-  -- other-extensions:
+  -- OverloadedRecordUpdate
   mixins:
     base hiding (Prelude),
     relude (Relude as Prelude, Relude.Container.One),
@@ -80,57 +66,57 @@ common shared
 
   default-language:   Haskell2010
 
-common windows
-  other-modules: Windows
-
-common linux
-  other-modules: Linux
-
-common darwin
-  other-modules: Darwin
-
 executable codchi
-  import:         shared
+  import:        shared
 
   if os(windows)
-    import:        windows
+    -- other-modules: Codchi.Platform.Windows
+
     -- /SUBSYSTEM:WINDOWS
-    -- ghc-options:   -optl-mwindows
+
     build-depends:
       , Win32
       , Win32-shortcut
 
-
   if os(linux)
-    import: linux
+    other-modules: Codchi.Platform.Linux
 
   if os(osx)
-    import: darwin
+    other-modules: Codchi.Platform.Darwin
 
-  main-is:        Main.hs
-  hs-source-dirs: src
+  main-is:       Codchi.hs
   other-modules:
-    Dsl
-    Linux
-    Parser
-    Types
-    Util
-    Windows
+    Codchi.CLI
+    Codchi.Config
+    Codchi.Dsl
+    Codchi.Effects
+    Codchi.Nix
+    Codchi.Parser
+    Codchi.Platform.Linux
+    Codchi.Platform.Windows
+    Codchi.Types
+    Paths_codchi
 
+  --        Codchi.Config
   build-depends:
+    , aeson
     , async
     , attoparsec
     , bytestring
     , cleff
     , directory             >=1.3.7.0
+    , exceptions
+    , filelock
     , monad-logger
     , optparse-applicative
+    , path
     , stm
     , template-haskell
     , text
+    , text-builder-linear
     , time
     , typed-process
     , unliftio
     , with-utf8
 
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:   -threaded -rtsopts -with-rtsopts=-N

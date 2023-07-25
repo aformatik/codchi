@@ -8,30 +8,46 @@
 }:
 
 let
-  binaries = with pkgsStatic; [ busybox bashInteractive nix ];
+  binaries = with pkgsStatic; [
+    busybox
+    bashInteractive
+    nix
+    jq
+    (gitMinimal.overrideAttrs (old: with pkgsStatic; {
+      configureFlags = lib.filter (f: !(lib.hasPrefix "ac_cv_prog_CURL_CONFIG" f)) old.configureFlags;
+      preConfigure = ''
+        export NIX_LDFLAGS="$NIX_LDFLAGS $(${curl.dev}/bin/curl-config --static-libs | sed 's/-pthread //' |  tr ' ' '\n' |  awk '!a[$0]++' |  tr '\n' ' ')"
+      '';
+      preInstallCheck = old.preInstallCheck + ''
+        disable_test t2082-parallel-checkout-attributes
+      '';
+    }))
+    # openssh
+  ];
   writeShellScript = name: text: writeScript name ''
-      #!/bin/bash
+    #!/bin/bash
 
-      set -e
-      set -o pipefail
+    set -e
+    set -o pipefail
 
-      ${text}
+    ${text}
   '';
 
 
-in callPackage ../make-tarball.nix {
+in
+callPackage ../make-tarball.nix {
   fileName = "controller";
 
   contents = {
     "/bin/" = toString (map (pkg: "${pkg}/bin/*") binaries);
 
     "/etc/profile.d/" = "${pkgsStatic.nix}/etc/profile.d/*";
-    "/etc/ssl/certs/ca-bundle.crt" = "${cacert}/etc/ssl/certs/ca-bundle.crt";
+    "/etc/ssl/certs/official-bundle.crt" = "${cacert}/etc/ssl/certs/ca-bundle.crt";
     "/etc/" = "${./etc}/*";
 
     "/root/.bash_profile" = writeText ".bashrc" ''
       set -e
-      . /etc/profile.d/nix.sh
+      ctrl-update-certs
       . /etc/profile.d/nix-daemon.sh
     '';
 
@@ -68,6 +84,13 @@ in callPackage ../make-tarball.nix {
       nix-env -p "/nix/var/nix/profiles/per-instance/$NAME/system" --set $(cat $DRV/system-store-path)
 
       echo "$DRV"
+    '';
+    "/bin/ctrl-update-certs" = writeShellScript "ctrl-update-certs" ''
+      mkdir -p /etc/ssl/certs/custom || true
+      cp -f /etc/ssl/certs/official-bundle.crt /etc/ssl/certs/ca-bundle.crt
+      for cert in $(find /etc/ssl/certs/custom/ -name '*.crt'); do
+        cat "$cert" >> /etc/ssl/certs/ca-bundle.crt
+      done
     '';
   };
 }

@@ -4,8 +4,6 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
 
-    docker-nixpkgs = { url = "github:nix-community/docker-nixpkgs"; flake = false; };
-    # nixos-wsl.url = "path:/home/afo/docs/contrib/NixOS-WSL";
     nixos-wsl.url = "github:aformatik/NixOS-WSL";
     nixos-wsl.inputs.nixpkgs.follows = "nixpkgs";
   };
@@ -58,9 +56,12 @@
 
       packages.${system} = rec {
         default = pkgs.haskellPackages.developPackage {
-          name = "CHANGEME";
+          name = "codchi";
           root = ./cli;
-          cabal2nixOptions = "--benchmark";
+          overrides = _: super: {
+            text-builder-linear = super.text-builder-linear.override { text = super.text_2_0_2; };
+            strong-path = pkgs.haskell.lib.compose.doJailbreak super.strong-path;
+          };
         };
         controller-rootfs = pkgs.callPackage ./nix/controller { };
 
@@ -84,16 +85,11 @@
 
           haskell-language-server
           ghcid
-          # (with pkgs.haskell.lib.compose; pipe cabal-plan [
-          #   (appendConfigureFlags [ "-f license-report" "-f exe" ])
-            # doJailbreak
-          # ])
 
           cabal-fmt
-          # fourmolu
-          stylish-haskell
+          fourmolu
+
           pkgs.zlib
-          pkgs.helix
         ];
       };
 

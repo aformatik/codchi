@@ -1,18 +1,19 @@
-{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
-module Dsl where
+
+module Codchi.Dsl where
 
 import Cleff
-import Cleff.Error                         (Error, runError)
-import Control.Concurrent.STM              (TChan, newBroadcastTChanIO, writeTChan)
-import Control.Monad.Logger                (LogLevel (..), LogLine, LoggingT, ToLogStr,
-                                            logWithoutLoc, runLoggingT)
-import Data.ByteString                     (hPut)
-import Data.Char                           (toLower)
-import System.Exit                         (ExitCode (..))
+import Cleff.Error (Error, runError)
+import Codchi.Effects
+import Codchi.Types
+import Control.Concurrent.STM (TChan, newBroadcastTChanIO, writeTChan)
+import Control.Monad.Logger (LogLevel (..), LogLine, LoggingT, ToLogStr, logWithoutLoc, runLoggingT)
+import Data.ByteString (hPut)
+import Data.Char (toLower)
+import System.Exit (ExitCode (..))
 import System.IO.Unsafe
-import Types
-import Util                                (EffectInterpreter (..))
 
 type Interpreter e m = forall es a. m :>> es => Eff (e : es) a -> Eff es a
 
@@ -20,21 +21,24 @@ data DirectoryType = DirState | DirConfig | DirCtrl
 
 data CodchiL :: Effect where
     GetStatus :: CodchiL m CodchiStatus
-    ListInstances :: CodchiL m [CodchiInstance]
+    -- ListInstances :: CodchiL m [CodchiInstance]
     --
-    InitCtrl :: CodchiL m ()
-    Start :: Bool -> CodchiL m ()
-    InstallRootfs :: InstanceName -> FilePath -> CodchiL m ()
-    UninstallInstance :: InstanceName -> CodchiL m ()
-    RunInInstance :: CodchiInstance -> Bool -> [Text] -> CodchiL m ()
+    ControllerInit :: CodchiL m ()
+    ControllerStart :: CodchiL m ()
+    -- | installation should succeed even if already installed
+    DriverInstallInstance :: CodchiName -> FilePath -> CodchiL m ()
+    DriverUninstallInstance :: CodchiName -> CodchiL m ()
+    GetInstanceInfo :: CodchiName -> CodchiL m CodchiInstance
+    RunInInstance :: InstanceConfig -> Bool -> [Text] -> CodchiL m ()
     --
+
     -- | path to $currentSystem/sw/share
-    UpdateShortcuts :: InstanceName -> FilePath -> CodchiL m ()
+    UpdateShortcuts :: CodchiName -> FilePath -> CodchiL m ()
     --
     RunCtrlNixCmd :: Bool -> Text -> CodchiL m (Either Text Text)
-    RunInstanceCmd :: Bool -> InstanceName -> Text -> CodchiL m (Either Text Text)
-    GetPath :: DirectoryType -> Path Rel -> CodchiL m FilePath
-    --
+    RunInstanceCmd :: Bool -> CodchiName -> Text -> CodchiL m (Either Text Text)
+    GetDriverPath :: DirectoryType -> Path Rel -> CodchiL m FilePath
+    GetControllerPath :: FilePath -> CodchiL m (Either Text (Path Abs))
     -- | NixOS module in flake.nix for driver (e.g. driver-wsl)
     GetDriverModule :: CodchiL m Text
 makeEffect ''CodchiL
@@ -52,17 +56,18 @@ instance (Exception e, Logger :> es ++ rest) => EffectInterpreter Logger (Error 
 
 interpretLogger :: Interpreter Logger '[IOE]
 interpretLogger = interpret $ \case
-    Log level msg         -> logIO level msg
-    LogExit code msg      -> logExitIO code msg
-    PrintOut msg          -> printOutIO msg
-    PrintLnOut msg        -> printLnOutIO msg
+    Log level msg -> logIO level msg
+    LogExit code msg -> logExitIO code msg
+    PrintOut msg -> printOutIO msg
+    PrintLnOut msg -> printLnOutIO msg
     PrintErrExit code msg -> printErrExitIO code msg
 
 runTChanLoggingT :: MonadIO m => LoggingT m a -> m a
-runTChanLoggingT = (`runLoggingT` sink) where
+runTChanLoggingT = (`runLoggingT` sink)
+  where
     sink loc src lvl msg
         | lvl < logLevel = pass
-        | otherwise = atomically $ writeTChan logChan $ Just (loc,src,lvl,msg)
+        | otherwise = atomically $ writeTChan logChan $ Just (loc, src, lvl, msg)
 
 logDebug, logInfo, logWarn, logError :: ('[Logger] :>> es) => Text -> Eff es ()
 logDebug = log LevelDebug
@@ -71,13 +76,13 @@ logWarn = log LevelWarn
 logError = log LevelError
 
 logIO :: MonadIO m => LogLevel -> Text -> m ()
-logIO level msg         = runTChanLoggingT $ logWithoutLoc "" level msg
+logIO level msg = runTChanLoggingT $ logWithoutLoc "" level msg
 logExitIO :: MonadIO m => ExitCode -> Text -> m a
-logExitIO code msg      = logIO LevelError msg >> exitWith code
+logExitIO code msg = logIO LevelError msg >> exitWith code
 printLnOutIO :: MonadIO m => Text -> m ()
-printLnOutIO            = putTextLn
+printLnOutIO = putTextLn
 printOutIO :: MonadIO m => Text -> m ()
-printOutIO              = putText
+printOutIO = putText
 printErrExitIO :: MonadIO m => ExitCode -> Text -> m a
 printErrExitIO code msg = liftIO $ hPut stderr (encodeUtf8 msg) >> exitWith code
 
@@ -90,10 +95,10 @@ logLevel = unsafePerformIO $ do
     lvlStr <- fromMaybe "" <$> lookupEnv "LOG"
     return $ case map toLower lvlStr of
         "error" -> LevelError
-        "warn"  -> LevelWarn
-        "info"  -> LevelInfo
+        "warn" -> LevelWarn
+        "info" -> LevelInfo
         "debug" -> LevelDebug
-        _       -> LevelInfo
+        _ -> LevelInfo
 {-# NOINLINE logLevel #-}
 
 logTrace :: ToLogStr s => String -> s -> a -> a
