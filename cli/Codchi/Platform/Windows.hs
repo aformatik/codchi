@@ -35,6 +35,7 @@ import qualified Data.ByteString as BS
 import Data.ByteString.Builder.Extra (defaultChunkSize)
 import qualified Data.ByteString.Lazy as BL
 import Data.Char (isSpace)
+import Data.List (stripPrefix)
 import qualified Data.String as String
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LText
@@ -44,7 +45,6 @@ import System.Process.Typed (ExitCode (..), ProcessConfig)
 import qualified System.Process.Typed as Proc
 import UnliftIO (bracket, catch, finally, hClose, throwIO)
 import UnliftIO.Directory
-import Data.List (stripPrefix)
 
 data WSLInstance = WSLInstance
     { _wslName :: !Text
@@ -183,12 +183,12 @@ runCodchiLIO = interpret $ \case
                         , toNTPath instanceDir
                         , toText rootfsPath
                         ]
-    DriverUninstallInstance name -> do
+    DriverUninstallInstance name _status -> do
         putTextLn $ "Uninstalling " <> name.text
+
         void $
-            rethrowAll $
-                readProcess_ $
-                    wsl'exeCmd ["--unregister", name.withPrefix]
+            rethrowAll
+                (readProcess_ $ wsl'exeCmd ["--unregister", name.withPrefix])
 
         liftIO $ do
             startMenu <- getFolderPath cSIDL_PROGRAMS
@@ -196,7 +196,6 @@ runCodchiLIO = interpret $ \case
             retryOnPermissionErrors 100 $
                 removePathForcibly (toString $ toNTPath instanceFolder)
             refreshIconCache
-
     RunInInstance i showTerm args -> do
         liftIO $ do
             consoleWindow <- getConsoleWindow
@@ -235,7 +234,7 @@ runCodchiLIO = interpret $ \case
                 DirConfig -> getOrCreateXdgDir XdgConfig emptyPath
     GetControllerPath path ->
         case "C:\\" `stripPrefix` path of
-            Just p ->  return (Right $ fromList ["mnt", "c"] </> mkNTPath p)
+            Just p -> return (Right $ fromList ["mnt", "c"] </> mkNTPath p)
             Nothing -> return (Left "Please provide an absolute path located on C:\\")
 
 mainLoop :: [IOE, Error ShellException, Error Panic, Logger, CodchiL] :>> es => Eff es ()

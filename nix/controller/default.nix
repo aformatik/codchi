@@ -1,29 +1,35 @@
-{ writeScript
+{ nixpkgs
+, lib
+
+, writeScript
 , writeText
 , callPackage
 
 , pkgsStatic
 , cacert
+
+, coreutils
+, iputils
+, jq
+, git
+, openssh
 , ...
 }:
 
 let
-  binaries = with pkgsStatic; [
+  staticBinaries = with pkgsStatic; [
     busybox
     bashInteractive
     nix
-    jq
-    (gitMinimal.overrideAttrs (old: with pkgsStatic; {
-      configureFlags = lib.filter (f: !(lib.hasPrefix "ac_cv_prog_CURL_CONFIG" f)) old.configureFlags;
-      preConfigure = ''
-        export NIX_LDFLAGS="$NIX_LDFLAGS $(${curl.dev}/bin/curl-config --static-libs | sed 's/-pthread //' |  tr ' ' '\n' |  awk '!a[$0]++' |  tr '\n' ' ')"
-      '';
-      preInstallCheck = old.preInstallCheck + ''
-        disable_test t2082-parallel-checkout-attributes
-      '';
-    }))
-    # openssh
   ];
+  otherBinaries = map builtins.unsafeDiscardStringContext [
+    coreutils
+    iputils
+    jq
+    git
+    openssh
+  ];
+
   writeShellScript = name: text: writeScript name ''
     #!/bin/bash
 
@@ -32,17 +38,28 @@ let
 
     ${text}
   '';
-
-
 in
 callPackage ../make-tarball.nix {
   fileName = "controller";
 
   contents = {
-    "/bin/" = toString (map (pkg: "${pkg}/bin/*") binaries);
+    "/bin/" = toString (map (pkg: "${pkg}/bin/*") staticBinaries);
 
-    "/etc/profile.d/" = "${pkgsStatic.nix}/etc/profile.d/*";
+    "/etc/profile.d/nix-daemon.sh" = "${pkgsStatic.nix}/etc/profile.d/nix-daemon.sh";
     "/etc/ssl/certs/official-bundle.crt" = "${cacert}/etc/ssl/certs/ca-bundle.crt";
+
+    # docs: https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-registry.html#registry-format
+    "/etc/nix/registry.json" = writeText "registry.json" (builtins.toJSON {
+      version = 2;
+      flakes = [{
+        exact = true;
+        from = { type = "indirect"; id = "nixpkgs"; };
+        to = { type = "path"; path = nixpkgs.outPath; }
+          // lib.filterAttrs
+          (n: _: n == "lastModified" || n == "rev" || n == "revCount" || n == "narHash")
+          nixpkgs;
+      }];
+    });
     "/etc/" = "${./etc}/*";
 
     "/root/.bash_profile" = writeText ".bashrc" ''
@@ -85,7 +102,17 @@ callPackage ../make-tarball.nix {
 
       echo "$DRV"
     '';
+    "/bin/ctrl-update-profile" = writeShellScript "ctrl-update-profile" ''
+      INSTALLED="$(nix profile list | cut -d' ' -f 4 | sort)"
+      NEW="$(echo ${toString otherBinaries} | xargs -n1 | sort)"
+
+      # remove whats only in $INSTALLED and not in $NEW
+      comm -23 <(echo $INSTALLED | xargs -n1) <(echo $NEW | xargs -n1) | xargs -r nix profile remove
+      # install whats only in $NEW and not in $INSTALLED
+      comm -13 <(echo $INSTALLED | xargs -n1) <(echo $NEW | xargs -n1) | xargs -r nix profile install
+    '';
     "/bin/ctrl-update-certs" = writeShellScript "ctrl-update-certs" ''
+      # update certs
       mkdir -p /etc/ssl/certs/custom || true
       cp -f /etc/ssl/certs/official-bundle.crt /etc/ssl/certs/ca-bundle.crt
       for cert in $(find /etc/ssl/certs/custom/ -name '*.crt'); do

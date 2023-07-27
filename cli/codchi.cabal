@@ -1,6 +1,6 @@
 cabal-version: 3.4
 name:          codchi
-version:       0.1.1.0
+version:       0.1.2.0
 license:       MPL-2.0 
 author:        aformatik
 build-type:    Simple
@@ -73,8 +73,7 @@ executable codchi
     -- other-modules: Codchi.Platform.Windows
 
     -- /SUBSYSTEM:WINDOWS
-    ld-options: -static
-
+    ld-options:    -static
     build-depends:
       , Win32
       , Win32-shortcut
@@ -108,6 +107,7 @@ executable codchi
     , directory             >=1.3.7.0
     , exceptions
     , filelock
+    , gitrev
     , monad-logger
     , optparse-applicative
     , path

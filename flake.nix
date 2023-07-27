@@ -34,6 +34,7 @@
       exampleSystems = mapAttrs
         (_: module: nixosSystem {
           inherit system;
+          specialArgs.inputs = inputs;
           modules = [ self.nixosModules.driver-wsl module { codchi.instance.name = "example"; } ];
         })
         exampleModules;
@@ -63,7 +64,7 @@
             strong-path = pkgs.haskell.lib.compose.doJailbreak super.strong-path;
           };
         };
-        controller-rootfs = pkgs.callPackage ./nix/controller { };
+        controller-rootfs = pkgs.callPackage ./nix/controller { inherit nixpkgs; };
 
         populate-cache =
           let

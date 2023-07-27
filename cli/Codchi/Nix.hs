@@ -112,6 +112,7 @@ mkNixFlake i follows driverModule =
                     |=| "inputs.nixpkgs.lib.nixosSystem"
                     |$| record
                         [ "system" |=| str "x86_64-linux"
+                        , "specialArgs.inputs" |=| "inputs"
                         , "modules"
                             |=| list
                                 ( [ record ["codchi.instance.name" |=| str i.name.text]
@@ -131,7 +132,7 @@ mkNixFlake i follows driverModule =
                 ]
     inputModule (m :: Module) =
         case m.moduleType of
-            FlakeModule modName ->
+            FlakeModule modName _dir ->
                 NIdent ("inputs." <> m.name.text <> ".nixosModules." <> modName.text)
             LegacyModule path ->
                 NIdent ("inputs." <> m.name.text) |+| str ("/" <> toUnixPath path.path)

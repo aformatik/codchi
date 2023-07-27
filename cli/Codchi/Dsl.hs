@@ -27,7 +27,7 @@ data CodchiL :: Effect where
     ControllerStart :: CodchiL m ()
     -- | installation should succeed even if already installed
     DriverInstallInstance :: CodchiName -> FilePath -> CodchiL m ()
-    DriverUninstallInstance :: CodchiName -> CodchiL m ()
+    DriverUninstallInstance :: CodchiName -> InstanceStatus -> CodchiL m ()
     GetInstanceInfo :: CodchiName -> CodchiL m CodchiInstance
     RunInInstance :: InstanceConfig -> Bool -> [Text] -> CodchiL m ()
     --

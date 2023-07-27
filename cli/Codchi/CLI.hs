@@ -4,8 +4,11 @@ import Codchi.Parser
 import Codchi.Types
 import Options.Applicative
 
+-- import qualified Data.ByteString.Char8 as BS
 import Data.Version (showVersion)
+-- import Language.Haskell.TH
 import Paths_codchi (version)
+-- import System.Directory (doesFileExist, getCurrentDirectory, getDirectoryContents)
 
 parseCmd :: IO Command
 parseCmd =
@@ -90,12 +93,14 @@ instanceCmdP =
     setFollowsP =
         CmdSetFollows
             <$> name
-            <*> ( CodchiNixpkgs
-                    <$ switch
-                        ( long "codchi"
-                            <> short 'c'
-                            <> help "Follow codchis' provided nixpkgs for this code machine"
-                        )
+            <*> ( ( CodchiNixpkgs
+                        <$ flag'
+                            ()
+                            ( long "codchi"
+                                <> short 'c'
+                                <> help "Follow codchis' provided nixpkgs for this code machine"
+                            )
+                  )
                     <|> ModuleNixpkgs
                         <$> option
                             parseable
@@ -120,7 +125,7 @@ instanceCmdP =
 data ModuleConfigureArgs = ModuleConfigureArgs
     { moduleName :: CodchiName
     , uri :: Text
-    , rev :: Maybe Text
+    , branchCommit :: Maybe BranchCommit
     , moduleType :: ModuleType
     -- ^ One can either use an nixosModule inside a flake or directly import a .nix file
     }
@@ -137,12 +142,21 @@ configP =
                 <> help "URI of the module. Can be an absolute file path or a git repository url (https or ssh supported)."
             )
         <*> optional
-            ( strOption
-                ( long "rev"
-                    <> short 'r'
-                    <> metavar "GIT_REV"
-                    <> help "Specify the git revision (branch, tag or commit). Only applicable to git modules."
-                )
+            ( BranchCommit
+                <$> strOption
+                    ( long "branch"
+                        <> short 'b'
+                        <> metavar "BRANCH_OR_TAG"
+                        <> help "Specify the git branch or tag. Only applicable when URI points to a git repository."
+                    )
+                <*> optional
+                    ( strOption
+                        ( long "commit"
+                            <> short 'c'
+                            <> metavar "COMMIT"
+                            <> help "Specify the git commit inside BRANCH_OR_TAG. Only applicable when URI points to a git repository."
+                        )
+                    )
             )
         <*> nixosModuleP
   where
@@ -155,6 +169,15 @@ configP =
                     <> metavar "FLAKE_MODULE"
                     <> help "Name of NixOS Module when using flakes. Must be under `nixosModules`."
                 )
+            <*> optional
+                ( option
+                    parseable
+                    ( long "flake-dir"
+                        <> short 'd'
+                        <> metavar "FLAKE_DIR"
+                        <> help "Path to directory of flake.nix relative to the git repository. Only applicable if using flakes."
+                    )
+                )
         )
             <|> ( LegacyModule
                     <$> option
@@ -165,3 +188,24 @@ configP =
                             <> help "Path to NixOS configuration file inside URI. Only applicable if not using flakes."
                         )
                 )
+
+-- gitHash :: Q Exp
+-- gitHash =
+--     stringE
+--         =<< runIO
+--             ( do
+--                 putStr "Current Directory: "
+--                 getCurrentDirectory >>= print
+--                 putStr "Directory contents: "
+--                 getCurrentDirectory >>= getDirectoryContents >>= print
+--                 let tryReadRef prefix = do
+--                         let path = prefix <> ".git/refs/heads/master"
+--                         exists <- doesFileExist path
+                        -- if exists
+                        --     then Just . decodeUtf8 . BS.strip <$> readFileBS path
+                        --     else return Nothing
+                -- ref <- listToMaybe . catMaybes <$> traverse tryReadRef ["", "../"]
+--                 case ref of
+--                     Nothing -> error "Couldn't find .git folder to read latest commit hash"
+--                     Just r -> return r
+--             )

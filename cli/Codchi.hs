@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 
 #if defined(mingw32_HOST_OS)
@@ -28,6 +29,10 @@ import qualified Data.Text as Text
 import Main.Utf8 (withUtf8)
 import System.Exit (ExitCode (..))
 import UnliftIO.Directory (copyFile, createDirectoryIfMissing, doesFileExist, getCurrentDirectory)
+import Development.GitRev (gitHash)
+
+_GIT_COMMIT :: String
+_GIT_COMMIT = logTraceShowId "current git hash" $(gitHash)
 
 cli ::
     [Logger, CodchiL, IOE] :>> es =>
@@ -37,7 +42,17 @@ cli ::
 cli CmdStart = do
     let doStart = do
             printLnOut "Updating controller..."
-            let cmd = "cd / && nix run --refresh github:aformatik/codchi#controller-rootfs.passthru.createContents"
+            -- we update to the git commit with which the codchi executable was compiled with
+            -- to ensure that executable and controller are compatible
+            let cmd =
+                    Text.intercalate
+                        " && "
+                        [ "cd /"
+                        , "nix run github:aformatik/codchi/"
+                            <> toText _GIT_COMMIT
+                            <> "#controller-rootfs.passthru.createContents"
+                        , "/bin/ctrl-update-profile"
+                        ]
             _ <-
                 either (throwError . NixError) return . logTraceShowId "controller update"
                     =<< runCtrlNixCmd True cmd
@@ -100,7 +115,7 @@ cli (CmdInit instanceName) =
             Just _existing ->
                 printErrExit
                     (ExitFailure 1)
-                    ("Code machine " <> instanceName.text <> " already exists")
+                    ("Code machine " <> instanceName.text <> " already exists.")
             Nothing ->
                 return (cfg{instances = Map.insert instanceName.text (defaultInstance instanceName) cfg.instances})
 cli (CmdAddModule instanceName opts) = modifyInstance instanceName $ \i ->
@@ -127,7 +142,7 @@ cli (CmdAddModule instanceName opts) = modifyInstance instanceName $ \i ->
                                 <> err
                     Right u -> return u
 
-            let modul = Module{uri, moduleType = opts.moduleType, name = opts.moduleName, rev = opts.rev}
+            let modul = Module{uri, moduleType = opts.moduleType, name = opts.moduleName, branchCommit = opts.branchCommit}
 
             -- automatically try to follow codchis' nixpkgs if not set already
             nixpkgsFollows <-
@@ -152,7 +167,19 @@ cli (CmdRemoveModule instanceName moduleName) = modifyInstance instanceName $ \i
         Nothing ->
             printErrExit (ExitFailure 1) $
                 "Code machine " <> i.name.text <> " has no module with name " <> show moduleName.text <> "."
-        Just _ -> return i{modules = Map.delete moduleName.text i.modules}
+        Just _ -> do
+            nixpkgsFollows <-
+                if i.nixpkgsFollows == Just (ModuleNixpkgs moduleName)
+                    then do
+                        logWarn $
+                            "Code machine " <> show instanceName.text <> " followed " <> moduleName.text <> "s' nixpkgs. This will now default to codchis' nixpkgs."
+                        return Nothing
+                    else return i.nixpkgsFollows
+            return
+                i
+                    { nixpkgsFollows
+                    , modules = Map.delete moduleName.text i.modules
+                    }
 cli (CmdSetFollows instanceName follows) = modifyInstance instanceName $ \i ->
     case follows of
         CodchiNixpkgs -> do
@@ -173,7 +200,7 @@ cli (CmdRebuild instanceName) = do
     case cfg.instances !? instanceName.text of
         Nothing ->
             printErrExit (ExitFailure 1) $
-                "Code machine " <> instanceName.text <> " does not exists"
+                "Code machine " <> instanceName.text <> " does not exist."
         Just machine -> do
             instanceDir <- getDriverPath DirCtrl (fromList ["instances", instanceName.text])
             instanceFlake <- getDriverPath DirCtrl (fromList ["instances", instanceName.text, "flake.nix"])
@@ -225,19 +252,28 @@ cli (CmdRun instanceName showTerm args) = do
     findInstance instanceName >>= \case
         Nothing ->
             printErrExit (ExitFailure 1) $
-                "Code machine " <> instanceName.text <> " does not exists"
+                "Code machine " <> instanceName.text <> " does not exist."
         Just i -> runInInstance i showTerm args
 cli (CmdUninstall instanceName) = modifyConfig $ \c ->
     case c.instances !? instanceName.text of
         Nothing -> do
             printErrExit (ExitFailure 1) $
-                "Code machine " <> instanceName.text <> " does not exists"
+                "Code machine " <> instanceName.text <> " does not exist."
         Just _ -> do
-            driverUninstallInstance instanceName
-            void $
-                either (throwError . NixError) return
-                    =<< runCtrlNixCmd False ("rm -r /instances/" <> instanceName.text)
-            return c{instances = Map.delete instanceName.text c.instances}
+            printLnOut $
+                "Do you really want to uninstall " <> instanceName.text <> "?. THIS WILL DELETE ALL OF YOUR DATA!"
+            printLnOut "Type 'yes' to confirm!"
+            answer <- getLine
+            if answer /= "yes"
+                then printErrExit (ExitFailure 1) "Aborted uninstall."
+                else do
+                    instanceStatus <- getInstanceInfo instanceName <&> (.status)
+                    when (instanceStatus /= NotInstalled) $ 
+                        driverUninstallInstance instanceName instanceStatus
+                    void $
+                        either (throwError . NixError) return
+                            =<< runCtrlNixCmd False ("rm -r /instances/" <> instanceName.text <> " || true")
+                    return c{instances = Map.delete instanceName.text c.instances}
 
 findInstance :: (CodchiL :> es, IOE :> es) => CodchiName -> Eff es (Maybe InstanceConfig)
 findInstance name = do
@@ -255,11 +291,11 @@ modifyInstance name f = modifyConfig $ \cfg ->
             i' <- f i
             return (cfg{instances = Map.insert name.text i' cfg.instances})
         Nothing ->
-            printErrExit (ExitFailure 1) $ "Code machine " <> name.text <> " does not exists"
+            printErrExit (ExitFailure 1) $ "Code machine " <> name.text <> " does not exist."
 
 getNixpkgsInput :: (CodchiL :> es) => Module -> Eff es (Maybe NixpkgsFollows)
 getNixpkgsInput m = do
-    let cmd = "nix flake metadata --json " <> toFlakeUrl m <> " | jq '.locks.nodes | has(\"nixpkgs\")'"
+    let cmd = "nix flake metadata --no-write-lock-file --json '" <> toFlakeUrl m <> "' | jq '.locks.nodes | has(\"nixpkgs\")'"
     output <- logTraceShowId "getNixpkgsInput" . fmap Text.strip <$> runCtrlNixCmd False cmd
     case output of
         Right "true" -> do

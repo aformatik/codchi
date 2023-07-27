@@ -26,7 +26,7 @@ let
     done
 
     ${(pipe contents [
-      (mapAttrsToList (path: content: "cp -af ${content} .${path}"))
+      (mapAttrsToList (path: content: "cp -af ${content} .${path} && chmod -R +w .${path}"))
       (concatStringsSep "\n")
     ])}
   '';

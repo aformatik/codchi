@@ -181,8 +181,14 @@ data NixpkgsFollows
 data Module = Module
     { name :: CodchiName
     , uri :: ModuleUri
-    , rev :: Maybe Text
+    , branchCommit :: Maybe BranchCommit
     , moduleType :: ModuleType
+    }
+    deriving (Eq, Show, Generic, ToJSON, FromJSON)
+
+data BranchCommit = BranchCommit
+    { branch :: Text
+    , commit :: Maybe Text
     }
     deriving (Eq, Show, Generic, ToJSON, FromJSON)
 
@@ -234,22 +240,46 @@ data GitProtocol = GitHttps | GitSsh
 
 toFlakeUrl :: Module -> Text
 toFlakeUrl m =
-    let rev = maybe "" ("/" <>) m.rev
+    let query =
+            [ ("ref", m.branchCommit <&> (.branch))
+            , ("rev", m.branchCommit >>= (.commit))
+            ,
+                ( "dir"
+                , case m.moduleType of
+                    FlakeModule _ d -> toUnixPath . (.path) <$> d
+                    _ -> Nothing
+                )
+            ]
+                & mapMaybe (\(key, val) -> (key,) <$> val)
+                & \case
+                    [] -> ""
+                    params ->
+                        params
+                            & map (\(name, val) -> name <> "=" <> val)
+                            & \p -> "?" <> T.intercalate "&" p
      in case m.uri of
-            LocalModule p -> "path:" <> toUnixPath p <> rev
+            LocalModule p -> "path:" <> toUnixPath p
             GitModule g ->
                 let prot = case g.protocol of
                         GitHttps -> "https"
                         GitSsh -> "ssh"
-                 in "git+" <> prot <> "://" <> g.uri <> rev
+                 in "git+" <> prot <> "://" <> g.uri <> query
 
 data ModuleType
-    = FlakeModule CodchiName
+    = FlakeModule CodchiName (Maybe FlakeSubDir)
     | LegacyModule NixFilePath
     deriving (Eq, Show, Generic, ToJSON, FromJSON)
 
+newtype FlakeSubDir = FlakeSubDir {path :: Path Rel}
+    deriving newtype (Eq, Show, ToJSON, FromJSON)
+instance Parseable FlakeSubDir where
+    parse input =
+        if "/" `T.isSuffixOf` input
+            then Left "The flake directory must be relative to the git repository."
+            else Right (FlakeSubDir $ mkUnixPath input)
+
 isFlake :: ModuleType -> Bool
-isFlake (FlakeModule _) = True
+isFlake (FlakeModule _ _) = True
 isFlake (LegacyModule _) = False
 
 newtype NixFilePath = NixFilePath {path :: Path Rel}

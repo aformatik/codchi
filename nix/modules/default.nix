@@ -1,4 +1,4 @@
-{ lib, config, pkgs, ... }: {
+{ inputs, lib, config, pkgs, ... }: {
 
   imports = [
     ./batteries.nix
@@ -33,13 +33,10 @@
       extraOptions = ''
         experimental-features = nix-command flakes
       '';
-      registry.nixpkgs = {
-        from = { type = "indirect"; id = "nixpkgs"; };
-        to = { type = "path"; inherit (pkgs) path; };
-      };
+      registry.nixpkgs.flake = inputs.nixpkgs;
       nixPath = [ "nixpkgs=/etc/channels/nixpkgs" ];
     };
-    environment.etc."channels/nixpkgs".source = pkgs.path;
+    environment.etc."channels/nixpkgs".source = inputs.nixpkgs;
 
     environment.sessionVariables = {
       XDG_CACHE_HOME = "\${HOME}/.cache";
