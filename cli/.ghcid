@@ -1,0 +1,1 @@
+-c "cabal repl codchi-tests --ghc-options='-osuf dyn_o -hisuf dyn_hi'" -W -T main

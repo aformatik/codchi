@@ -6,11 +6,10 @@ author:        aformatik
 build-type:    Simple
 
 common shared
+  default-language:   Haskell2010
   ghc-options:
     -Wall -Wcompat -Widentities -Wincomplete-record-updates
     -Wincomplete-uni-patterns -Wpartial-fields
-
-  -- -Wredundant-constraints
 
   default-extensions:
     NoFieldSelectors
@@ -60,20 +59,56 @@ common shared
     relude (Relude as Prelude, Relude.Container.One),
     relude
 
+  other-modules:
+    Codchi
+    Codchi.CLI
+    Codchi.Config
+    Codchi.Config.Common
+    Codchi.Config.IO
+    Codchi.Config.V012
+    Codchi.Error
+    Codchi.Nix
+    Codchi.Parser
+    Codchi.Platform
+    Codchi.Platform.CodchiMonad
+    Codchi.Platform.Windows
+    Codchi.Platform.Windows.Internal
+    Codchi.Types
+    Paths_codchi
+
   build-depends:
-    , base    >=4.15 && <5
-    , relude  >=1.0
-
-  default-language:   Haskell2010
-
-executable codchi
-  import:        shared
+    , aeson
+    , aeson-pretty
+    , annotated-exception
+    , async
+    , attoparsec
+    , base                  >=4.15    && <5
+    , byline
+    , bytestring
+    , directory             >=1.3.7.0
+    , exceptions
+    , filelock
+    , gitrev
+    , monad-logger
+    , mtl
+    , optparse-applicative
+    , path
+    , relude                >=1.0
+    , rio
+    , safe-json
+    , stm
+    , template-haskell
+    , text
+    , text-builder-linear
+    , time
+    , transformers
+    , typed-process
+    , unliftio
+    , with-utf8
 
   if os(windows)
-    -- other-modules: Codchi.Platform.Windows
-
-    -- /SUBSYSTEM:WINDOWS
-    ld-options:    -static
+    -- exposed-modules: Codchi.Platform.Windows
+    --    Codchi.Platform.Windows.Internal
     build-depends:
       , Win32
       , Win32-shortcut
@@ -84,40 +119,20 @@ executable codchi
   if os(osx)
     other-modules: Codchi.Platform.Darwin
 
-  main-is:       Codchi.hs
-  other-modules:
-    Codchi.CLI
-    Codchi.Config
-    Codchi.Dsl
-    Codchi.Effects
-    Codchi.Nix
-    Codchi.Parser
-    Codchi.Platform.Linux
-    Codchi.Platform.Windows
-    Codchi.Types
-    Paths_codchi
+executable codchi
+  import:         shared
+  hs-source-dirs: app src
+  main-is:        Main.hs
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
 
-  --        Codchi.Config
-  build-depends:
-    , aeson
-    , async
-    , attoparsec
-    , bytestring
-    , cleff
-    , directory             >=1.3.7.0
-    , exceptions
-    , filelock
-    , gitrev
-    , monad-logger
-    , optparse-applicative
-    , path
-    , stm
-    , template-haskell
-    , text
-    , text-builder-linear
-    , time
-    , typed-process
-    , unliftio
-    , with-utf8
+  if os(windows)
+    ld-options: -static
 
-  ghc-options:   -threaded -rtsopts -with-rtsopts=-N
+test-suite codchi-tests
+  import:             shared
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test src
+  main-is:            Spec.hs
+  build-depends:      hspec
+  build-tool-depends: hspec-discover:hspec-discover
+  ghc-options:        -threaded -rtsopts -with-rtsopts=-N

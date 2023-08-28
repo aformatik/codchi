@@ -3,6 +3,7 @@
 module Codchi.Nix where
 
 import Codchi.Types
+import Codchi.Config
 import qualified Data.Map.Strict as Map
 import Data.Text.Builder.Linear
 import Prelude hiding (intercalate)
@@ -46,8 +47,7 @@ data BinOp = ConcatStrings | ConcatLists
 (|+|) = NBinApp ConcatStrings
 
 (|++|) :: Nix -> Nix -> Nix
-(|++|) = NBinApp ConcatLists
-
+(|++|) = NBinApp ConcatLists 
 builder :: Nix -> Builder
 builder (NIdent i) = fromText i
 builder (NString s) = surround '"' '"' (fromText s)

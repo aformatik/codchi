@@ -1,26 +1,24 @@
 module Codchi.CLI where
 
 import Codchi.Parser
-import Codchi.Types
 import Options.Applicative
 
--- import qualified Data.ByteString.Char8 as BS
+import Codchi.Config
 import Data.Version (showVersion)
--- import Language.Haskell.TH
 import Paths_codchi (version)
--- import System.Directory (doesFileExist, getCurrentDirectory, getDirectoryContents)
 
-parseCmd :: IO Command
+parseCmd :: MonadIO m => m Command
 parseCmd =
-    execParser $
-        info
-            ( cmdP
-                <**> helper
-                <**> simpleVersioner (showVersion version)
-            )
-            ( fullDesc
-                <> header "CODe maCHInes - Declarative, Reproducible, Cross Platform Development Environments as Code"
-            )
+    liftIO $
+        execParser $
+            info
+                ( cmdP
+                    <**> helper
+                    <**> simpleVersioner (showVersion version)
+                )
+                ( fullDesc
+                    <> header "CODe maCHInes - Declarative, Reproducible, Cross Platform Development Environments as Code"
+                )
 
 data Command
     = CmdStart
@@ -201,10 +199,10 @@ configP =
 --                 let tryReadRef prefix = do
 --                         let path = prefix <> ".git/refs/heads/master"
 --                         exists <- doesFileExist path
-                        -- if exists
-                        --     then Just . decodeUtf8 . BS.strip <$> readFileBS path
-                        --     else return Nothing
-                -- ref <- listToMaybe . catMaybes <$> traverse tryReadRef ["", "../"]
+-- if exists
+--     then Just . decodeUtf8 . BS.strip <$> readFileBS path
+--     else return Nothing
+-- ref <- listToMaybe . catMaybes <$> traverse tryReadRef ["", "../"]
 --                 case ref of
 --                     Nothing -> error "Couldn't find .git folder to read latest commit hash"
 --                     Just r -> return r

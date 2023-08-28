@@ -1,30 +1,28 @@
-{-# LANGUAGE TypeOperators #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module Codchi.Platform.Linux where
 
-import Cleff
-import Codchi.Dsl
-import Codchi.Effects
+import Codchi.Config
+import Codchi.Platform.CodchiMonad
 import Codchi.Types
+import RIO (HasLogFunc, RIO)
 import UnliftIO.Directory
 
-runCodchiLIO :: Interpreter CodchiL (Logger : IOE : Errors [DriverException, UserError, Panic])
-runCodchiLIO = interpretIO $ \case
-    GetDriverPath dirType s ->
+instance MonadCodchi (RIO Codchi) where
+    getDriverPath dirType s =
         toString . toUnixPath . (</> s)
             <$> case dirType of
                 DirCtrl -> undefined
                 DirState -> getOrCreateXdgDir XdgState ""
                 DirConfig -> getOrCreateXdgDir XdgConfig ""
-    _ -> return undefined -- error "not implemented"
 
 instance IsString (Path x) where
     fromString = mkUnixPath . toText
 
-getOrCreateXdgDir :: MonadIO m => XdgDirectory -> Path Rel -> m (Path Abs)
-getOrCreateXdgDir xdg dir = liftIO $ do
+getOrCreateXdgDir :: HasLogFunc e => XdgDirectory -> Path Rel -> RIO e (Path Abs)
+getOrCreateXdgDir xdg dir = do
     path <- fromString <$> getXdgDirectory xdg _APP_NAME
     let innerPath = path </> dir
-    createDirectoryIfMissing True (logTraceId "create-dir" $ toString $ toUnixPath innerPath)
+    fp <- logTraceId "create-dir" (toString $ toUnixPath innerPath)
+    createDirectoryIfMissing True fp
     return innerPath

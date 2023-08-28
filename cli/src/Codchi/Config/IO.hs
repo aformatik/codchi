@@ -1,19 +1,20 @@
-{-# LANGUAGE TypeOperators #-}
+module Codchi.Config.IO where
 
-module Codchi.Config where
-
-import Cleff
-import Codchi.Dsl
+import Codchi.Config.Common
+import Codchi.Config.V012
+import Codchi.Platform.CodchiMonad
 import Codchi.Types
-import Data.Aeson (FromJSON)
-import qualified Data.Aeson as JSON
+import Data.Aeson.Safe (SafeJSON)
+import qualified Data.Aeson.Safe as JSON
 import System.FileLock
 import UnliftIO.Directory
+import Data.Aeson.Encode.Pretty (encodePretty)
+import RIO (MonadUnliftIO(..))
 
 _CONFIG_PATH :: Path Rel
 _CONFIG_PATH = fromList ["config.json"]
 
-createConfigIfMissing :: [CodchiL, IOE] :>> es => Eff es FilePath
+createConfigIfMissing :: MonadCodchi m => m FilePath
 createConfigIfMissing = do
     path <- getDriverPath DirConfig _CONFIG_PATH
     unlessM (doesFileExist path) $ do
@@ -22,7 +23,7 @@ createConfigIfMissing = do
         liftIO $ JSON.encodeFile path defaultConfig
     return path
 
-tryReadConfigOrBackup :: (MonadIO m, FromJSON a) => FilePath -> m (Maybe a)
+tryReadConfigOrBackup :: (MonadIO m, SafeJSON a) => FilePath -> m (Maybe a)
 tryReadConfigOrBackup path = do
     cfg <- liftIO $ JSON.decodeFileStrict' path
 
@@ -36,17 +37,14 @@ tryReadConfigOrBackup path = do
 
     return cfg
 
-readConfig :: [CodchiL, IOE] :>> es => Eff es Config
+readConfig :: MonadCodchi m => m Config
 readConfig = do
     path <- createConfigIfMissing
     liftIO $
         fromMaybe defaultConfig
             <$> withFileLock path Shared (\_ -> tryReadConfigOrBackup path)
 
-modifyConfig ::
-    [CodchiL, IOE] :>> es =>
-    (Config -> Eff es Config) ->
-    Eff es ()
+modifyConfig :: MonadCodchi m => (Config -> m Config) -> m ()
 modifyConfig f = do
     path <- createConfigIfMissing
     withRunInIO $ \run -> do
@@ -60,4 +58,9 @@ modifyConfig f = do
         -- possibly long running action
         cfg' <- withFileLock path Exclusive (\_ -> run $ f cfg)
         -- For writing the second lock has to be closed as well on windows
-        JSON.encodeFile path cfg'
+        writeFileLBS path $ encodePretty (JSON.safeToJSON cfg')
+
+
+----------------------
+-- Helper functions --
+----------------------

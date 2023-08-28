@@ -63,6 +63,7 @@
             text-builder-linear = super.text-builder-linear.override { text = super.text_2_0_2; };
             strong-path = pkgs.haskell.lib.compose.doJailbreak super.strong-path;
           };
+          withHoogle = true;
         };
         controller-rootfs = pkgs.callPackage ./nix/controller { inherit nixpkgs; };
 
@@ -85,13 +86,18 @@
           cabal-install
 
           haskell-language-server
+          # haskell-debug-adapter
+          fast-tags
           ghcid
+          # ghci-dap
+          # hoogle
 
           cabal-fmt
           fourmolu
 
           pkgs.zlib
         ];
+        LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:${pkgs.zlib}/lib";
       };
 
       passthru.${system} = { inherit pkgs; };
