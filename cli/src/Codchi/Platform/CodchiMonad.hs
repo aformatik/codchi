@@ -16,6 +16,12 @@ import RIO.Process (HasProcessContext (..), ProcessContext, mkDefaultProcessCont
 data StreamOutput = StreamStd | StreamIgnore
     deriving (Show, Eq)
 
+data DriverMeta = DriverMeta
+    { moduleName :: Text
+    -- ^ Name in codchi's NixOS modules (`codchi.internal.<DRIVER>.enable = true`)
+    }
+    deriving (Show, Eq, Generic)
+
 class
     ( Functor m
     , Applicative m
@@ -28,30 +34,57 @@ class
     ) =>
     MonadCodchi m
     where
-    -- | Get status of the Codchi app
+    driverMeta :: m DriverMeta
+
+    -- | Get status of the Codchi app (currently: not installed / stopped /
+    -- started)
     getStatus :: m CodchiStatus
 
+    -- | Get status of code machines (currently: not installed / stopped /
+    -- started / orphaned)
     listMachines :: m [CodeMachine]
 
+    -- | Register the controller rootfs archive with the driver. The rootfs is
+    -- either included in the installation package (MSIX / RPM / ...) or built
+    -- via Nix
     controllerInit :: m ()
+
+    -- | Start the controller container, do shared mounts (/nix, ...), launch
+    -- nix-daemon, start accessory programs (X-Server, ...), start GUI.
+    -- This should be a no-op if already running.
     controllerStart :: m ()
 
-    -- | installation should succeed even if already installed
+    -- | Register rootfs archive from disk with the driver
+    -- This should be a no-op if already installed
     driverInstallInstance :: CodchiName -> FilePath -> m ()
 
+    -- | Unregister instance from driver and delete all state on disk which is
+    -- associated with the instance (shared mounts, shortcuts).
     driverUninstallInstance :: CodchiName -> MachineStatus -> m ()
+
+    -- | Run root command in instance
     runInInstance :: InstanceConfig -> Bool -> [Text] -> m ()
 
-    -- | path to $currentSystem/sw/share
+    -- | Synchronize shortcuts on host with instance shortcut. FilePath is path
+    -- to $currentSystem/sw/share.
     updateShortcuts :: CodchiName -> FilePath -> m ()
 
+    -- | Run command in controller instance and return error if stderr contains
+    -- 'error: ' (error thrown by Nix).
     runCtrlNixCmd :: StreamOutput -> Text -> m (Either String Text)
+
+    -- | Run command as default user in instance
     runInstanceCmd :: StreamOutput -> CodchiName -> Text -> m (Either Text Text)
+
+    -- | Get path on host for given directory type. The path of the directory
+    -- type should be created if it doesn't exist.
     getDriverPath :: DirectoryType -> Path Rel -> m FilePath
+
+    -- | Get path in controller for path on host OS. Currently only used for
+    -- local NixOS configs with `codchi add-module`.
     getControllerPath :: FilePath -> m (Either String (Path Abs))
 
-    -- | NixOS module in flake.nix for driver (e.g. driver-wsl)
-    getDriverModule :: m Text
+{-# DEPRECATED runInInstance "Should be migrated to runInstanceCommand" #-}
 
 data Codchi = Codchi
     { logFunc :: !LogFunc

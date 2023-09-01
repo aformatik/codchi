@@ -1,12 +1,7 @@
 name: nix
 
 on:
-  push:
-    paths:
-      - flake.nix
-      - flake.lock
-      - 'nix/**'
-      - 'examples/**'
+  pull_request: {}
 
 permissions:
   contents: read
@@ -24,4 +19,4 @@ jobs:
       with:
         name: nixos-devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - run: nix build .#populate-cache
+    - run: nix flake check

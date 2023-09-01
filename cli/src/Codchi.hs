@@ -1,6 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeOperators #-}
-
 module Codchi where
 
 import Codchi.CLI
@@ -16,27 +13,19 @@ import Data.List (maximum)
 import Data.Map.Strict ((!?))
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
-import Development.GitRev (gitHash)
 import RIO hiding (atomically, show, unlessM, unlines, whenM)
 import UnliftIO.Directory (copyFile, createDirectoryIfMissing, doesFileExist, getCurrentDirectory)
-
-_GIT_COMMIT :: String
-_GIT_COMMIT = $(gitHash)
 
 cli :: Command -> RIO Codchi ()
 cli CmdStart = do
     let doStart = do
             logInfo "Updating controller..."
-            -- we update to the git commit with which the codchi executable was compiled with
-            -- to ensure that executable and controller are compatible
-            gitCommit <- logTraceId "current git hash" _GIT_COMMIT
+            driver <- driverMeta
             let cmd =
                     Text.intercalate
                         " && "
                         [ "cd /"
-                        , "nix run github:aformatik/codchi/"
-                            <> toText gitCommit
-                            <> "#controller-rootfs.passthru.createContents"
+                        , "nix run " <> ctrlRootfsCreateContents driver.moduleName
                         , "/bin/ctrl-update-profile"
                         ]
             _ <-
@@ -210,7 +199,7 @@ cli (CmdRebuild instanceName) = do
             instanceDir <- getDriverPath DirCtrl (fromList ["instances", instanceName.text])
             instanceFlake <- getDriverPath DirCtrl (fromList ["instances", instanceName.text, "flake.nix"])
 
-            driverModule <- getDriverModule
+            meta <- driverMeta
             follows <- case machine.nixpkgsFollows of
                 Just u -> return u
                 Nothing -> do
@@ -221,7 +210,7 @@ cli (CmdRebuild instanceName) = do
                     return CodchiNixpkgs
 
             createDirectoryIfMissing True instanceDir
-            writeNixFile instanceFlake (mkNixFlake machine follows driverModule)
+            writeNixFile instanceFlake (mkNixFlake machine follows meta)
 
             let cmd = "/bin/ctrl-install " <> instanceName.text
 
@@ -260,8 +249,9 @@ cli (CmdRun instanceName showTerm args) = do
             logExit $
                 "Code machine " <> display instanceName.text <> " does not exist."
         Just i -> runInInstance i showTerm args
-cli (CmdUninstall instanceName) = modifyConfig $ \c ->
-    case c.instances !? instanceName.text of
+cli (CmdUninstall instanceName) = do
+    config <- readConfig
+    case config.instances !? instanceName.text of
         Nothing -> do
             logExit $
                 "Code machine " <> display instanceName.text <> " does not exist."
@@ -273,13 +263,13 @@ cli (CmdUninstall instanceName) = modifyConfig $ \c ->
             if answer /= "yes"
                 then logExit "Aborted uninstall."
                 else do
+                    modifyConfig $ \c -> return c{instances = Map.delete instanceName.text c.instances}
                     instanceStatus <- (.status) <$> findCodeMachine_ instanceName
                     when (instanceStatus /= MachineNotInstalled) $
                         driverUninstallInstance instanceName instanceStatus
-                    _ <-
+                    void $
                         runCtrlNixCmd_ StreamIgnore $
                             "rm -r /instances/" <> instanceName.text <> " || true"
-                    return c{instances = Map.delete instanceName.text c.instances}
 
 findInstance :: MonadCodchi m => CodchiName -> m (Maybe InstanceConfig)
 findInstance name = do
@@ -297,7 +287,10 @@ modifyInstance name f = modifyConfig $ \cfg ->
 
 getNixpkgsInput :: Module -> RIO Codchi (Maybe NixpkgsFollows)
 getNixpkgsInput m = do
-    let cmd = "nix flake metadata --no-write-lock-file --json '" <> toFlakeUrl m <> "' | jq '.locks.nodes | has(\"nixpkgs\")'"
+    let cmd =
+            "nix flake metadata --no-write-lock-file --json \""
+                <> toFlakeUrl m
+                <> "\" | nix shell nixpkgs#jq -c jq \".locks.nodes | has(\\\"nixpkgs\\\")\""
     output <-
         logTraceId "getNixpkgsInput"
             . fmap Text.strip
