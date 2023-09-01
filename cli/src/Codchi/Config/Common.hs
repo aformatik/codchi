@@ -20,7 +20,15 @@ _INSTANCE_PREFIX = _APP_NAME <> "-instance-"
 -- Data types for codchi --
 ---------------------------
 
-data DirectoryType = DirState | DirConfig | DirCtrl
+data DirectoryType
+    = -- | Used for logs
+      DirState
+    | -- | Used for config.json
+      DirConfig
+    | -- | Root directory of controller. Should contain at least:
+      -- - /instances (code machine flakes)
+      -- - /nix
+      DirCtrl
 
 newtype CodchiName = CodchiName {text :: Text}
     deriving (Eq, Show, Generic)

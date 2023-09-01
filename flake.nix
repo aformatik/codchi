@@ -1,106 +1,120 @@
 {
-  description = "Development Environment as Code";
+  description = "CODe maCHInes - Declarative and Reprodicible Development Environements as Code";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
-
-    nixos-wsl.url = "github:aformatik/NixOS-WSL";
-    nixos-wsl.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = inputs@{ self, nixpkgs, ... }:
     let
       system = "x86_64-linux";
-      pkgs = import nixpkgs {
-        inherit system;
-        overlays = [ ];
-        config.allowBroken = true;
-      };
+      pkgs = import nixpkgs { inherit system; };
+      drivers = [ "wsl" "lxd" ];
 
-      inherit (nixpkgs.lib) pipe mapAttrs nixosSystem concatStrings;
-      inherit (builtins) readDir;
-
-      examples = pipe ./examples [
-        readDir
-        (mapAttrs (path: _: "${./examples}/${path}"))
-      ];
-      exampleModules = mapAttrs (_: path: import "${path}/configuration.nix") examples;
-      exampleTemplates = mapAttrs
-        (name: path: {
-          inherit path;
-          description = "NixOS module for ${name}";
-        })
-        examples;
-      exampleSystems = mapAttrs
-        (_: module: nixosSystem {
-          inherit system;
-          specialArgs.inputs = inputs;
-          modules = [ self.nixosModules.driver-wsl module { codchi.instance.name = "example"; } ];
-        })
-        exampleModules;
+      inherit (nixpkgs.lib) foldl' recursiveUpdate;
+      mergeAttrList = foldl' recursiveUpdate { };
     in
-    rec {
+    mergeAttrList
+      [
+        {
+          passthru.${system}.pkgs = pkgs;
 
-      inherit pkgs;
+          nixosModules.default = import ./modules;
 
-      nixosModules =
-        let
-          codchi = import ./nix/modules;
-          wsl = import ./nix/wsl { inherit inputs; };
-        in
-        exampleModules // {
-          driver-wsl = { imports = [ codchi wsl ]; };
-        };
+          packages.${system} = {
+            default =
+              let
+                inherit (pkgs.haskell.lib.compose) markUnbroken addBuildTool;
+              in
+              pkgs.haskellPackages.developPackage {
+                name = "codchi";
+                root = ./cli;
+                overrides = _self: super: {
+                  byline = markUnbroken super.byline;
+                };
+                modifier = addBuildTool (pkgs.writeShellScriptBin "git" ''
+                  echo "${self.rev or (builtins.throw "Can't build codchi: Git tree is dirty")}"
+                '');
+                withHoogle = true;
+              };
 
-      nixosConfigurations = exampleSystems;
-      templates = exampleTemplates;
+          } // pkgs.callPackages ./controller { inherit nixpkgs; };
 
-      packages.${system} = rec {
-        default = pkgs.haskellPackages.developPackage {
-          name = "codchi";
-          root = ./cli;
-          overrides = _: super: {
-            text-builder-linear = super.text-builder-linear.override { text = super.text_2_0_2; };
-            strong-path = pkgs.haskell.lib.compose.doJailbreak super.strong-path;
-          };
-          withHoogle = true;
-        };
-        controller-rootfs = pkgs.callPackage ./nix/controller { inherit nixpkgs; };
+          devShells.${system}.default = pkgs.mkShell {
+            inputsFrom = [ self.packages.${system}.default.env ];
+            packages = with pkgs.haskellPackages; [
+              cabal-install
 
-        populate-cache =
-          let
-            buildInputs = map (drv: "${drv}") [
-              nixosConfigurations.base.config.system.build.toplevel
-              controller-rootfs.passthru.createContents
-              controller-rootfs
+              haskell-language-server
+              # haskell-debug-adapter
+              fast-tags
+              ghcid
+              # ghci-dap
+              # hoogle
+
+              cabal-fmt
+              fourmolu
+
+              pkgs.zlib
             ];
+            LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:${pkgs.zlib}/lib";
+          };
+
+          checks.${system}.populate-cache =
+            let
+              buildInputs = [
+                self.nixosConfigurations.lxd-base.config.system.build.toplevel
+                self.nixosConfigurations.wsl-base.config.system.build.toplevel
+
+                self.packages.${system}.wsl-ctrl-rootfs.passthru.createContents
+                self.packages.${system}.wsl-ctrl-rootfs
+                self.packages.${system}.lxd-ctrl-rootfs.passthru.createContents
+                self.packages.${system}.lxd-ctrl-rootfs
+
+                self.packages.${system}.default
+              ];
+            in
+            pkgs.runCommandLocal "populate-cache" { } ''
+              echo ${toString buildInputs} > $out
+            '';
+
+        }
+        (
+          let
+
+            inherit (nixpkgs.lib) flip mapAttrs mapAttrs' nixosSystem nameValuePair;
+            inherit (builtins) readDir;
+
+            examples = flip mapAttrs (readDir ./examples) (path: _: "${./examples}/${path}");
+            exampleModules = flip mapAttrs examples (_: path: import "${path}/configuration.nix");
+            exampleTemplates = flip mapAttrs examples
+              (name: path: {
+                inherit path;
+                description = "NixOS module for ${name}";
+              });
+            mkExampleSystems = driver:
+              flip mapAttrs exampleModules
+                (_: module: nixosSystem {
+                  inherit system;
+                  specialArgs.inputs = inputs;
+                  modules = [
+                    module
+                    { codchi.internal = { name = "example"; ${driver}.enable = true; }; }
+                    self.nixosModules.default
+                  ];
+                });
           in
-          pkgs.runCommandLocal "populate-cache" { } ''
-            echo ${concatStrings buildInputs} > $out
-          '';
-      };
-
-      devShells.${system}.default = pkgs.mkShell {
-        inputsFrom = [ packages.${system}.default.env ];
-        packages = with pkgs.haskellPackages; [
-          cabal-install
-
-          haskell-language-server
-          # haskell-debug-adapter
-          fast-tags
-          ghcid
-          # ghci-dap
-          # hoogle
-
-          cabal-fmt
-          fourmolu
-
-          pkgs.zlib
-        ];
-        LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:${pkgs.zlib}/lib";
-      };
-
-      passthru.${system} = { inherit pkgs; };
-
-    };
+          {
+            templates = exampleTemplates;
+            nixosModules = exampleModules;
+            nixosConfigurations = mergeAttrList
+              (flip map drivers
+                (driver:
+                  (mapAttrs'
+                    (name: nameValuePair "${driver}-${name}"))
+                    (mkExampleSystems driver)
+                ));
+          }
+        )
+      ];
 }

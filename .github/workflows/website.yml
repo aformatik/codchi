@@ -2,8 +2,8 @@ name: website
 
 on:
   push:
-     branches:
-      - meta/website
+     paths:
+      - 'static/website/**'
 
 permissions:
   contents: write

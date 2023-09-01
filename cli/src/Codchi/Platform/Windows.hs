@@ -7,9 +7,6 @@ module Codchi.Platform.Windows where
 
 #ifdef mingw32_HOST_OS
 import Graphics.Win32 hiding (try)
-import System.Win32.Console.CtrlHandler
-import System.Win32.DLL (getModuleHandle)
-import System.Win32.Registry
 import System.Win32.Shell
 import System.Win32.Shortcut
 #endif
@@ -92,6 +89,9 @@ newtype ControllerException
     deriving anyclass (Exception)
 
 instance MonadCodchi (RIO Codchi) where
+    driverMeta =
+        pure $ DriverMeta{moduleName = "wsl"}
+
     getStatus =
         getControllerStatus >>= \case
             WSLNotInstalledOrNeedsUpdate ->
@@ -138,7 +138,7 @@ instance MonadCodchi (RIO Codchi) where
             Nothing ->
                 Ann.throw $ InternalPanic "Couldn't find root filesystem for Codchi controller"
             Just rootfs -> do
-                ctrlDir <- getOrCreateXdgDir XdgState (mkNTPath (_CONTROLLER_DIR :: Text))
+                ctrlDir <- getOrCreateXdgDir XdgCache (mkNTPath (_CONTROLLER_DIR :: Text))
                 ctrlFile <-
                     logTraceId "controller dir" $
                         toNTPath $
@@ -161,7 +161,7 @@ instance MonadCodchi (RIO Codchi) where
 
     runCtrlNixCmd streamLog cmd = do
         let printWSL Win _ = pass
-            printWSL WSL txt = putTextLn txt
+            printWSL WSL txt = putText txt
             rp
                 | streamLog == StreamStd = readProcessWith printWSL printWSL
                 | otherwise = readProcess
@@ -175,7 +175,7 @@ instance MonadCodchi (RIO Codchi) where
             Right out -> return $ Right out
     runInstanceCmd streamLog inst cmd = do
         let printWSL Win _ = pass
-            printWSL WSL txt = putTextLn txt
+            printWSL WSL txt = putText txt
             rp
                 | streamLog == StreamStd = readProcessWith printWSL printWSL
                 | otherwise = readProcess
@@ -186,7 +186,7 @@ instance MonadCodchi (RIO Codchi) where
             Right out -> return $ Right out
     driverInstallInstance name rootfsPath = do
         instanceDir <-
-            getOrCreateXdgDir XdgState $
+            getOrCreateXdgDir XdgCache $
                 mkNTPath ("instances" :: Text) </> mkNTPath name.text
 
         putTextLn $ "Installing " <> show name.text <> " from " <> toText rootfsPath
@@ -240,7 +240,7 @@ instance MonadCodchi (RIO Codchi) where
     updateShortcuts name swSharePath = do
         icosFolder <-
             toString . toNTPath
-                <$> getOrCreateXdgDir XdgState (fromList ["icos", name.text])
+                <$> getOrCreateXdgDir XdgCache (fromList ["icos", name.text])
 
         -- cleanup start menu entries
         mapM_ (removeFile . (\f -> icosFolder <> "\\" <> f)) =<< listDirectory icosFolder
@@ -249,7 +249,7 @@ instance MonadCodchi (RIO Codchi) where
             let parseDesktopEntryAndIco app = do
                     de <-
                         parse @(DesktopEntry ()) . decodeUtf8
-                            <$> readFileBS (swSharePath <> "\\wsl\\applications\\" <> toString app <> ".desktop")
+                            <$> readFileBS (swSharePath <> "\\codchi\\applications\\" <> toString app <> ".desktop")
 
                     case de of
                         Left err ->
@@ -257,7 +257,7 @@ instance MonadCodchi (RIO Codchi) where
                                 InternalPanic $
                                     "Could not parse desktop entry for " <> toString app <> ":\n" <> err
                         Right desktopEntry -> do
-                            let iconInCtrl = swSharePath <> "\\wsl\\icos\\" <> toString app <> ".ico"
+                            let iconInCtrl = swSharePath <> "\\codchi\\icos\\" <> toString app <> ".ico"
                                 iconInWin = icosFolder <> "\\" <> toString desktopEntry.name <> ".ico"
                             icon <-
                                 doesFileExist iconInCtrl >>= \case
@@ -270,7 +270,7 @@ instance MonadCodchi (RIO Codchi) where
                             return $ desktopEntry{icon}
              in mapM parseDesktopEntryAndIco
                     . mapMaybe (Text.stripSuffix ".desktop" . toText)
-                    =<< listDirectory (swSharePath <> "\\wsl\\applications")
+                    =<< listDirectory (swSharePath <> "\\codchi\\applications")
 
         startMenuFolder <- liftIO $ do
             startMenu <- getFolderPath cSIDL_PROGRAMS
@@ -312,7 +312,6 @@ instance MonadCodchi (RIO Codchi) where
                 )
         liftIO refreshIconCache
 
-    getDriverModule = return "driver-wsl"
     getDriverPath dirType s =
         toString . toNTPath . (</> s)
             <$> case dirType of
@@ -320,7 +319,7 @@ instance MonadCodchi (RIO Codchi) where
                     let dir = getWSLInstanceDir _CONTROLLER
                     createDirectoryIfMissing True $ toString $ toNTPath dir
                     return dir
-                DirState -> getOrCreateXdgDir XdgState emptyPath
+                DirState -> getOrCreateXdgDir XdgCache emptyPath
                 DirConfig -> getOrCreateXdgDir XdgConfig emptyPath
     getControllerPath path =
         case "C:\\" `stripPrefix` path of
@@ -357,7 +356,7 @@ mainLoop = do
             void $
                 runProcessSilent $
                     shellProc "taskkill.exe" ["/F", "/IM", name]
-            let doLog lvl _ txt = logGeneric name lvl $ display txt
+            let doLog lvl _ = logGeneric name lvl . display . Text.stripEnd
             fix $ \loop -> do
                 runProcessWith (doLog LevelInfo) (doLog LevelWarn) (shellProc cmd args)
                 whenNothingM_ (atomically $ tryReadTChan myCancelChan) $ do
@@ -409,7 +408,7 @@ mainLoop = do
     void $ async $ do
         myCancelChan <- atomically $ dupTChan cancelChan
         void $ readProcess $ controllerCmd "pkill nix-daemon || true"
-        let doLog lvl _ = logGeneric "controller" lvl . display
+        let doLog lvl _ = logGeneric "controller" lvl . display . Text.stripEnd
         fix $ \loop -> do
             runProcessWith (doLog LevelInfo) (doLog LevelWarn) $
                 Proc.setStdin Proc.closed $
@@ -424,12 +423,6 @@ mainLoop = do
         void $ runProcessSilent $ controllerCmd "pkill nix-daemon || true"
         -- void $ runProcessSilent $ shellProc "taskkill.exe" [ "/F", "/IM", "codchi_pulseaudio.exe" ]
         void $ runProcessSilent $ shellProc "taskkill.exe" ["/F", "/IM", "codchi_vcxsrv.exe"]
-
-runProcessSilent :: MonadIO m => ProcessConfig stdin stdout stderr -> m ExitCode
-runProcessSilent =
-    Proc.runProcess
-        . Proc.setStdout Proc.nullStream
-        . Proc.setStderr Proc.nullStream
 
 -- retryDuring :: MonadIO m => Integer -> Int -> m (Maybe e) -> m (Maybe e)
 -- retryDuring timeFrame maxTries act
@@ -496,6 +489,12 @@ shellProc cmd args =
 
 listWSLDistros :: MonadCodchi m => m [WSLDistro]
 listWSLDistros = parseProcess_ $ wsl'exeCmd ["-l", "-v"]
+
+runProcessSilent :: MonadIO m => ProcessConfig stdin stdout stderr -> m ExitCode
+runProcessSilent =
+    Proc.runProcess
+        . Proc.setStdout Proc.nullStream
+        . Proc.setStderr Proc.nullStream
 
 runProcessWith ::
     MonadUnliftIO m =>

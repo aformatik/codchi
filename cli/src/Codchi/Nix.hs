@@ -1,12 +1,20 @@
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Codchi.Nix where
 
-import Codchi.Types
 import Codchi.Config
+import Codchi.Platform.CodchiMonad (DriverMeta (..))
+import Codchi.Types
 import qualified Data.Map.Strict as Map
-import Data.Text.Builder.Linear
+import Text.Builder
+import Development.GitRev (gitHash, gitBranch)
 import Prelude hiding (intercalate)
+
+-------------
+-- Nix DSL --
+-------------
 
 data Nix
     = NIdent Text
@@ -41,57 +49,66 @@ infixr 1 |:|
 (|$|) = NApp
 infixr 2 |$|
 
-data BinOp = ConcatStrings | ConcatLists
+data BinOp = ConcatStrings | ConcatLists | MergeAttrs
 
 (|+|) :: Nix -> Nix -> Nix
 (|+|) = NBinApp ConcatStrings
 
 (|++|) :: Nix -> Nix -> Nix
-(|++|) = NBinApp ConcatLists 
+(|++|) = NBinApp ConcatLists
+
+(|//|) :: Nix -> Nix -> Nix
+(|//|) = NBinApp MergeAttrs
+
 builder :: Nix -> Builder
-builder (NIdent i) = fromText i
-builder (NString s) = surround '"' '"' (fromText s)
+builder (NIdent i) = text i
+builder (NString s) = surround '"' '"' (text s)
 builder (NBool b) = if b then "true" else "false"
 builder (NList elems) =
     surround '[' ']' (mconcat (map buildElem elems))
   where
-    buildElem e = mconcat [indent, surround '(' ')' (builder e), fromChar '\n']
+    buildElem e = mconcat [indent, surround '(' ')' (builder e), char '\n']
 builder (NRecord attrs) = surround '{' '}' (mconcat (map buildBinding (Map.toList attrs)))
   where
-    buildBinding (name, val) = mconcat [indent, fromText name, " = ", builder val, ";\n"]
+    buildBinding (name, val) = mconcat [indent, text name, " = ", builder val, ";\n"]
 builder (NLambda arg body) =
-    mconcat [fromText arg, ": ", builder body]
+    mconcat [text arg, ": ", builder body]
 builder (NApp f arg) =
     mconcat
         [ surround '(' ')' (builder f)
-        , fromChar ' '
+        , char ' '
         , surround '(' ')' (builder arg)
         ]
 builder (NBinApp op a b) =
     mconcat
         [ surround '(' ')' (builder a)
         , case op of
-            ConcatStrings -> fromChar '+'
+            ConcatStrings -> char '+'
             ConcatLists -> "++"
+            MergeAttrs -> "//"
         , surround '(' ')' (builder b)
         ]
 
 indent :: Builder
-indent = "  "
+indent = mempty -- "  "
 
 surround :: Char -> Char -> Builder -> Builder
-surround start end b = fromChar start <> b <> fromChar end
+surround start end b = char start <> b <> char end
 
 surroundLn :: Char -> Char -> Builder -> Builder
-surroundLn start end b = fromChar start <> fromChar '\n' <> b <> fromChar end
+surroundLn start end b = char start <> char '\n' <> b <> char end
 
-intercalate :: Builder -> [Builder] -> Builder
-intercalate _ [] = mempty
-intercalate _ [x] = x
-intercalate sep (x : xs) = x <> sep <> intercalate sep xs
+-- intercalate :: Builder -> [Builder] -> Builder
+-- intercalate _ [] = mempty
+-- intercalate _ [x] = x
+-- intercalate sep (x : xs) = x <> sep <> intercalate sep xs
 
-mkNixFlake :: InstanceConfig -> NixpkgsFollows -> Text -> Nix
-mkNixFlake i follows driverModule =
+----------------------
+-- Flake generation --
+----------------------
+
+mkNixFlake :: InstanceConfig -> NixpkgsFollows -> DriverMeta -> Nix
+mkNixFlake i follows meta =
     record
         [ "description"
             |=| str
@@ -101,7 +118,7 @@ mkNixFlake i follows driverModule =
                 )
         , "inputs"
             |=| record
-                ( ["codchi.url" |=| "github:aformatik/codchi"]
+                ( ["codchi.url" |=| fromString _CODCHI_FLAKE_URL]
                     <> map toInput (Map.elems i.modules)
                     <> ["nixpkgs.follows" |=| str (nixpkgsFollows <> "/nixpkgs")]
                 )
@@ -112,13 +129,16 @@ mkNixFlake i follows driverModule =
                     |=| "inputs.nixpkgs.lib.nixosSystem"
                     |$| record
                         [ "system" |=| str "x86_64-linux"
-                        , "specialArgs.inputs" |=| "inputs"
+                        , "specialArgs.inputs" |=| ("inputs.codchi.inputs" |//| "inputs")
                         , "modules"
                             |=| list
-                                ( [ record ["codchi.instance.name" |=| str i.name.text]
-                                  , NIdent ("inputs.codchi.nixosModules." <> driverModule)
-                                  ]
-                                    <> map inputModule (Map.elems i.modules)
+                                ( map inputModule (Map.elems i.modules)
+                                    <> [ record
+                                            [ "codchi.internal.name" |=| str i.name.text
+                                            , "codchi.internal." <> meta.moduleName <> ".enable" |=| NBool True
+                                            ]
+                                       , "inputs.codchi.nixosModules.default"
+                                       ]
                                 )
                         ]
                 ]
@@ -141,4 +161,29 @@ mkNixFlake i follows driverModule =
         ModuleNixpkgs m -> m.text
 
 writeNixFile :: MonadIO m => FilePath -> Nix -> m ()
-writeNixFile fp = writeFileBS fp . runBuilderBS . builder
+writeNixFile fp = writeFileText fp . run . builder
+
+----------------------------------
+-- Constants for codchi's flake --
+----------------------------------
+
+type Str s = (IsString s, Monoid s) => s
+
+_GIT_COMMIT :: Str s
+_GIT_COMMIT = $(gitHash)
+
+_GIT_BRANCH :: Str s
+_GIT_BRANCH = $(gitBranch)
+
+-- FIXME
+_CODCHI_FLAKE_URL :: Str s
+_CODCHI_FLAKE_URL = "github:aformatik/codchi/" <> _GIT_COMMIT
+
+codchiFlakeAttribute :: Str s -> Str s
+codchiFlakeAttribute attr = mconcat [_CODCHI_FLAKE_URL, "#", attr]
+
+-- codchiFlakePackage :: Str s -> Str s
+-- codchiFlakePackage = codchiFlakeAttribute
+
+ctrlRootfsCreateContents :: Str s -> Str s
+ctrlRootfsCreateContents driver = codchiFlakeAttribute $ driver <> "-ctrl-rootfs.passthru.createContents"

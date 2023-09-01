@@ -4,6 +4,7 @@ import Codchi.Parser
 import Options.Applicative
 
 import Codchi.Config
+import Codchi.Nix (_GIT_COMMIT)
 import Data.Version (showVersion)
 import Paths_codchi (version)
 
@@ -186,6 +187,21 @@ configP =
                             <> help "Path to NixOS configuration file inside URI. Only applicable if not using flakes."
                         )
                 )
+
+-- | backported from optparse-applicative 0.17.1.0
+simpleVersioner ::
+    -- | Version string to be shown
+    String ->
+    Parser (a -> a)
+simpleVersioner v =
+    infoOption txt $
+        mconcat
+            [ long "version"
+            , help "Show version information"
+            , hidden
+            ]
+  where
+    txt = v <> " - " <> _GIT_COMMIT
 
 -- gitHash :: Q Exp
 -- gitHash =
