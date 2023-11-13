@@ -8,6 +8,7 @@
 
   config = {
 
+    fonts.enableDefaultFonts = true;
     environment = {
       sessionVariables = {
         # Allow OpenGL in WSL
