@@ -72,6 +72,7 @@ in
       # https://wiki.archlinux.org/title/Java#Better_font_rendering
       JDK_JAVA_OPTIONS = "-Dawt.useSystemAAFontSettings=on, -Dswing.aatext=true";
     };
+    fonts.enableDefaultFonts = true;
   };
 
 }

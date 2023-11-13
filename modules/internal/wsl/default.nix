@@ -17,7 +17,7 @@ in
   config = mkIf cfg.enable {
 
     codchi.internal.init.rootfsContents = {
-      "/bin/" = with pkgs.pkgsStatic; toString (map (pkg: "${pkg}/bin/*") [ busybox bash ]);
+      "/bin/" = with pkgs.pkgsStatic; toString (map (pkg: "${pkg}/bin/*") [ busybox bashInteractive ]);
 
       # See https://learn.microsoft.com/en-us/windows/wsl/wsl-config#configuration-settings-for-wslconf for all options
       "/etc/wsl.conf" = pkgs.writeText "wsl.conf" (generators.toINI { } {

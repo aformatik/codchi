@@ -4,11 +4,67 @@ let
   cfg = config.codchi.internal.wsl;
 in
 {
-
   config = mkIf cfg.enable {
-
     nixpkgs.overlays = [
       (_: _: {
+        # open files with windows explorer
+        wsl-explorer = pkgs.stdenvNoCC.mkDerivation rec{
+          pname = "wsl-explorer";
+          version = "0.0.1";
+
+          dontUnpack = true;
+          installPhase = ''
+            runHook preInstall
+
+            install -D -t $out/bin $wslExplorer/bin/*
+            install -D -t $out/share/applications $desktopItem/share/applications/*
+
+            runHook postInstall
+          '';
+
+          desktopItem = pkgs.makeDesktopItem {
+            name = pname;
+            noDisplay = true;
+            exec = "${pname} %u";
+            icon = "inode-directory";
+            desktopName = "Windows File Explorer";
+            genericName = "File Explorer";
+            categories = [ "FileManager" ];
+            mimeTypes = [
+              "inode/directory"
+              "application/x-7z-compressed"
+              "application/x-7z-compressed-tar"
+              "application/x-bzip"
+              "application/x-bzip-compressed-tar"
+              "application/x-compress"
+              "application/x-compressed-tar"
+              "application/x-cpio"
+              "application/x-gzip"
+              "application/x-lha"
+              "application/x-lzip"
+              "application/x-lzip-compressed-tar"
+              "application/x-lzma"
+              "application/x-lzma-compressed-tar"
+              "application/x-tar"
+              "application/x-tarz"
+              "application/x-xar"
+              "application/x-xz"
+              "application/x-xz-compressed-tar"
+              "application/zip"
+              "application/gzip"
+              "application/bzip2"
+              "application/vnd.rar"
+              "application/zstd"
+              "application/x-zstd-compressed-tar"
+            ];
+          };
+
+          wslExplorer = pkgs.writeShellScriptBin "wsl-explorer" ''
+            explorer.exe "$@"
+          '';
+        };
+
+        # open files with windows default browser
         wsl-browser = pkgs.stdenvNoCC.mkDerivation rec{
           pname = "wsl-browser";
           version = "0.0.1";
@@ -97,7 +153,7 @@ in
       })
     ];
 
-    environment.systemPackages = [ pkgs.wsl-browser ];
+    environment.systemPackages = [ pkgs.wsl-browser pkgs.wsl-explorer ];
   };
 
 }
