@@ -35,7 +35,7 @@
             NAME="$(grep Icon "$app" | sed 's/Icon=//')"
             ICON="$(find -L icons/ pixmaps/ -name "$NAME.*" | sort -rV | head -n1)"
             if [ ! -z "$ICON" ]; then
-              ${pkgs.imagemagick}/bin/convert -background transparent "$ICON" "wsl/icos/$NAME.ico"
+              ${pkgs.imagemagick}/bin/convert -background transparent -define icon:auto-resize=16,24,32,48,64,72,96,128,256 "$ICON" "wsl/icos/$NAME.ico"
             fi
             cp "$app" wsl/applications
           done
