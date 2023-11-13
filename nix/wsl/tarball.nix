@@ -4,7 +4,7 @@ let
   mnt = cfg.wslConf.automount;
 
   contents = {
-    "/bin/" = with pkgs.pkgsStatic; toString (map (pkg: "${pkg}/bin/*") [ busybox bash ]);
+    "/bin/" = with pkgs.pkgsStatic; toString (map (pkg: "${pkg}/bin/*") [ busybox bashInteractive ]);
 
     "/etc/wsl.conf" = config.environment.etc."wsl.conf".source;
 
