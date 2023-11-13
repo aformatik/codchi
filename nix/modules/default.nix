@@ -38,6 +38,11 @@
     };
     environment.etc."channels/nixpkgs".source = inputs.nixpkgs;
 
+    # Desktop stuff
+    environment.systemPackages = [
+      pkgs.xdg-utils
+      pkgs.nixos-icons # needed for gnome and pantheon about dialog, nixos-manual and maybe more
+    ];
     environment.sessionVariables = {
       XDG_CACHE_HOME = "\${HOME}/.cache";
       XDG_CONFIG_HOME = "\${HOME}/.config";
