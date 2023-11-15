@@ -289,7 +289,12 @@ instance MonadCodchi (RIO Codchi) where
                 ( runExceptT $ do
                     ExceptT initialize
                     forM_ desktopEntries $ \desktopEntry -> do
-                        let lnk =
+                        let exec = toString
+                                    . unwords
+                                    . filter (not . ("%" `Text.isPrefixOf`))
+                                    . words
+                                    $ desktopEntry.exec
+                            lnk =
                                 Shortcut
                                     { targetPath = _APP_NAME <> ".exe"
                                     , arguments =
@@ -298,7 +303,7 @@ instance MonadCodchi (RIO Codchi) where
                                                 <> ["--no-terminal" | not desktopEntry.isTerminal]
                                                 <> [ toString name.text
                                                    , "--"
-                                                   , toString desktopEntry.exec
+                                                   , exec
                                                    ]
                                     , workingDirectory = homeDir
                                     , showCmd = if desktopEntry.isTerminal then ShowNormal else ShowMinimized

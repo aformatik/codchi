@@ -8,7 +8,7 @@ in
 
   imports = [
     ./driver.nix
-    ./browser.nix
+    ./default-tools.nix
   ];
 
   options.codchi.internal.wsl.enable = mkEnableOption "codchi's WSL driver"
@@ -91,12 +91,10 @@ in
     };
 
     environment = {
-      sessionVariables = {
-        # Allow OpenGL in WSL
-        LIBGL_ALWAYS_INDIRECT = "1";
-
-        # Don't prompt for VS code server when running `code`
-        DONT_PROMPT_WSL_INSTALL = "1";
+      variables = {
+        PATH = [ "$PATH" ]; # Use $PATH from WSL (includes Windows Path)
+        LIBGL_ALWAYS_INDIRECT = "1"; # Allow OpenGL in WSL
+        DONT_PROMPT_WSL_INSTALL = "1"; # Don't prompt for VS code server when running `code`
       };
       shellInit = ''
         export PULSE_SERVER=tcp:$(ip route | awk '/^default/{print $3; exit}');

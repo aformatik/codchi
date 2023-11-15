@@ -13,6 +13,27 @@
 
       inherit (nixpkgs.lib) foldl' recursiveUpdate;
       mergeAttrList = foldl' recursiveUpdate { };
+
+      cli = isProd:
+        let
+          inherit (pkgs.haskell.lib.compose) markUnbroken addBuildTool;
+        in
+        pkgs.haskellPackages.developPackage {
+          name = "codchi";
+          root = ./cli;
+          overrides = _self: super: {
+            byline = markUnbroken super.byline;
+          };
+          modifier =
+            if isProd
+            then
+              addBuildTool
+                (pkgs.writeShellScriptBin "git" ''
+                  echo "${self.rev or (builtins.throw "Can't build codchi: Git tree is dirty")}"
+                '')
+            else x: x;
+          withHoogle = true;
+        };
     in
     mergeAttrList
       [
@@ -21,27 +42,11 @@
 
           nixosModules.default = import ./modules;
 
-          packages.${system} = {
-            default =
-              let
-                inherit (pkgs.haskell.lib.compose) markUnbroken addBuildTool;
-              in
-              pkgs.haskellPackages.developPackage {
-                name = "codchi";
-                root = ./cli;
-                overrides = _self: super: {
-                  byline = markUnbroken super.byline;
-                };
-                modifier = addBuildTool (pkgs.writeShellScriptBin "git" ''
-                  echo "${self.rev or (builtins.throw "Can't build codchi: Git tree is dirty")}"
-                '');
-                withHoogle = true;
-              };
-
-          } // pkgs.callPackages ./controller { inherit nixpkgs; };
+          packages.${system} = { default = cli true; }
+            // pkgs.callPackages ./controller { inherit nixpkgs; };
 
           devShells.${system}.default = pkgs.mkShell {
-            inputsFrom = [ self.packages.${system}.default.env ];
+            inputsFrom = [ (cli false).env ];
             packages = with pkgs.haskellPackages; [
               cabal-install
 

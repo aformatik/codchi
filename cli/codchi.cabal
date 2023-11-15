@@ -1,6 +1,6 @@
 cabal-version: 3.4
 name:          codchi
-version:       0.1.2.0
+version:       0.1.3.0
 license:       MPL-2.0 
 author:        aformatik
 build-type:    Simple

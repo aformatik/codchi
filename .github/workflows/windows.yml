@@ -79,7 +79,7 @@ jobs:
         name: nixos-devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
     - run: |
-        nix build .#controller-rootfs
+        nix build .#wsl-ctrl-rootfs
         cp  result/controller.tar.gz controller.tar.gz
     - name: Temporarily save artifacts
       uses: actions/upload-artifact@v3

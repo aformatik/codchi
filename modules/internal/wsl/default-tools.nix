@@ -60,7 +60,9 @@ in
           };
 
           wslExplorer = pkgs.writeShellScriptBin "wsl-explorer" ''
-            explorer.exe "$@"
+            set -e
+            set -o pipefail
+            explorer.exe "$(wslpath -w "$1")"
           '';
         };
 
@@ -154,6 +156,12 @@ in
     ];
 
     environment.systemPackages = [ pkgs.wsl-browser pkgs.wsl-explorer ];
+
+    xdg.mime.defaultApplications = {
+      "inode/directory" = "wsl-explorer.desktop";
+      "x-scheme-handler/http" = "wsl-browser.desktop";
+      "x-scheme-handler/https" = "wsl-browser.desktop";
+    };
   };
 
 }
