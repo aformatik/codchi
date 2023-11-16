@@ -12,7 +12,8 @@ in
     description = ''
       List of JDKs which should be symlinked to ~/.jdks (for IDEs lik IntelliJ).
     '';
-    example = literalExpression ''{
+    example = literalExpression ''
+      {
         openjdk19 = pkgs.jdk19;
       }'';
     default = { };
