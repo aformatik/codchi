@@ -38,8 +38,6 @@
     mergeAttrList
       [
         {
-          passthru.${system}.pkgs = pkgs;
-
           nixosModules.default = import ./modules;
 
           packages.${system} = { default = cli true; }

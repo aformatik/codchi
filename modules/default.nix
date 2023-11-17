@@ -6,6 +6,7 @@ in
 {
 
   imports = [
+    ./docker.nix
     ./internal
     ./java.nix
     ./recommended-config.nix
@@ -14,8 +15,12 @@ in
   options.codchi = {
     defaultUser = mkOption {
       type = types.str;
-      internal = true;
+      readOnly = true;
       default = "nixos";
+      description = ''
+        The name of the default linux user. This can be used to configure user
+        specific things (e.g. add an user to a group) via `''${config.codchi.defaultUser}`
+      '';
     };
   };
 
@@ -57,21 +62,6 @@ in
       pkgs.xdg-utils
       pkgs.nixos-icons # needed for gnome and pantheon about dialog, nixos-manual and maybe more
     ];
-    xdg = {
-      autostart.enable = true;
-      menus.enable = true;
-      mime.enable = true;
-      icons.enable = true;
-    };
-    environment.sessionVariables = {
-      XDG_CACHE_HOME = "\${HOME}/.cache";
-      XDG_CONFIG_HOME = "\${HOME}/.config";
-      XDG_BIN_HOME = "\${HOME}/.local/bin";
-      XDG_DATA_HOME = "\${HOME}/.local/share";
-
-      # https://wiki.archlinux.org/title/Java#Better_font_rendering
-      JDK_JAVA_OPTIONS = "-Dawt.useSystemAAFontSettings=on, -Dswing.aatext=true";
-    };
     fonts.enableDefaultFonts = true;
   };
 

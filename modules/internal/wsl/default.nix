@@ -17,7 +17,7 @@ in
   config = mkIf cfg.enable {
 
     codchi.internal.init.rootfsContents = {
-      "/bin/" = with pkgs.pkgsStatic; toString (map (pkg: "${pkg}/bin/*") [ busybox bashInteractive ]);
+      "/bin/" = with pkgs.pkgsStatic; toString (map (pkg: "${pkg}/bin/*") [ busybox bash ]);
 
       # See https://learn.microsoft.com/en-us/windows/wsl/wsl-config#configuration-settings-for-wslconf for all options
       "/etc/wsl.conf" = pkgs.writeText "wsl.conf" (generators.toINI { } {
@@ -58,7 +58,7 @@ in
         # this logs everything to dmesg
         set -x
 
-        PATH="$PATH:/bin"
+        PATH="/bin:$PATH"
 
         if [ ! -d /mnt/wsl/nix/store ] || [ ! -d /mnt/wsl/nix/var/nix/daemon-socket ] ; then
           echo "Remote store is not mounted on /mnt/wsl/nix" >&2
@@ -92,11 +92,18 @@ in
 
     environment = {
       variables = {
-        PATH = [ "$PATH" ]; # Use $PATH from WSL (includes Windows Path)
+        AAAA_WSLPATH = "$PATH"; # Use as' as a prefix which is sorted alphabetically before PATH in a nix attrset so the generated export statement isn't overriden by the NixOS PATH
         LIBGL_ALWAYS_INDIRECT = "1"; # Allow OpenGL in WSL
         DONT_PROMPT_WSL_INSTALL = "1"; # Don't prompt for VS code server when running `code`
+
+        # https://wiki.archlinux.org/title/Java#Better_font_rendering
+        JDK_JAVA_OPTIONS = "-Dawt.useSystemAAFontSettings=on, -Dswing.aatext=true";
       };
-      shellInit = ''
+      extraInit = ''
+        # include Windows' $PATH in our $PATH
+        export PATH="$PATH:$AAAA_WSLPATH"
+        unset AAAA_WSLPATH
+
         export PULSE_SERVER=tcp:$(ip route | awk '/^default/{print $3; exit}');
         export DISPLAY=$(ip route | awk '/^default/{print $3; exit}'):0
         unset WAYLAND_DISPLAY

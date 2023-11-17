@@ -9,8 +9,10 @@ import Codchi.Platform.CodchiMonad (DriverMeta (..))
 import Codchi.Types
 import qualified Data.Map.Strict as Map
 import Text.Builder
-import Development.GitRev (gitHash, gitBranch)
+import Development.GitRev (gitHash)
 import Prelude hiding (intercalate)
+import Data.Version (showVersion)
+import Paths_codchi (version)
 
 -------------
 -- Nix DSL --
@@ -172,12 +174,18 @@ type Str s = (IsString s, Monoid s) => s
 _GIT_COMMIT :: Str s
 _GIT_COMMIT = $(gitHash)
 
-_GIT_BRANCH :: Str s
-_GIT_BRANCH = $(gitBranch)
+-- _GIT_BRANCH :: Str s
+-- _GIT_BRANCH = $(gitBranch)
+
+_GIT_TAG :: Str s
+_GIT_TAG = "v" <> fromString (showVersion version)
+
+_CODCHI_FLAKE_URL :: Str s
+_CODCHI_FLAKE_URL = "github:aformatik/codchi/" <> _GIT_TAG
 
 -- FIXME
-_CODCHI_FLAKE_URL :: Str s
-_CODCHI_FLAKE_URL = "github:aformatik/codchi/" <> _GIT_COMMIT
+-- _CODCHI_FLAKE_URL :: Str s
+-- _CODCHI_FLAKE_URL = "github:aformatik/codchi/" <> _GIT_COMMIT
 
 codchiFlakeAttribute :: Str s -> Str s
 codchiFlakeAttribute attr = mconcat [_CODCHI_FLAKE_URL, "#", attr]
