@@ -154,7 +154,30 @@ boolean</p>
 <code>true</code></p>
 <p><em>Declared by:</em></p>
 <ul>
-<li><a href="https://github.com/aformatik/codchi/blob/e4ffae31a45e1c2120e0e36cbc4eee415716e916/modules/recommended-config.nix">&lt;codchi/recommended-config.nix&gt;</a></li>
+<li><a href="https://github.com/aformatik/codchi/blob/b9c6526306d76dc97116ae811d7197c722ecc04c/modules/recommended-config.nix">&lt;codchi/recommended-config.nix&gt;</a></li>
+</ul>
+<h2 id="codchidefaultuser"><a class="header" href="#codchidefaultuser">codchi.defaultUser</a></h2>
+<p>The name of the default linux user. This can be used to configure user
+specific things (e.g. add an user to a group) via <code>${config.codchi.defaultUser}</code></p>
+<p><em>Type:</em>
+string <em>(read only)</em></p>
+<p><em>Default:</em>
+<code>&quot;nixos&quot;</code></p>
+<p><em>Declared by:</em></p>
+<ul>
+<li><a href="file:///nix/store/jhmq4jhr9qr5drmb7wz4zwclc0gv4vkx-source/static/website/flake.nix">/nix/store/jhmq4jhr9qr5drmb7wz4zwclc0gv4vkx-source/static/website/flake.nix</a></li>
+</ul>
+<h2 id="codchidockerenable"><a class="header" href="#codchidockerenable">codchi.docker.enable</a></h2>
+<p>Whether to enable the docker daemon.
+This also adds the default user to the docker group and installs
+docker-compose.</p>
+<p><em>Type:</em>
+boolean</p>
+<p><em>Default:</em>
+<code>false</code></p>
+<p><em>Declared by:</em></p>
+<ul>
+<li><a href="https://github.com/aformatik/codchi/blob/b9c6526306d76dc97116ae811d7197c722ecc04c/modules/docker.nix">&lt;codchi/docker.nix&gt;</a></li>
 </ul>
 <h2 id="programsjavapackages"><a class="header" href="#programsjavapackages">programs.java.packages</a></h2>
 <p>List of JDKs which should be symlinked to ~/.jdks (for IDEs lik IntelliJ).</p>
@@ -169,7 +192,7 @@ attribute set of package</p>
 </code></pre>
 <p><em>Declared by:</em></p>
 <ul>
-<li><a href="https://github.com/aformatik/codchi/blob/e4ffae31a45e1c2120e0e36cbc4eee415716e916/modules/java.nix">&lt;codchi/java.nix&gt;</a></li>
+<li><a href="https://github.com/aformatik/codchi/blob/b9c6526306d76dc97116ae811d7197c722ecc04c/modules/java.nix">&lt;codchi/java.nix&gt;</a></li>
 </ul>
 
                     </main>
