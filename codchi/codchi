@@ -1,0 +1,8 @@
+#!/usr/bin/env nu
+# vi: ft=nu
+
+export use ./ *
+
+export def main [] {
+    help commands "codchi"
+}

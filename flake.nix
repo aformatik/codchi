@@ -2,7 +2,7 @@
   description = "CODe maCHInes - Declarative and Reprodicible Development Environements as Code";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
   };
 
   outputs = inputs@{ self, nixpkgs, ... }:
@@ -39,28 +39,67 @@
       [
         {
           nixosModules.default = import ./modules;
+          nixosModules.codchi = {
+            environment.systemPackages = [ pkgs.vscodium ];
+            programs.direnv = {
+              enable = true;
+              nix-direnv.enable = true;
+            };
+          };
 
-          packages.${system} = { default = cli true; }
-            // pkgs.callPackages ./controller { inherit nixpkgs; };
+          packages.${system} = {
+            haskell = cli true;
+            default = pkgs.callPackage ./codchi/native { };
+          }
+          // pkgs.callPackages ./controller { inherit nixpkgs; };
 
-          devShells.${system}.default = pkgs.mkShell {
-            inputsFrom = [ (cli false).env ];
-            packages = with pkgs.haskellPackages; [
-              cabal-install
+          devShells.${system} = {
+            haskell = pkgs.mkShell {
+              inputsFrom = [ (cli false).env ];
+              packages = with pkgs.haskellPackages; [
+                cabal-install
 
-              haskell-language-server
-              # haskell-debug-adapter
-              fast-tags
-              ghcid
-              # ghci-dap
-              # hoogle
+                haskell-language-server
+                # haskell-debug-adapter
+                fast-tags
+                ghcid
+                # ghci-dap
+                # hoogle
 
-              cabal-fmt
-              fourmolu
+                cabal-fmt
+                fourmolu
 
-              pkgs.zlib
-            ];
-            LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:${pkgs.zlib}/lib";
+                pkgs.zlib
+              ];
+              LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:${pkgs.zlib}/lib";
+            };
+            default = pkgs.mkShell rec {
+              RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
+              shellHook = ''
+                export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/run/opengl-driver/lib/:${pkgs.lib.makeLibraryPath (with pkgs;[
+                  # xorg.libxcb
+                  xorg.libX11
+                  libxkbcommon
+                ])}"
+              '';
+              nativeBuildInputs = with pkgs; [
+                nixpkgs-fmt
+                rustc
+                cargo
+                rustfmt
+                clippy
+                rust-analyzer
+
+                strace
+
+                nushell
+                (pkgs.writeShellScriptBin "wslcargo" ''
+                  powershell.exe -Command '$env:CARGO_INCREMENTAL=0; cargo.exe '"$@"
+                '')
+              ] ++ self.packages.${system}.default.nativeBuildInputs
+              ++ self.packages.${system}.default.buildInputs;
+
+            };
           };
 
           checks.${system}.populate-cache =
