@@ -288,9 +288,9 @@ modifyInstance name f = modifyConfig $ \cfg ->
 getNixpkgsInput :: Module -> RIO Codchi (Maybe NixpkgsFollows)
 getNixpkgsInput m = do
     let cmd =
-            "nix flake metadata --no-write-lock-file --json \""
+            "nix flake metadata --no-write-lock-file --json '"
                 <> toFlakeUrl m
-                <> "\" | nix shell nixpkgs#jq -c jq \".locks.nodes | has(\\\"nixpkgs\\\")\""
+                <> "' | nix shell nixpkgs#jq -c jq '.locks.nodes | has(\\\"nixpkgs\\\")'"
     output <-
         logTraceId "getNixpkgsInput"
             . fmap Text.strip

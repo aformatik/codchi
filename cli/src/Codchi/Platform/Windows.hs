@@ -289,7 +289,8 @@ instance MonadCodchi (RIO Codchi) where
                 ( runExceptT $ do
                     ExceptT initialize
                     forM_ desktopEntries $ \desktopEntry -> do
-                        let exec = toString
+                        let exec =
+                                toString
                                     . unwords
                                     . filter (not . ("%" `Text.isPrefixOf`))
                                     . words
@@ -473,7 +474,7 @@ wslCmd name cmd =
         , "-ic"
         ]
             -- <> (["-x" | logLevel <= LevelDebug]) FIXME
-            <> [ show $ "printf " <> _MAGIC_UTF8_SEQ <> " | tee /dev/stderr ; " <> cmd
+            <> [ "\"printf " <> _MAGIC_UTF8_SEQ <> " | tee /dev/stderr ; " <> cmd <> "\""
                ]
 
 wsl'exeCmd :: [Text] -> ProcessConfig () () ()
@@ -482,10 +483,10 @@ wsl'exeCmd = shellCmd "wsl.exe"
 shellCmd :: Text -> [Text] -> ProcessConfig () () ()
 shellCmd cmd args =
     -- logTraceId "shellCmd" $ FIXME
-    Proc.shell $
-        toString $
-            unwords $
-                cmd : args
+    Proc.shell
+        $ toString
+        $ unwords
+        $ cmd : args
 
 shellProc :: Text -> [Text] -> ProcessConfig () () ()
 shellProc cmd args =
