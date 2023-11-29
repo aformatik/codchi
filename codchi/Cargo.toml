@@ -1,0 +1,41 @@
+[package]
+name = "codchi"
+version = "0.2.0"
+edition = "2021"
+# Keep this in sync with NixOS stable
+rust-version = "1.70.0"
+build = "build.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive", "cargo"] }
+clap-verbosity-flag = "2.1.0"
+
+anyhow = { version = "1.0", features = ["backtrace"] }
+log = "0.4"
+env_logger = "0.10"
+confy = "0.5.1"
+directories = "5.0.1"
+human-panic = "1.2.2"
+# nix = { version = "0.27.1", features = ["mount", "process"] }
+shadow-rs = { version = "0.24" }
+fs2 = "0.4.3"
+sysinfo = "0.29.11"
+lazy_static = "1.4.0"
+
+[target.'cfg(unix)'.dependencies]
+daemonize = "0.5.0"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.52", features = [ "Win32_System_Threading" ]}
+# windows-service = "0.6.0"
+
+[[bin]]
+name = "codchi"
+path = "src/main.rs"
+
+[build-dependencies]
+clap = { version = "4", features = ["derive", "cargo"] }
+clap-verbosity-flag = "2.1.0"
+clap_complete = "4.4.4"
+clap_mangen = "0.2.15"
+shadow-rs = { version = "0.24" }

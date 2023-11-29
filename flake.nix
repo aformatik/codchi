@@ -49,7 +49,7 @@
 
           packages.${system} = {
             haskell = cli true;
-            default = pkgs.callPackage ./codchi/native { };
+            default = pkgs.callPackage ./codchi { };
           }
           // pkgs.callPackages ./controller { inherit nixpkgs; };
 
@@ -78,8 +78,8 @@
               shellHook = ''
                 export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/run/opengl-driver/lib/:${pkgs.lib.makeLibraryPath (with pkgs;[
                   # xorg.libxcb
-                  xorg.libX11
-                  libxkbcommon
+                  # xorg.libX11
+                  # libxkbcommon
                 ])}"
               '';
               nativeBuildInputs = with pkgs; [

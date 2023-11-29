@@ -15,11 +15,14 @@ rustPlatform.buildRustPackage {
   src = ./.;
   cargoLock.lockFile = ./Cargo.lock;
 
-  nativeBuildInputs = [ pkg-config python3 ];
+  nativeBuildInputs = [
+    # pkg-config
+    # python3
+  ];
   buildInputs = [
-    gtk3
-    xorg.libxcb
-    xorg.libX11
-    libxkbcommon
+    # gtk3
+    # xorg.libxcb
+    # xorg.libX11
+    # libxkbcommon
   ];
 }
