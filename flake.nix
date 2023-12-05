@@ -3,44 +3,32 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      flake = false; # prevent fetching transitive inputs
+    };
   };
 
-  outputs = inputs@{ self, nixpkgs, ... }:
+  outputs = inputs@{ self, nixpkgs, rust-overlay, ... }:
     let
       system = "x86_64-linux";
-      pkgs = import nixpkgs { inherit system; };
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [ (import rust-overlay) ];
+        config.allowUnfree = true;
+      };
       drivers = [ "wsl" "lxd" ];
 
       inherit (nixpkgs.lib) foldl' recursiveUpdate;
       mergeAttrList = foldl' recursiveUpdate { };
-
-      cli = isProd:
-        let
-          inherit (pkgs.haskell.lib.compose) markUnbroken addBuildTool;
-        in
-        pkgs.haskellPackages.developPackage {
-          name = "codchi";
-          root = ./cli;
-          overrides = _self: super: {
-            byline = markUnbroken super.byline;
-          };
-          modifier =
-            if isProd
-            then
-              addBuildTool
-                (pkgs.writeShellScriptBin "git" ''
-                  echo "${self.rev or (builtins.throw "Can't build codchi: Git tree is dirty")}"
-                '')
-            else x: x;
-          withHoogle = true;
-        };
     in
     mergeAttrList
       [
         {
           nixosModules.default = import ./modules;
           nixosModules.codchi = {
-            environment.systemPackages = [ pkgs.vscodium ];
+            nixpkgs.config.allowUnfree = true;
+            environment.systemPackages = [ pkgs.jetbrains.rust-rover ];
             programs.direnv = {
               enable = true;
               nix-direnv.enable = true;
@@ -48,58 +36,15 @@
           };
 
           packages.${system} = {
-            haskell = cli true;
-            default = pkgs.callPackage ./codchi { };
+            inherit pkgs;
+            default = pkgs.callPackage ./codchi { platform = "linux"; };
+            windows = pkgs.callPackage ./codchi { platform = "win"; };
           }
           // pkgs.callPackages ./controller { inherit nixpkgs; };
 
           devShells.${system} = {
-            haskell = pkgs.mkShell {
-              inputsFrom = [ (cli false).env ];
-              packages = with pkgs.haskellPackages; [
-                cabal-install
-
-                haskell-language-server
-                # haskell-debug-adapter
-                fast-tags
-                ghcid
-                # ghci-dap
-                # hoogle
-
-                cabal-fmt
-                fourmolu
-
-                pkgs.zlib
-              ];
-              LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:${pkgs.zlib}/lib";
-            };
-            default = pkgs.mkShell rec {
-              RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
-              shellHook = ''
-                export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/run/opengl-driver/lib/:${pkgs.lib.makeLibraryPath (with pkgs;[
-                  # xorg.libxcb
-                  # xorg.libX11
-                  # libxkbcommon
-                ])}"
-              '';
-              nativeBuildInputs = with pkgs; [
-                nixpkgs-fmt
-                rustc
-                cargo
-                rustfmt
-                clippy
-                rust-analyzer
-
-                strace
-
-                nushell
-                (pkgs.writeShellScriptBin "wslcargo" ''
-                  powershell.exe -Command '$env:CARGO_INCREMENTAL=0; cargo.exe '"$@"
-                '')
-              ] ++ self.packages.${system}.default.nativeBuildInputs
-              ++ self.packages.${system}.default.buildInputs;
-
-            };
+            default = pkgs.callPackage ./codchi/shell.nix { platform = "linux"; };
+            windows = pkgs.callPackage ./codchi/shell.nix { platform = "win"; };
           };
 
           checks.${system}.populate-cache =
@@ -114,6 +59,7 @@
                 self.packages.${system}.lxd-ctrl-rootfs
 
                 self.packages.${system}.default
+                self.packages.${system}.windows
               ];
             in
             pkgs.runCommandLocal "populate-cache" { } ''

@@ -14,7 +14,7 @@ anyhow = { version = "1.0", features = ["backtrace"] }
 log = "0.4"
 env_logger = "0.10"
 confy = "0.5.1"
-directories = "5.0.1"
+dirs-next = "2.0.0"
 human-panic = "1.2.2"
 # nix = { version = "0.27.1", features = ["mount", "process"] }
 shadow-rs = { version = "0.24" }
@@ -22,8 +22,13 @@ fs2 = "0.4.3"
 sysinfo = "0.29.11"
 lazy_static = "1.4.0"
 
+tray-icon = { git = "https://github.com/htngr/tray-icon", version = "0.11", rev = "ffe07cca6a3175686c7873c2d6a4c0a42b16aabf" }
+image = "0.24.7"
+tao = "0.24.0"
+
 [target.'cfg(unix)'.dependencies]
 daemonize = "0.5.0"
+# gtk = "0.18.1"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.52", features = [ "Win32_System_Threading" ]}

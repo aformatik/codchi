@@ -1,4 +1,7 @@
 use clap::*;
+use clap_verbosity_flag::{Verbosity,WarnLevel,LogLevel};
+
+type DefaultLogLevel = WarnLevel;
 
 /// codchi
 #[derive(Debug, Parser)]
@@ -8,7 +11,7 @@ use clap::*;
 )]
 pub struct Cli {
     #[command(flatten)]
-    pub verbose: clap_verbosity_flag::Verbosity,
+    pub verbose: Verbosity<DefaultLogLevel>,
 
     #[command(subcommand)]
     pub command: Cmd,
@@ -33,4 +36,48 @@ pub enum ControllerCmd {
 
     /// Stop the codchi controller
     Stop {},
+}
+
+
+impl Cli {
+    #[allow(dead_code)]
+    pub fn to_args(&self) -> Vec<&'static str> {
+        let mut args = Vec::new();
+
+        let default_lvl = <DefaultLogLevel as LogLevel>::default().unwrap() as i8;
+        let log_level = self.verbose.log_level().map(|it| it as i8).unwrap_or(0);
+
+        let rel_level = log_level - default_lvl;
+        // println!("{default_lvl} {log_level} {rel_level} {:?}", self.verbose);
+
+        if rel_level > 0 {
+            for _ in 0..rel_level {
+                args.push("--verbose");
+            }
+        } else if rel_level < 0 {
+            for _ in 0..(-rel_level) {
+                args.push("--quiet");
+            }
+        }
+
+
+        match &self.command {
+            Cmd::Controller(cmd) => {
+                args.push("controller");
+                match cmd {
+                    ControllerCmd::Stop {  } => args.push("stop"),
+                    ControllerCmd::Start { run_in_foreground } => {
+                        args.push("start");
+                        if *run_in_foreground {
+                            args.push("--foreground");
+                        }
+                    },
+                }
+            },
+            Cmd::Status {  } => args.push("status"),
+            Cmd::Rebuild {  } => args.push("rebuild"),
+        }
+
+        args
+    }
 }

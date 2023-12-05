@@ -2,7 +2,6 @@ use std::{error::Error, fs, path::PathBuf};
 
 use clap::CommandFactory;
 use clap_complete::{generate_to, Shell::*};
-use shadow_rs::shadow;
 
 #[path = "src/cli.rs"]
 mod cli;
@@ -30,7 +29,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         generate_to(shell, &mut mut_cmd, name, &comp_dir).unwrap();
     }
 
-    shadow_rs::new()?;
+    {
+        shadow_rs::new()?;
+    }
+
+    #[cfg(target_os = "linux")]
+    { }
 
     Ok(())
 }
