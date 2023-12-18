@@ -14,7 +14,7 @@
   # , libappindicator-gtk3
 , libayatana-appindicator
 , libxkbcommon
-, xorg
+# , xorg
 , vulkan-loader
 , libGL
   # , webkitgtk_4_1
@@ -37,6 +37,7 @@ let
     targets = [
       "x86_64-unknown-linux-gnu"
       "x86_64-pc-windows-msvc"
+      "wasm32-wasi"
     ];
   };
   rustPlatform = makeRustPlatform {
@@ -69,10 +70,10 @@ let
             outputHash = "sha256-R3a5kYii/0tuspES9bkYE4uphKqG+Tg5Qhjb77t/9Co=";
           }
           '' 
-      mkdir -p $out/xwin
-      xwin --accept-license splat --output $out/xwin --copy
-      echo "x86_64" > $out/xwin/DONE
-    '';
+            mkdir -p $out/xwin
+            xwin --accept-license splat --output $out/xwin --copy
+            echo "x86_64" > $out/xwin/DONE
+          '';
       in
       rec {
         inherit splatted;
@@ -229,7 +230,7 @@ rustPlatform.buildRustPackage (lib.recursiveUpdate
   src = ./.;
   cargoLock.lockFile = ./Cargo.lock;
   cargoLock.outputHashes = {
-    "tray-icon-0.11.0" = "";
+    # "tray-icon-0.11.0" = "";
   };
 
   passthru = { inherit rust rustPlatform; } // native;

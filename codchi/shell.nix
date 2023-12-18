@@ -9,6 +9,10 @@
 
 , platform # "win" or "linux"
 , jetbrains
+
+, cargo-bloat
+# , cargo-udeps
+
 , ...
 }:
 let
@@ -21,7 +25,7 @@ let
       shellHook = ''
         # export WINE_PREFIX="$(pwd)/.wine"
         export XWIN_ARCH="x86_64"
-        export XWIN_CACHE_DIR="$(pwd)/.xwin"
+        export XWIN_CACHE_DIR="$(git rev-parse --show-toplevel)/.xwin"
         if [ ! -d $XWIN_CACHE_DIR ]; then 
           mkdir $XWIN_CACHE_DIR/xwin
           cp -r ${codchi.passthru.splatted} $XWIN_CACHE_DIR
@@ -46,7 +50,15 @@ mkShell (lib.recursiveUpdate
     gdb
     gdbgui
 
-    jetbrains.rust-rover
+    # (jetbrains.rust-rover.overrideAttrs (_: {
+    #   src = fetchTarball {
+    #     url = "https://download.jetbrains.com/rustrover/RustRover-233.11799.284.tar.gz";
+    #     sha256 = "sha256:0nq62y0cqvhx8a81c7wc1zrm9bp00ljrh96qlsvmy0mwn3s278ym";
+    #   };
+    # }))
+
+    cargo-bloat
+    # cargo-udeps
   ] ++ (codchi.passthru.nativeBuildInputs or [ ]);
 
   inherit (codchi.passthru) CARGO_BUILD_TARGET;

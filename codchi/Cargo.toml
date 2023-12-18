@@ -10,33 +10,37 @@ build = "build.rs"
 clap = { version = "4", features = ["derive", "cargo"] }
 clap-verbosity-flag = "2.1.0"
 
-anyhow = { version = "1.0", features = ["backtrace"] }
-log = "0.4"
-env_logger = "0.10"
-confy = "0.5.1"
-dirs-next = "2.0.0"
-human-panic = "1.2.2"
-# nix = { version = "0.27.1", features = ["mount", "process"] }
-shadow-rs = { version = "0.24" }
-fs2 = "0.4.3"
-sysinfo = "0.29.11"
 lazy_static = "1.4.0"
+shadow-rs = { version = "0.24" }
 
-tray-icon = { git = "https://github.com/htngr/tray-icon", version = "0.11", rev = "ffe07cca6a3175686c7873c2d6a4c0a42b16aabf" }
+anyhow = { version = "1.0", features = ["backtrace"] }
+thiserror = "1.0"
+env_logger = "0.10"
+log = "0.4"
+human-panic = "1.2.2"
+config = "0.13.4"
+
+directories = "5.0.1"
+interprocess = { version = "1.2.1", features = [ "tokio_support"] }
+# single-instance = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+rmp-serde = "1.1"
+tokio = { version = "1.35", features = [ "rt-multi-thread" ] }
+tokio-util = { version = "0.7.10", features = ["codec"] }
+tokio-serde = { version = "0.8.0", features = ["messagepack"] }
+parity-tokio-ipc = "0.9.0"
+futures = "0.3.29"
+futures-io = { version = "0.3" }
+
+tray-icon = "0.11.1"
 image = "0.24.7"
 tao = "0.24.0"
 
 [target.'cfg(unix)'.dependencies]
 daemonize = "0.5.0"
-# gtk = "0.18.1"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.52", features = [ "Win32_System_Threading" ]}
-# windows-service = "0.6.0"
-
-[[bin]]
-name = "codchi"
-path = "src/main.rs"
 
 [build-dependencies]
 clap = { version = "4", features = ["derive", "cargo"] }

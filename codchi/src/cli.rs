@@ -1,12 +1,12 @@
 use clap::*;
-use clap_verbosity_flag::{Verbosity,WarnLevel,LogLevel};
+use clap_verbosity_flag::{LogLevel, Verbosity, WarnLevel};
 
 type DefaultLogLevel = WarnLevel;
 
 /// codchi
 #[derive(Debug, Parser)]
 #[command(
-    version, author, about, long_about = None, 
+    version, author, about, long_about = None,
     infer_subcommands = true
 )]
 pub struct Cli {
@@ -20,7 +20,7 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Cmd {
     #[command(subcommand)]
-    Controller (ControllerCmd),
+    Controller(ControllerCmd),
     Status {},
     Rebuild {},
 }
@@ -30,14 +30,13 @@ pub enum ControllerCmd {
     /// Start the codchi controller
     Start {
         /// Run in foreground, dont daemonize
-        #[arg(long="foreground", short='f')] 
+        #[arg(long = "foreground", short = 'f')]
         run_in_foreground: bool,
     },
 
     /// Stop the codchi controller
     Stop {},
 }
-
 
 impl Cli {
     #[allow(dead_code)]
@@ -50,32 +49,28 @@ impl Cli {
         let rel_level = log_level - default_lvl;
         // println!("{default_lvl} {log_level} {rel_level} {:?}", self.verbose);
 
+        #[allow(clippy::comparison_chain)]
         if rel_level > 0 {
-            for _ in 0..rel_level {
-                args.push("--verbose");
-            }
+            args.resize((args.len() as i8 + rel_level) as usize, "--verbose");
         } else if rel_level < 0 {
-            for _ in 0..(-rel_level) {
-                args.push("--quiet");
-            }
+            args.resize((args.len() as i8 - rel_level) as usize, "--quiet");
         }
-
 
         match &self.command {
             Cmd::Controller(cmd) => {
                 args.push("controller");
                 match cmd {
-                    ControllerCmd::Stop {  } => args.push("stop"),
+                    ControllerCmd::Stop {} => args.push("stop"),
                     ControllerCmd::Start { run_in_foreground } => {
                         args.push("start");
                         if *run_in_foreground {
                             args.push("--foreground");
                         }
-                    },
+                    }
                 }
-            },
-            Cmd::Status {  } => args.push("status"),
-            Cmd::Rebuild {  } => args.push("rebuild"),
+            }
+            Cmd::Status {} => args.push("status"),
+            Cmd::Rebuild {} => args.push("rebuild"),
         }
 
         args

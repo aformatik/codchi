@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     #[cfg(target_os = "linux")]
-    { }
+    {}
 
     Ok(())
 }
