@@ -11,6 +11,7 @@ clap = { version = "4", features = ["derive", "cargo"] }
 clap-verbosity-flag = "2.1.0"
 
 lazy_static = "1.4.0"
+once_cell = "1.19.0"
 shadow-rs = { version = "0.24" }
 
 anyhow = { version = "1.0", features = ["backtrace"] }
@@ -21,16 +22,15 @@ human-panic = "1.2.2"
 config = "0.13.4"
 
 directories = "5.0.1"
-interprocess = { version = "1.2.1", features = [ "tokio_support"] }
 # single-instance = "0.3"
 serde = { version = "1.0", features = ["derive"] }
-rmp-serde = "1.1"
-tokio = { version = "1.35", features = [ "rt-multi-thread" ] }
-tokio-util = { version = "0.7.10", features = ["codec"] }
-tokio-serde = { version = "0.8.0", features = ["messagepack"] }
+tokio = { version = "1.35", features = [ "io-util", "rt-multi-thread" ] }
+# tokio-util = { version = "0.7.10", features = ["codec"] }
+# tokio-serde = { version = "0.8.0", features = ["messagepack"] }
 parity-tokio-ipc = "0.9.0"
-futures = "0.3.29"
+futures = "0.3"
 futures-io = { version = "0.3" }
+tarpc = { version = "0.33", features = [ "serde1", "tokio1", "serde-transport", "serde-transport-bincode" ] }
 
 tray-icon = "0.11.1"
 image = "0.24.7"
@@ -48,3 +48,4 @@ clap-verbosity-flag = "2.1.0"
 clap_complete = "4.4.4"
 clap_mangen = "0.2.15"
 shadow-rs = { version = "0.24" }
+once_cell = "1.19.0"

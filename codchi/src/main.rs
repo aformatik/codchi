@@ -1,9 +1,8 @@
-use std::env;
-
 use anyhow::Result;
 use clap::*;
 use log::*;
 use shadow_rs::shadow;
+use std::env;
 
 mod cli;
 mod config;
@@ -13,10 +12,8 @@ mod data;
 mod driver;
 shadow!(build);
 
-use crate::cli::Cli;
-
 fn command() -> Command {
-    Cli::command() //
+    cli::Cli::command() //
         .long_version(build::CLAP_LONG_VERSION)
 }
 
@@ -24,7 +21,7 @@ fn main() -> Result<()> {
     human_panic::setup_panic!();
 
     let cli = {
-        let res = Cli::from_arg_matches(&command().get_matches()) //
+        let res = cli::Cli::from_arg_matches(&command().get_matches()) //
             .map_err(|err| err.format(&mut command()));
         match res {
             Ok(r) => r,
@@ -38,8 +35,15 @@ fn main() -> Result<()> {
 
     trace!("Started codchi with args: {:?}", cli);
 
+    cli::CLI_ARGS
+        .set(cli.clone())
+        .expect("Only main is allowed to set CLI_ARGS.");
+
     match &cli.command {
-        cli::Cmd::Controller(ctrl_cmd) => cli.controller(ctrl_cmd),
+        cli::Cmd::Controller(ctrl_cmd) => match ctrl_cmd {
+            cli::ControllerCmd::Start { run_in_foreground } => controller::start(run_in_foreground),
+            cli::ControllerCmd::Stop {} => controller::stop(),
+        },
         cli::Cmd::Rebuild {} => todo!(),
         cli::Cmd::Status {} => todo!(),
     }
