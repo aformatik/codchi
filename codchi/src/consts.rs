@@ -6,6 +6,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub const CONTROLLER_NAME: &str = "codchi-controller";
+
 lazy_static! {
     static ref CODCHI_PROJ_DIR: ProjectDirs =
         ProjectDirs::from("de", "aformatik", "codchi").unwrap();
@@ -24,6 +26,8 @@ lazy_static! {
                 .unwrap_or_else(|| env::temp_dir().join("codchi"))
         });
 }
+
+
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -44,7 +48,7 @@ impl Dir {
 
     pub fn get_or_create(&self) -> Result<PathBuf> {
         let path = self.get_path();
-        fs::create_dir_all(path.clone()).with_context(|| {
+        fs::create_dir_all(&path).with_context(|| {
             format!(
                 "Failed to create {self:?} directory for codchi at path {}",
                 path.to_string_lossy()

@@ -25,7 +25,7 @@ pub fn get_socket_path() -> Result<String> {
 pub fn bind_server() -> Result<Endpoint> {
     let path = get_socket_path()?;
     if fs::metadata(&path).is_ok() {
-        drop(fs::remove_file(path.clone())); // ignore result
+        drop(fs::remove_file(&path)); // ignore result
     }
     let mut endpoint = Endpoint::new(path);
     endpoint.set_security_attributes(SecurityAttributes::allow_everyone_create()?);
@@ -53,6 +53,7 @@ pub async fn connect_client_async() -> Result<Option<ControllerServiceClient>> {
     }
 }
 
+#[allow(dead_code)]
 pub fn with_client<Fut, Res>(f: impl FnOnce(Option<ControllerServiceClient>) -> Fut) -> Result<Res>
 where
     Res: Send + 'static,

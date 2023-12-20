@@ -4,12 +4,15 @@ use log::*;
 use shadow_rs::shadow;
 use std::env;
 
+use crate::platform::Driver;
+
 mod cli;
 mod config;
 mod consts;
 mod controller;
 mod data;
-mod driver;
+mod nix;
+mod platform;
 shadow!(build);
 
 fn command() -> Command {
@@ -45,6 +48,9 @@ fn main() -> Result<()> {
             cli::ControllerCmd::Stop {} => controller::stop(),
         },
         cli::Cmd::Rebuild {} => todo!(),
-        cli::Cmd::Status {} => todo!(),
+        cli::Cmd::Status {} => {
+            platform::DRIVER.init_controller()
+            // println!("{}", status);
+        }
     }
 }

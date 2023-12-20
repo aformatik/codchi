@@ -134,8 +134,8 @@ mod utils {
         if !run_in_foreground {
             let dir = Dir::Data.get_or_create()?;
             let exe = env::current_exe()?;
-            let stdout = File::create(dir.clone().join("ctrl.out.log"))?;
-            let stderr = File::create(dir.clone().join("ctrl.err.log"))?;
+            let stdout = File::create(dir.join("ctrl.out.log"))?;
+            let stderr = File::create(dir.join("ctrl.err.log"))?;
             let cmd = Cmd::Controller(ControllerCmd::Start {
                 run_in_foreground: true,
             });
@@ -156,8 +156,8 @@ mod utils {
         use daemonize::Daemonize;
         if !run_in_foreground {
             let dir = Dir::Data.get_or_create()?;
-            let stdout = File::create(dir.clone().join("ctrl.out.log"))?;
-            let stderr = File::create(dir.clone().join("ctrl.err.log"))?;
+            let stdout = File::create(dir.join("ctrl.out.log"))?;
+            let stderr = File::create(dir.join("ctrl.err.log"))?;
             let daemonize = Daemonize::new()
                 // .pid_file(Dir::Runtime.get_or_create()?.join("codchi.pid")) // Every method except `new` and `start`
                 .stdout(stdout) // Redirect stdout to `/tmp/daemon.out`.

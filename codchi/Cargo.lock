@@ -590,9 +590,11 @@ dependencies = [
  "image",
  "lazy_static",
  "log",
+ "lxd",
  "once_cell",
  "parity-tokio-ipc",
  "serde",
+ "serde_json",
  "shadow-rs",
  "tao",
  "tarpc",
@@ -600,6 +602,7 @@ dependencies = [
  "tokio",
  "tray-icon",
  "windows",
+ "wslapi",
 ]
 
 [[package]]
@@ -1914,6 +1917,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
 
 [[package]]
+name = "lxd"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "918a314b8eb7d4e19c3d154b4069b12aa37c25a68bae4f2c2a69f50bf47c7c5a"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "malloc_buf"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1945,6 +1958,12 @@ checksum = "5a634b1c61a95585bd15607c6ab0c4e5b226e695ff2800ba0cdccddf208c406c"
 dependencies = [
  "autocfg",
 ]
+
+[[package]]
+name = "minidl"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc0a023a2715164b8a15b7f91a4baa3decc92158a539b96bf0bdb61f18c69366"
 
 [[package]]
 name = "minimal-lexical"
@@ -2498,6 +2517,12 @@ dependencies = [
  "quote",
  "version_check",
 ]
+
+[[package]]
+name = "proc-macro-hack"
+version = "0.5.20+deprecated"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc375e1527247fe1a97d8b7156678dfe7c1af2fc075c9a4db3690ecd2a148068"
 
 [[package]]
 name = "proc-macro2"
@@ -3571,6 +3596,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ab9b36309365056cd639da3134bf87fa8f3d86008abf99e612384a6eecd459f"
 
 [[package]]
+name = "wchar"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c74d010bf16569f942b0b7d3c777dd674f8ee539b48d809dc548b3453039c2df"
+dependencies = [
+ "proc-macro-hack",
+ "wchar-impl",
+]
+
+[[package]]
+name = "wchar-impl"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f135922b9303f899bfa446fce1eb149f43462f1e9ac7f50e24ea6b913416dd84"
+dependencies = [
+ "proc-macro-hack",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "weezl"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3873,6 +3920,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7e87b8dfbe3baffbe687eef2e164e32286eff31a5ee16463ce03d991643ec94"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "wslapi"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "afc9c51137636a37c388bb01765a0eae1362915d82a5e238e1a356c400f9f619"
+dependencies = [
+ "minidl",
+ "wchar",
+ "winapi",
 ]
 
 [[package]]
