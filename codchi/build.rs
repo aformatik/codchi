@@ -30,11 +30,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     {
-        shadow_rs::new()?;
+        build_data::set_GIT_BRANCH();
+        build_data::set_GIT_COMMIT();
+        build_data::set_GIT_DIRTY();
+        build_data::set_SOURCE_TIMESTAMP();
+        build_data::no_debug_rebuilds();
     }
-
-    #[cfg(target_os = "linux")]
-    {}
+    // #[cfg(target_os = "linux")]
+    // {}
 
     Ok(())
 }

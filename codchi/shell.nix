@@ -8,10 +8,12 @@
 , gdbgui
 
 , platform # "win" or "linux"
-, jetbrains
+  # , jetbrains
 
+, cargo-deps
+  # , cargo-udeps
 , cargo-bloat
-# , cargo-udeps
+, graphviz
 
 , ...
 }:
@@ -40,6 +42,7 @@ let
 
 in
 mkShell (lib.recursiveUpdate
+  native
 {
   inputsFrom = [ codchi ];
 
@@ -58,10 +61,17 @@ mkShell (lib.recursiveUpdate
     # }))
 
     cargo-bloat
+    cargo-deps
+    graphviz
     # cargo-udeps
   ] ++ (codchi.passthru.nativeBuildInputs or [ ]);
 
+  shellHook = ''
+    export CODCHI_CONFIG_DIR="$(git rev-parse --show-toplevel)/.codchi/config"
+    export CODCHI_DATA_DIR="$(git rev-parse --show-toplevel)/.codchi/data"
+    export CODCHI_RUNTIME_DIR="$(git rev-parse --show-toplevel)/.codchi/runtime"
+  '' + (native.shellHook or "");
+
   inherit (codchi.passthru) CARGO_BUILD_TARGET;
 
-}
-  native)
+})

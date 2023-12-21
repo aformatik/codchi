@@ -1,10 +1,8 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::*;
 use log::*;
-use shadow_rs::shadow;
 use std::env;
-
-use crate::platform::Driver;
+use tarpc::context;
 
 mod cli;
 mod config;
@@ -13,11 +11,18 @@ mod controller;
 mod data;
 mod nix;
 mod platform;
-shadow!(build);
 
 fn command() -> Command {
-    cli::Cli::command() //
-        .long_version(build::CLAP_LONG_VERSION)
+    cli::Cli::command().long_version(format!(
+        r"{}
+commit={}
+branch={}
+dirty={}",
+        env!("CARGO_PKG_VERSION"),
+        env!("GIT_BRANCH"),
+        env!("GIT_COMMIT"),
+        env!("GIT_DIRTY")
+    ))
 }
 
 fn main() -> Result<()> {
@@ -44,13 +49,26 @@ fn main() -> Result<()> {
 
     match &cli.command {
         cli::Cmd::Controller(ctrl_cmd) => match ctrl_cmd {
-            cli::ControllerCmd::Start { run_in_foreground } => controller::start(run_in_foreground),
+            cli::ControllerCmd::Start { run_in_foreground } => {
+                controller::start(*run_in_foreground)?;
+                if !run_in_foreground {
+                    std::process::exit(0);
+                }
+                Ok(())
+            }
             cli::ControllerCmd::Stop {} => controller::stop(),
         },
         cli::Cmd::Rebuild {} => todo!(),
         cli::Cmd::Status {} => {
-            platform::DRIVER.init_controller()
+            let status = controller::force_client(|client| async move {
+                client
+                    .get_status(context::current())
+                    .await
+                    .context("Failed to get status via RPC.")
+            })?;
+            println!("{status:#?}");
             // println!("{}", status);
+            Ok(())
         }
     }
 }

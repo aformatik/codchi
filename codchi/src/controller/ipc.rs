@@ -1,4 +1,5 @@
-use super::{ControllerServiceClient, RUNTIME};
+use super::ControllerServiceClient;
+use super::RUNTIME;
 use crate::consts::Dir;
 use anyhow::{anyhow, Result};
 use futures::Future;
@@ -54,28 +55,14 @@ pub async fn connect_client_async() -> Result<Option<ControllerServiceClient>> {
 }
 
 #[allow(dead_code)]
-pub fn with_client<Fut, Res>(f: impl FnOnce(Option<ControllerServiceClient>) -> Fut) -> Result<Res>
+pub fn connect_client<Fut, F, Res>(f: F) -> Result<Res>
 where
     Res: Send + 'static,
+    F: FnOnce(Option<ControllerServiceClient>) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Result<Res>> + Send + 'static,
 {
     RUNTIME.block_on(async {
         let client = connect_client_async().await?;
-        f(client).await
-    })
-}
-
-pub fn with_client_connected<Fut, Res>(
-    f: impl FnOnce(ControllerServiceClient) -> Fut,
-) -> Result<Res>
-where
-    Res: Send + 'static,
-    Fut: Future<Output = Result<Res>> + Send + 'static,
-{
-    RUNTIME.block_on(async {
-        let client = connect_client_async()
-            .await?
-            .ok_or(super::Error::NotRunning)?;
         f(client).await
     })
 }

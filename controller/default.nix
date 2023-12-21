@@ -54,7 +54,11 @@
         rootfs = prev // {
           "/sbin/init" = prev."/bin/ctrl-serve";
           "/usr/share/udhcpc/default.script" = udhcpcScript;
-          "/tmp/" = null;
+          "/dev/" = null;
+          "/proc/" = null;
+          "/sys/" = null;
+          "/tmp" = null;
+          "/var" = null;
         };
       in
 
