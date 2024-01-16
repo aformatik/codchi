@@ -79,7 +79,7 @@ in
 
         mnt /nix/store /nix/store -r
         mnt /nix/var/nix/daemon-socket /nix/var/nix/daemon-socket
-        mnt "/nix/var/nix/profiles/per-instance/${config.codchi.internal.name}" /nix/var/nix/profiles
+        mnt "/nix/var/nix/profiles/per-instance/$WSL_DISTRO_NAME" /nix/var/nix/profiles
 
         mnt /nix/var/nix/profiles /nix/var/nix/profiles/global
         mnt /nix/var/nix/db /nix/var/nix/db

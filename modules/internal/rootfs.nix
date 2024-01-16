@@ -20,13 +20,6 @@ in
 {
   options = {
     codchi.internal = {
-      name = mkOption {
-        type = types.str;
-        readOnly = true;
-        description = ''
-          Name of this code machine. This is set with `codchi init <name>`.
-        '';
-      };
       init = {
         rootfsContents = mkOption {
           type = rootfsType;

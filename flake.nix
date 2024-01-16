@@ -21,10 +21,14 @@
 
       inherit (nixpkgs.lib) foldl' recursiveUpdate;
       mergeAttrList = foldl' recursiveUpdate { };
+
+      lib = import ./nix/lib.nix;
     in
     mergeAttrList
       [
         {
+          inherit lib;
+
           nixosModules.default = import ./modules;
           nixosModules.codchi = {
             nixpkgs.config.allowUnfree = true;
@@ -70,7 +74,7 @@
         (
           let
 
-            inherit (nixpkgs.lib) flip mapAttrs mapAttrs' nixosSystem nameValuePair;
+            inherit (nixpkgs.lib) flip mapAttrs mapAttrs' nameValuePair;
             inherit (builtins) readDir;
 
             examples = flip mapAttrs (readDir ./examples) (path: _: "${./examples}/${path}");
@@ -82,14 +86,10 @@
               });
             mkExampleSystems = driver:
               flip mapAttrs exampleModules
-                (_: module: nixosSystem {
-                  inherit system;
+                (_: module: lib.codeMachine {
+                  inherit system driver nixpkgs;
                   specialArgs.inputs = inputs;
-                  modules = [
-                    module
-                    { codchi.internal = { name = "example"; ${driver}.enable = true; }; }
-                    self.nixosModules.default
-                  ];
+                  codchiModules = [{ inherit module; }];
                 });
           in
           {

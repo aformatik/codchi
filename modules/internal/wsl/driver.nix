@@ -1,4 +1,4 @@
-{ inputs, config, lib, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 let
   inherit (lib) mkIf mkRemovedOptionModule stringAfter;
 

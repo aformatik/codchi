@@ -4,6 +4,8 @@ use log::*;
 use std::env;
 use tarpc::context;
 
+use crate::platform::NixDriver;
+
 mod cli;
 mod config;
 mod consts;
@@ -60,6 +62,7 @@ fn main() -> Result<()> {
         },
         cli::Cmd::Rebuild {} => todo!(),
         cli::Cmd::Status {} => {
+            println!("{:?}", platform::DRIVER.list_nixos_modules("github:aformatik/codchi")?);
             let status = controller::force_client(|client| async move {
                 client
                     .get_status(context::current())
@@ -67,7 +70,6 @@ fn main() -> Result<()> {
                     .context("Failed to get status via RPC.")
             })?;
             println!("{status:#?}");
-            // println!("{}", status);
             Ok(())
         }
     }

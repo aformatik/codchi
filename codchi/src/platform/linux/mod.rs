@@ -1,11 +1,11 @@
-use std::{fs, path::PathBuf};
+use std::{fs, io, path::PathBuf, process::Output};
 
 use crate::{
     consts::{self, Dir},
     nix,
 };
 
-use super::Driver;
+use super::{Driver, NixDriver};
 use anyhow::{Context, Result};
 use lazy_static::lazy_static;
 use log::*;
@@ -97,15 +97,30 @@ gid 100 100";
             .context("Failed to build LXD controller rootfs.")?;
         Ok(dir.join("controller.tar.gz"))
     }
+
+    fn ctrl_cmd_spawn(&self, program: &str, args: &[&str]) -> io::Result<()> {
+        let mut lxd_args = vec!["exec", consts::CONTROLLER_NAME, "--", program];
+        lxd_args.extend_from_slice(&args);
+        lxd::lxc(&lxd_args)
+    }
+
+    fn ctrl_cmd_output(&self, program: &str, args: &[&str]) -> io::Result<Output> {
+        let mut lxd_args = vec!["exec", consts::CONTROLLER_NAME, "--", "run", program];
+        lxd_args.extend_from_slice(&args);
+        lxd::lxc_output(&lxd_args)
+    }
 }
 
+/// "inspired" by lxd-rs
 mod lxd {
     pub use lxd::*;
     use std::path::Path;
+    use std::process::Output;
     use std::{io, process::Command};
 
-    fn lxc(args: &[&str]) -> io::Result<()> {
+    pub fn lxc(args: &[&str]) -> io::Result<()> {
         let mut cmd = Command::new("lxc");
+        cmd.arg("-q");
         for arg in args.iter() {
             cmd.arg(arg);
         }
@@ -121,6 +136,18 @@ mod lxd {
                 format!("LXD {:?} failed with {}", args, status),
             ))
         }
+    }
+
+    pub fn lxc_output(args: &[&str]) -> io::Result<Output> {
+        let mut cmd = Command::new("lxc");
+        cmd.arg("-q");
+        for arg in args.iter() {
+            cmd.arg(arg);
+        }
+
+        log::trace!("Running LXC command: {:?}", &cmd);
+
+        cmd.output()
     }
 
     pub mod image {
