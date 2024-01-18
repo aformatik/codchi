@@ -5,7 +5,7 @@ use crate::{
     nix,
 };
 
-use super::{Driver, NixDriver};
+use super::Driver;
 use anyhow::{Context, Result};
 use lazy_static::lazy_static;
 use log::*;
@@ -141,6 +141,10 @@ mod lxd {
     pub fn lxc_output(args: &[&str]) -> io::Result<Output> {
         let mut cmd = Command::new("lxc");
         cmd.arg("-q");
+        // see https://github.com/rust-lang/rust/issues/30098#issuecomment-160346319
+        // cmd.stdin(Stdio::inherit());
+        // cmd.stdout(Stdio::inherit());
+        // cmd.stderr(Stdio::inherit());
         for arg in args.iter() {
             cmd.arg(arg);
         }

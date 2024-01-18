@@ -1,17 +1,18 @@
+#![deny(unused_crate_dependencies)]
+
 use anyhow::{Context, Result};
 use clap::*;
 use log::*;
 use std::env;
 use tarpc::context;
 
-use crate::platform::NixDriver;
-
 mod cli;
-mod config;
+mod module;
 mod consts;
-mod controller;
-mod data;
+mod ctrl;
 mod nix;
+mod util;
+mod config;
 mod platform;
 
 fn command() -> Command {
@@ -52,24 +53,32 @@ fn main() -> Result<()> {
     match &cli.command {
         cli::Cmd::Controller(ctrl_cmd) => match ctrl_cmd {
             cli::ControllerCmd::Start { run_in_foreground } => {
-                controller::start(*run_in_foreground)?;
+                ctrl::start(*run_in_foreground)?;
                 if !run_in_foreground {
                     std::process::exit(0);
                 }
                 Ok(())
             }
-            cli::ControllerCmd::Stop {} => controller::stop(),
+            cli::ControllerCmd::Stop {} => ctrl::stop(),
         },
         cli::Cmd::Rebuild {} => todo!(),
         cli::Cmd::Status {} => {
-            println!("{:?}", platform::DRIVER.list_nixos_modules("github:aformatik/codchi")?);
-            let status = controller::force_client(|client| async move {
+            let status = ctrl::force_client(|client| async move {
                 client
                     .get_status(context::current())
                     .await
                     .context("Failed to get status via RPC.")
             })?;
             println!("{status:#?}");
+            Ok(())
+        }
+        cli::Cmd::Init { empty, options } => {
+            // let url = "github:aformatik/codchi";
+            // let url = "gitlab:jhr/nixos-devenv?host=gitlab.aformatik.de";
+            // let url = "github:htngr/broba-website";
+            // let url = "git+https://code.huettinger.me/johannes/passwords";
+            // let url = "sourcehut:~htngs/nix-colors";
+            println!("{:?}", module::init_flow(*empty, &options)?);
             Ok(())
         }
     }
