@@ -51,6 +51,7 @@ callPackage ../nix/make-tarball.nix {
     "/bin/" = toString (map (pkg: "${pkg}/bin/*") staticBinaries);
     "/bin/run" = writeShellScript "run" ''
       source /etc/profile.d/nix-daemon.sh
+      [ ! -d /tmp ] && mkdir /tmp
       exec "$@"
     '';
     "/bin/ctrl-serve" = writeShellScript "ctrl-serve" ''

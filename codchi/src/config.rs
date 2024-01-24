@@ -1,24 +1,18 @@
-use crate::consts::Dir;
-use crate::util::Finally;
-use anyhow::Context;
-use anyhow::Result;
+use crate::{consts::Dir, util::UtilExt};
+use anyhow::{Context, Result};
 use fs4::FileExt;
 use itertools::Itertools;
-use serde::Deserialize;
-use serde::Serialize;
-use serde_with::serde_as;
-use serde_with::DisplayFromStr;
-use std::collections::HashMap;
-use std::fmt;
-use std::fmt::Display;
-use std::fs;
-use std::io::Read;
-use std::io::Seek;
-use std::io::Write;
-use std::str::FromStr;
+use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DisplayFromStr};
+use std::{
+    collections::HashMap,
+    fmt::{self, Display},
+    fs,
+    io::{Read, Seek, Write},
+    str::FromStr,
+};
 use strum::EnumString;
-use toml_edit::ser::to_document;
-use toml_edit::table;
+use toml_edit::{array, ser::to_document, table};
 
 use self::flake_attr::Type;
 
@@ -58,7 +52,9 @@ impl MutableConfig {
 
     pub fn write(mut self) -> Result<()> {
         let res = self.doc.to_string();
-        self.file.write_all(res.as_bytes())?;
+        let bytes = res.as_bytes();
+        self.file.set_len(bytes.len() as u64)?;
+        self.file.write_all(bytes)?;
         drop(self);
         Ok(())
     }
@@ -72,6 +68,18 @@ impl MutableConfig {
             .expect("Config toml doesn't contain key 'machines'");
         table.set_implicit(true);
         table
+    }
+
+    pub fn get_machine(&mut self, name: &str) -> Option<&mut toml_edit::Table> {
+        self.get_machines()
+            .get_mut(name)
+            .and_then(|t| t.as_table_mut())
+            .map(|t| {
+                if !t.contains_key("modules") {
+                    t["modules"] = array();
+                }
+                t
+            })
     }
 }
 
@@ -96,7 +104,7 @@ impl CodchiConfig {
                 let size = file.metadata().map(|m| m.len() as usize).ok();
                 let mut content = String::with_capacity(size.unwrap_or(0));
                 file.read_to_string(&mut content)?;
-                toml::from_str(&content)
+                toml_edit::de::from_str(&content)
                     .with_context(|| format!("Failed parsing config at {path:?}"))
             }
             .finally(|| file.unlock().expect("Failed unlocking config file."))
@@ -117,29 +125,6 @@ pub struct CodeMachine {
 }
 
 pub type CodchiModule = FlakeUrl<flake_attr::With>;
-
-// impl FromStr for CodchiModule {
-//     type Err = String;
-
-//     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-//         let url = FlakeUrl::from_str(s)?;
-//         let flake_module = url
-//             .flake_attr
-//             .as_ref()
-//             .ok_or_else(|| format!("Missing flake module"))
-//             .and_then(|s| ModuleAttrPath::from_str(s))?;
-
-//         Ok(Self { url, flake_module })
-//     }
-// }
-
-// impl Display for CodchiModule {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         let mut url = self.url.clone();
-//         url.flake_attr = Some(self.flake_module.to_string());
-//         url.fmt(f)
-//     }
-// }
 
 pub mod flake_attr {
     pub trait Type {
@@ -302,14 +287,18 @@ impl FromStr for FlakeUrl<flake_attr::Optional> {
         } else {
             None
         };
-        let metadata = metadata
-            .split("&")
-            .map(|kv| {
-                kv.split_once('=')
-                    .map(|(k, v)| (k.to_string(), v.to_string()))
-                    .ok_or_else(|| format!("Missing '=' in {kv}"))
-            })
-            .collect::<Result<HashMap<String, String>, String>>()?;
+        let metadata = if !metadata.is_empty() {
+            metadata
+                .split("&")
+                .map(|kv| {
+                    kv.split_once('=')
+                        .map(|(k, v)| (k.to_string(), v.to_string()))
+                        .ok_or_else(|| format!("Missing '=' in {kv}"))
+                })
+                .collect::<Result<HashMap<String, String>, String>>()?
+        } else {
+            HashMap::new()
+        };
 
         Ok(FlakeUrl {
             scheme,

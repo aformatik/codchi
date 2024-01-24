@@ -2,9 +2,10 @@ use crate::platform::{self, Driver};
 
 use self::tray::TrayMsg;
 use anyhow::{Context, Result};
+use base64::{prelude::BASE64_STANDARD, Engine};
 use futures::{Future, StreamExt};
 use log::*;
-use std::io;
+use std::{io, str::from_utf8};
 use tarpc::{
     context, serde_transport,
     server::{BaseChannel, Channel},
@@ -179,9 +180,9 @@ mod utils {
         let exe = env::current_exe()?;
         let stdout = File::create(dir.join("ctrl.out.log"))?;
         let stderr = File::create(dir.join("ctrl.err.log"))?;
-        let cmd = Cmd::Controller(ControllerCmd::Start {
+        let cmd = ControllerCmd::Start {
             run_in_foreground: true,
-        });
+        };
         Command::new(exe)
             .args(cmd.to_args())
             .stdout(stdout)
@@ -215,4 +216,18 @@ mod utils {
         }
         .context("Failed daemonizing controller")
     }
+}
+
+#[allow(unused)]
+pub fn echo_ca_certs() -> Result<()> {
+    let crts = rustls_native_certs::load_native_certs()?;
+    for crt in crts {
+        println!("-----BEGIN CERTIFICATE-----");
+        for line in BASE64_STANDARD.encode(crt.as_ref()).as_bytes().chunks(64) {
+            println!("{}", from_utf8(line).unwrap());
+        }
+        println!("-----END CERTIFICATE-----");
+        break;
+    }
+    Ok(())
 }

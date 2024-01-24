@@ -1,16 +1,18 @@
 use crate::{
     cli::AddModuleOptions,
-    config::{flake_attr, CodchiModule, CodeMachine, FlakeScheme, FlakeUrl, MutableConfig},
+    config::{
+        flake_attr, CodchiConfig, CodchiModule, CodeMachine, FlakeScheme, FlakeUrl, MutableConfig,
+    },
     platform::{nix::NixDriver, *},
-    util::Finally,
+    util::UtilExt,
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use git_url_parse::Scheme;
 use spinoff::{spinners, Color, Spinner};
 use std::fmt::Display;
 use toml_edit::{ser::to_document, Key};
 
-pub fn init_flow(empty: bool, opts: &AddModuleOptions) -> Result<()> {
+pub fn init(empty: bool, opts: &AddModuleOptions) -> Result<()> {
     let mut cfg = MutableConfig::open()?;
     let machines = cfg.get_machines();
 
@@ -24,15 +26,15 @@ pub fn init_flow(empty: bool, opts: &AddModuleOptions) -> Result<()> {
             modules: Vec::new(),
         }
     } else {
-        let (module, has_nixpkgs) = fetch_module_flow(&opts)?;
+        let (module, has_nixpkgs) = fetch_module(&opts)?;
         let bare_url = module.with_attr(());
         let nixpkgs_from = if has_nixpkgs {
-            if opts.accept_defaults {
+            if opts.dont_prompt {
                 Some(bare_url)
             } else {
                 // TODO move to docs?
-                eprintln!("This codchi module has a nixpkgs input. Do you want to use it for the code machine? Otherwise the shared nixpkgs of codchi is used, which might decrease reproducibility but is faster.");
                 if inquire::Confirm::new(&format!("Use nixpkgs from '{}'", bare_url.pretty_print()))
+                    .with_help_message("This codchi module has a nixpkgs input. Do you want to use it for the code machine? Otherwise the shared nixpkgs of codchi is used, which might decrease reproducibility but is faster.")
                     .prompt()?
                 {
                     Some(bare_url)
@@ -58,9 +60,99 @@ pub fn init_flow(empty: bool, opts: &AddModuleOptions) -> Result<()> {
     Ok(())
 }
 
+pub fn add(opts: &AddModuleOptions) -> std::result::Result<(), anyhow::Error> {
+    let mut cfg = MutableConfig::open()?;
+    let machine = cfg
+        .get_machine(&opts.name)
+        .ok_or(anyhow!("Code machine '{}' doesn't exist.", opts.name))?;
+
+    let modules = machine
+        .get_mut("modules")
+        .and_then(|t| t.as_array_mut())
+        .ok_or(anyhow!(
+            "Expected list at `machines.{}.modules` in codchi config.",
+            opts.name
+        ))?;
+
+    let (module, _has_nixpkgs) = fetch_module(&opts)?;
+    let mod_str = module.to_string();
+
+    if modules
+        .iter()
+        .any(|m| m.as_str().is_some_and(|m| m == mod_str))
+    {
+        bail!(
+            "Not adding already existing module '{}' from {}/{}.",
+            module.flake_attr.0,
+            module.host,
+            module.repo
+        );
+    }
+
+    modules.push(mod_str);
+    cfg.write()?;
+    Ok(())
+}
+
+/// List modules of a code machine
+pub fn list(name: &String) -> Result<()> {
+    use comfy_table::*;
+    let cfg = CodchiConfig::read_config()?;
+    let machine = cfg
+        .machines
+        .get(name)
+        .ok_or(anyhow!("Code machine '{name}' doesn't exist."))?;
+
+    let mut table = Table::new();
+    table.load_preset(presets::UTF8_FULL).set_header(vec![
+        Cell::new("Id"),
+        Cell::new("Url"),
+        Cell::new("Flake Module"),
+    ]);
+
+    // TODO add protocol column if SSH is added
+
+    for (i, module) in machine.modules.iter().enumerate() {
+        let pretty_url = format!("{}/{}", module.host, module.repo);
+        table.add_row(vec![
+            Cell::new(i.to_string()),
+            Cell::new(pretty_url),
+            Cell::new(&module.flake_attr.0),
+        ]);
+    }
+
+    println!("{table}");
+
+    Ok(())
+}
+
+pub fn delete(name: &str, id: usize) -> std::result::Result<(), anyhow::Error> {
+    let mut cfg = MutableConfig::open()?;
+    let machine = cfg
+        .get_machine(name)
+        .ok_or(anyhow!("Code machine '{name}' doesn't exist."))?;
+
+    let modules = machine
+        .get_mut("modules")
+        .and_then(|t| t.as_array_mut())
+        .ok_or(anyhow!(
+            "Expected list at `machines.{name}.modules` in codchi config."
+        ))?;
+
+    if id < modules.len() {
+        modules.remove(id);
+    } else {
+        bail!("Code machine '{name}' doesn't have a module with id {id}.");
+    }
+
+    cfg.write()?;
+
+    Ok(())
+}
+
 type HasNixpkgs = bool;
-pub fn fetch_module_flow(opts: &AddModuleOptions) -> Result<(CodchiModule, HasNixpkgs)> {
-    if opts.accept_defaults && opts.module_path.is_none() {
+pub fn fetch_module(opts: &AddModuleOptions) -> Result<(CodchiModule, HasNixpkgs)> {
+    if opts.dont_prompt && opts.module_path.is_none() {
         bail!("Please provide MODULE_PATH in non interactive mode.");
     }
 
@@ -97,8 +189,9 @@ pub fn fetch_module_flow(opts: &AddModuleOptions) -> Result<(CodchiModule, HasNi
         }
         None => {
             // non interactive mode is checked above
-            eprintln!("Which module would you like to use?");
-            inquire::Select::new("Module:", available_modules).prompt()?
+            inquire::Select::new("Module:", available_modules)
+                .with_help_message("Which module would you like to use?")
+                .prompt()?
         }
     };
 
@@ -169,9 +262,8 @@ fn inquire_module_url(opts: &AddModuleOptions) -> Result<FlakeUrl<flake_attr::Wi
                 let guess = guess_scheme(&host);
                 if let Guess::Sure(scheme) = guess {
                     (host, scheme)
-                } else if !opts.accept_defaults {
+                } else if !opts.dont_prompt {
                     // only prompt user in interactive mode
-                    eprintln!("Please select the type of code forge where this repository is hosted. This will speed up subsequent commands!");
                     let select = inquire::Select::new(
                         "Code forge:",
                         vec![
@@ -180,7 +272,7 @@ fn inquire_module_url(opts: &AddModuleOptions) -> Result<FlakeUrl<flake_attr::Wi
                             FS(FlakeScheme::Sourcehut),
                             FS(fallback_scheme),
                         ],
-                    );
+                    ).with_help_message("Please select the type of code forge where this repository is hosted. This will speed up subsequent commands!");
                     let idx = if let Guess::Maybe(scheme) = guess {
                         select
                             .options
