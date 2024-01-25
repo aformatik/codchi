@@ -1,5 +1,6 @@
 use std::{fmt::Display, str::FromStr};
 
+use clap::builder::*;
 use clap::*;
 use clap_verbosity_flag::{LogLevel, Verbosity, WarnLevel};
 use git_url_parse::GitUrl;
@@ -11,6 +12,8 @@ pub use self::module::*;
 
 pub static CLI_ARGS: OnceCell<Cli> = OnceCell::new();
 
+// static long_version: &'static str = ;
+
 type DefaultLogLevel = WarnLevel;
 
 /// codchi
@@ -18,6 +21,16 @@ type DefaultLogLevel = WarnLevel;
 #[command(
     version, author, about, long_about = None,
     // infer_subcommands = true
+    long_version = format!(
+        r"{}
+commit={}
+branch={}
+dirty={}",
+        option_env!("CARGO_PKG_VERSION").unwrap_or(""),
+        option_env!("GIT_BRANCH").unwrap_or(""),
+        option_env!("GIT_COMMIT").unwrap_or(""),
+        option_env!("GIT_DIRTY").unwrap_or("")
+    )
 )]
 pub struct Cli {
     #[command(flatten)]

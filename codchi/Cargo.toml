@@ -67,7 +67,7 @@ wslapi = "0.1.3"
 # colored = "2.1.0"
 
 [build-dependencies]
-clap = { version = "4", features = ["derive", "cargo"] }
+clap = { version = "4", features = ["derive", "cargo", "string"] }
 clap-verbosity-flag = "2.1.0"
 clap_complete = "4.4.4"
 clap_mangen = "0.2.15"

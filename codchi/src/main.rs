@@ -18,30 +18,10 @@ mod nix;
 mod platform;
 mod util;
 
-fn command() -> Command {
-    Cli::command().long_version(format!(
-        r"{}
-commit={}
-branch={}
-dirty={}",
-        env!("CARGO_PKG_VERSION"),
-        env!("GIT_BRANCH"),
-        env!("GIT_COMMIT"),
-        env!("GIT_DIRTY")
-    ))
-}
-
 fn real_main() -> anyhow::Result<()> {
     human_panic::setup_panic!();
 
-    let cli = {
-        let res = Cli::from_arg_matches(&command().get_matches()) //
-            .map_err(|err| err.format(&mut command()));
-        match res {
-            Ok(r) => r,
-            Err(e) => e.exit(),
-        }
-    };
+    let cli = Cli::parse();
 
     env_logger::Builder::new()
         .filter_level(cli.verbose.log_level_filter())
@@ -73,11 +53,12 @@ fn real_main() -> anyhow::Result<()> {
             println!("{status:#?}");
         }
         Cmd::Init { empty, options } => module::init(*empty, &options)?,
-        Cmd::Rebuild {} => todo!(),
+        Cmd::Rebuild { name } => todo!(),
         Cmd::Module(cmd) => match cmd {
             cli::ModuleCmd::List { name } => module::list(name)?,
             cli::ModuleCmd::Add(opts) => module::add(opts)?,
             cli::ModuleCmd::Delete { name, id } => module::delete(name, *id)?,
+            cli::ModuleCmd::Update { name } => todo!(),
         },
     }
 
