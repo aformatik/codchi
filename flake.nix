@@ -3,6 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+    unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       flake = false; # prevent fetching transitive inputs
@@ -23,6 +24,8 @@
       mergeAttrList = foldl' recursiveUpdate { };
 
       lib = import ./nix/lib.nix;
+
+      unstable = import inputs.unstable { inherit system; config.allowUnfree = true; };
     in
     mergeAttrList
       [
@@ -32,7 +35,7 @@
           nixosModules.default = import ./modules;
           nixosModules.codchi = {
             nixpkgs.config.allowUnfree = true;
-            environment.systemPackages = [ pkgs.jetbrains.rust-rover ];
+            environment.systemPackages = [ unstable.jetbrains.rust-rover ];
             programs.direnv = {
               enable = true;
               nix-direnv.enable = true;
