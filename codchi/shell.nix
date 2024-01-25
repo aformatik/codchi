@@ -1,4 +1,5 @@
 { mkShell
+, writeShellScriptBin
 , lib
 , callPackage
 
@@ -64,6 +65,12 @@ mkShell (lib.recursiveUpdate
     cargo-deps
     graphviz
     # cargo-udeps
+
+    (writeShellScriptBin "msvc-fetch-manifest" ''
+      CACHE="$(mktemp -d)"
+      ${codchi.passthru.xwin}/bin/xwin --accept-license --cache-dir "$CACHE" download
+      cat "$CACHE"/dl/manifest*.json
+    '')
   ] ++ (codchi.passthru.nativeBuildInputs or [ ]);
 
   shellHook = ''

@@ -1,6 +1,6 @@
 { runCommand
-, writeShellScript
 , fetchFromGitHub
+, writeShellScript
 , lib
 
 , platform
@@ -14,7 +14,7 @@
   # , libappindicator-gtk3
 , libayatana-appindicator
 , libxkbcommon
-# , xorg
+  # , xorg
 , vulkan-loader
 , libGL
   # , webkitgtk_4_1
@@ -45,21 +45,21 @@ let
     rustc = rust;
   };
 
+  xwin = rustPlatform.buildRustPackage rec {
+    name = "xwin";
+    src = fetchFromGitHub {
+      owner = "Jake-Shadle";
+      repo = "xwin";
+      rev = "0.5.0";
+      sha256 = "sha256-qHlh1PjEzm8nJW3IemikCaaxLtUCZRQccGQg/DgnJ4k=";
+    };
+    checkPhase = ":";
+    cargoLock.lockFile = "${src}/Cargo.lock";
+  };
 
   native = {
     win =
       let
-        xwin = rustPlatform.buildRustPackage rec {
-          name = "xwin";
-          src = fetchFromGitHub {
-            owner = "Jake-Shadle";
-            repo = "xwin";
-            rev = "0.5.0";
-            sha256 = "sha256-qHlh1PjEzm8nJW3IemikCaaxLtUCZRQccGQg/DgnJ4k=";
-          };
-          checkPhase = ":";
-          cargoLock.lockFile = "${src}/Cargo.lock";
-        };
         splatted = runCommand "splat"
           {
             nativeBuildInputs = [
@@ -67,11 +67,11 @@ let
             ];
             outputHashMode = "recursive";
             outputHashAlgo = "sha256";
-            outputHash = "sha256-R3a5kYii/0tuspES9bkYE4uphKqG+Tg5Qhjb77t/9Co=";
+            outputHash = "sha256-T2UxUspFF/7N6C6p3qSn4OHUV0oqnBDlZWwSq3/Bc4s=";
           }
           '' 
             mkdir -p $out/xwin
-            xwin --accept-license splat --output $out/xwin --copy
+            xwin --accept-license --manifest ${./.msvc_manifest.json} splat --output $out/xwin --copy
             echo "x86_64" > $out/xwin/DONE
           '';
       in
@@ -233,7 +233,7 @@ rustPlatform.buildRustPackage (lib.recursiveUpdate
     # "tray-icon-0.11.0" = "";
   };
 
-  passthru = { inherit rust rustPlatform; } // native;
+  passthru = { inherit rust rustPlatform xwin; } // native;
 
 }
   native)
