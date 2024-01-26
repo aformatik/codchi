@@ -1,6 +1,7 @@
 use super::ControllerServiceClient;
 use super::RUNTIME;
 use crate::consts::Dir;
+use anyhow::bail;
 use anyhow::{anyhow, Result};
 use futures::Future;
 use parity_tokio_ipc::Endpoint;
@@ -19,7 +20,7 @@ pub fn get_socket_path() -> Result<String> {
     } else if cfg!(target_family = "windows") {
         Ok(r"\\.\pipe\codchi.sock".to_string())
     } else {
-        Err(anyhow!("Unsupported OS."))
+        bail!("Unsupported OS.")
     }
 }
 

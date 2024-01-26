@@ -22,7 +22,7 @@ impl Driver for DriverImpl {
 
         let names = wslapi::registry::distribution_names();
         println!("{:#?}", names.collect::<OsString>());
-        todo!()
+        Ok(())
     }
 
     fn get_controller_fs(&self) -> anyhow::Result<std::path::PathBuf> {

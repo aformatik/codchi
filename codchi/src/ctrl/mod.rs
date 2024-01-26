@@ -171,9 +171,15 @@ mod utils {
     #[cfg(target_family = "windows")]
     pub fn daemonize() -> Result<bool> {
         use crate::cli::*;
+        use crate::ctrl::ipc;
+        use crate::util::UtilExt;
+        use anyhow::bail;
+        use spinoff::*;
         use std::env;
         use std::os::windows::process::CommandExt;
-        use std::process::{exit, Command};
+        use std::process::Command;
+        use std::time::Duration;
+        use tokio::runtime::Runtime;
         use windows::Win32::System::Threading::*;
 
         let dir = Dir::Data.get_or_create()?;
@@ -190,6 +196,23 @@ mod utils {
             .creation_flags(CREATE_NEW_PROCESS_GROUP.0 | CREATE_NO_WINDOW.0)
             .spawn()?;
 
+        let mut spinner = Spinner::new_with_stream(
+            spinners::Dots,
+            "Starting controller in background...",
+            Color::Blue,
+            spinoff::Streams::Stderr,
+        );
+        Runtime::new()?
+            .block_on(async {
+                for _ in 0..15 {
+                    if let Some(_) = ipc::connect_client_async().await? {
+                        return Ok(());
+                    }
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+                bail!("Failed to start controller within 2 second.");
+            })
+            .finally(|| spinner.clear())?;
         // We're always the parent here
         Ok(false)
     }
