@@ -49,7 +49,7 @@ futures = "0.3"
 parity-tokio-ipc = "0.9.0"
 tarpc = { version = "0.33", features = [ "serde1", "tokio1", "serde-transport", "serde-transport-bincode" ] }
 
-tray-icon = "0.11.1"
+tray-icon = { version = "0.11.1", default-features = false }
 image = { version = "0.24", features = ["png"], default-features = false }
 tao = {version = "0.24.0", default-features = false }
 inquire = "0.6.2"

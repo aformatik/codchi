@@ -1,6 +1,10 @@
-{ runCommand
-, fetchFromGitHub
+{ self
+, runCommand
+, runCommandLocal
+, runtimeShell
 , writeShellScript
+, writeShellScriptBin
+, fetchFromGitHub
 , lib
 
 , platform
@@ -10,16 +14,16 @@
 
 , pkg-config
 , gtk3
-, xdotool
+# , xdotool
   # , libappindicator-gtk3
 , libayatana-appindicator
-, libxkbcommon
+# , libxkbcommon
   # , xorg
-, vulkan-loader
-, libGL
+# , vulkan-loader
+# , libGL
   # , webkitgtk_4_1
   # , libsoup
-, libdbusmenu
+# , libdbusmenu
 
 , llvmPackages
 , cargo-xwin
@@ -29,7 +33,7 @@
 let
   Cargo = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 
-  rust = rust-bin.stable.latest.default.override {
+  rustOrig = rust-bin.stable.latest.default.override {
     extensions = [
       "rust-src"
       "rust-analyzer"
@@ -40,12 +44,8 @@ let
       "wasm32-wasi"
     ];
   };
-  rustPlatform = makeRustPlatform {
-    cargo = rust;
-    rustc = rust;
-  };
-
-  xwin = rustPlatform.buildRustPackage rec {
+  rustPlatformOrig = makeRustPlatform { cargo = rustOrig; rustc = rustOrig; };
+  xwin = rustPlatformOrig.buildRustPackage rec {
     name = "xwin";
     src = fetchFromGitHub {
       owner = "Jake-Shadle";
@@ -56,141 +56,124 @@ let
     checkPhase = ":";
     cargoLock.lockFile = "${src}/Cargo.lock";
   };
+  nix-git = writeShellScriptBin "nix-git-commit" ''
+    echo ${self.rev or self.dirtyRev or "dirty"}
+  '';
+
 
   native = {
-    win =
-      let
+    win = rec {
+      passthru = {
+        inherit xwin;
         splatted = runCommand "splat"
           {
-            nativeBuildInputs = [
-              xwin
-            ];
+            nativeBuildInputs = [ passthru.xwin ];
             outputHashMode = "recursive";
             outputHashAlgo = "sha256";
-            outputHash = "sha256-T2UxUspFF/7N6C6p3qSn4OHUV0oqnBDlZWwSq3/Bc4s=";
+            outputHash = "sha256-5ZZeEBuemx+lRmc9PczMfd13JwTvI6qMNvNmHdtK+1U=";
           }
           '' 
             mkdir -p $out/xwin
             xwin --accept-license --manifest ${./.msvc_manifest.json} splat --output $out/xwin --copy
-            echo "x86_64" > $out/xwin/DONE
           '';
-      in
-      rec {
-        inherit splatted;
 
-        # targetCargo = "X86_64_PC_WINDOWS_MSVC";
-        CARGO_BUILD_TARGET = "x86_64-pc-windows-msvc";
-        CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER = writeShellScript "wine-wsl" ''
-          if ! command -v wslpath &> /dev/null; then
-            ${wine64}/bin/wine64 "$@"
-          else
-            "$@"
+        # wrap cargo by checking and injecting xwin where it is needed
+        rust = (runCommandLocal "cargo-xwinize" { } ''
+          cp -r ${rustOrig} $out
+          chmod +w $out/bin
+          mv $out/bin/cargo $out/bin/.cargo
+          cat << EOF > $out/bin/cargo
+          #!${runtimeShell}
+          case "\$1" in
+            build|check|clippy|run|rustc|test)     
+              # replace linux target with msvc
+              if [ -z "\$CARGO_ENCODED_RUSTFLAGS" ]; then
+                args=()
+                prev_was_target=
+                for i in "\$@"; do
+                  if [ -n "\$prev_was_target" ]; then
+                    args+=("${CARGO_BUILD_TARGET}");
+                    prev_was_target=
+                    continue
+                  fi
+                  case "\$i" in
+                    --target) 
+                      prev_was_target=1 
+                      ;;
+                    --)
+                      # duplicate '--' to satisfy xwin test
+                      if [ "\$1" = "test" ]; then
+                        args+=("\$i");
+                      fi
+                      ;;
+                  esac
+                  args+=("\$i");
+                done
+                exec -a "\$0" $out/bin/.cargo xwin "\''${args[@]}" 
+              fi 
+              ;;
+          esac
+          exec -a "\$0" $out/bin/.cargo "\$@"
+          EOF
+          chmod +x $out/bin/cargo
+        '')
+        //
+        { inherit (rustOrig) meta; };
+        rustPlatform = makeRustPlatform { cargo = passthru.rust; rustc = passthru.rust; };
+
+        setupXWin = topDir: /* bash */ ''
+          if [ ! -d "${topDir}" ]; then 
+            mkdir -p "${topDir}"
+          fi
+          export WINEPREFIX="${topDir}/.wine"
+          export XWIN_ARCH="x86_64"
+          export XWIN_CACHE_DIR="${topDir}/.xwin"
+          if [ ! -d $XWIN_CACHE_DIR ]; then 
+            mkdir -p $XWIN_CACHE_DIR
+            cp -r ${passthru.splatted}/xwin $XWIN_CACHE_DIR
+            chmod -R +w $XWIN_CACHE_DIR
+            echo "x86_64" > $XWIN_CACHE_DIR/xwin/DONE
           fi
         '';
-
-        nativeBuildInputs = [
-          llvmPackages.llvm
-          llvmPackages.bintools
-          llvmPackages.clang
-          llvmPackages.lld
-          cargo-xwin
-        ];
-
-        buildPhase = ''
-          
-          runHook preBuild
-
-          export XWIN_CACHE_DIR=$(mktemp -d) 
-          export PATH=${rust}/bin:$PATH
-          cp -r ${splatted}/xwin $XWIN_CACHE_DIR
-          chmod -R +w $XWIN_CACHE_DIR
-
-          if [ ! -z "''${buildAndTestSubdir-}" ]; then
-              # ensure the output doesn't end up in the subdirectory
-              export CARGO_TARGET_DIR="$(pwd)/target"
-
-              pushd "''${buildAndTestSubdir}"
-          fi
-
-          if [ "''${cargoBuildType}" != "debug" ]; then
-              cargoBuildProfileFlag="--profile ''${cargoBuildType}"
-          fi
-
-          if [ -n "''${cargoBuildNoDefaultFeatures-}" ]; then
-              cargoBuildNoDefaultFeaturesFlag=--no-default-features
-          fi
-
-          if [ -n "''${cargoBuildFeatures-}" ]; then
-              cargoBuildFeaturesFlag="--features=''${cargoBuildFeatures// /,}"
-          fi
-
-          cargo xwin build -j $NIX_BUILD_CORES \
-            --xwin-cache-dir $XWIN_CACHE_DIR --xwin-arch x86_64 \
-            --frozen \
-            ''${cargoBuildProfileFlag} \
-            ''${cargoBuildNoDefaultFeaturesFlag} \
-            ''${cargoBuildFeaturesFlag} \
-            ''${cargoBuildFlags}
-
-            
-          if [ ! -z "''${buildAndTestSubdir-}" ]; then
-              popd
-          fi
-
-          runHook postBuild
-        '';
-
-        checkPhase = ''
-          runHook preCheck
-
-          export WINEPREFIX=$(mktemp -d)
-
-          
-          if [[ -n "''${buildAndTestSubdir-}" ]]; then
-              pushd "''${buildAndTestSubdir}"
-          fi
-
-          if [ "''${cargoCheckType}" != "debug" ]; then
-              cargoCheckProfileFlag="--profile ''${cargoCheckType}"
-          fi
-
-          if [ -n "''${cargoCheckNoDefaultFeatures-}" ]; then
-              cargoCheckNoDefaultFeaturesFlag=--no-default-features
-          fi
-
-          if [ -n "''${cargoCheckFeatures-}" ]; then
-              cargoCheckFeaturesFlag="--features=''${cargoCheckFeatures// /,}"
-          fi
-
-          if [ "''${cargoCheckType}" != "debug" ]; then
-              cargoCheckProfileFlag="--profile ''${cargoCheckType}"
-          fi
-
-          argstr="''${cargoCheckProfileFlag} ''${cargoCheckNoDefaultFeaturesFlag} ''${cargoCheckFeaturesFlag}
-            --frozen ''${cargoTestFlags}"
-
-          cargo xwin test -j $NIX_BUILD_CORES \
-            --xwin-cache-dir $XWIN_CACHE_DIR --xwin-arch x86_64 \
-            ''${argstr} -- \
-            ''${checkFlags} \
-            ''${checkFlagsArray+"''${checkFlagsArray[@]}"}
-
-          if [[ -n "''${buildAndTestSubdir-}" ]]; then
-              popd
-          fi
-
-          runHook postCheck
-        '';
-
-        installPhase = ''
-          mkdir -p $out/bin
-          cp target/${CARGO_BUILD_TARGET}/*/*.exe $out/bin
-        '';
-
       };
-    linux = {
+
+      auditable = false; # disable cargo auditable
+
+      # targetCargo = "X86_64_PC_WINDOWS_MSVC";
+      CARGO_BUILD_TARGET = "x86_64-pc-windows-msvc";
+      CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER = writeShellScript "wine-wsl" ''
+        if ! command -v wslpath &> /dev/null; then
+          ${wine64}/bin/wine64 "$@"
+        else
+          "$@"
+        fi
+      '';
+
+      nativeBuildInputs = [
+        llvmPackages.llvm
+        llvmPackages.bintools
+        llvmPackages.clang
+        llvmPackages.lld
+        cargo-xwin
+        nix-git
+      ];
+
+      preConfigure = passthru.setupXWin "$(mktemp -d)";
+
+      installPhase = ''
+        mkdir -p $out/bin
+        cp target/${CARGO_BUILD_TARGET}/*/*.exe $out/bin
+      '';
+
+    };
+    linux = rec {
       # targetCargo = "X86_64-UNKNOWN-LINUX-GNU";
       CARGO_BUILD_TARGET = "x86_64-unknown-linux-gnu";
+      passthru = {
+        inherit xwin;
+        rust = rustOrig;
+        rustPlatform = rustPlatformOrig;
+      };
       nativeBuildInputs = [
         pkg-config
         # llvmPackages.llvm
@@ -199,41 +182,43 @@ let
         # llvmPackages.lld
         # webkitgtk_4_1
         # libsoup
-        gtk3
-        gtk3.debug
+        # gtk3
+        # gtk3.debug
+        nix-git
       ];
       buildInputs = [
         gtk3
-        gtk3.debug
-        xdotool
+        # gtk3.debug
         # libappindicator-gtk3
-        libayatana-appindicator
-        libxkbcommon
+        libayatana-appindicator.out
+        # libxkbcommon
         # xorg.libX11
-        vulkan-loader
-        libGL
-        libdbusmenu
+        # vulkan-loader
+        # libGL
+        # libdbusmenu
         # llvmPackages.clang
         # libsoup
         # webkitgtk_4_1
       ];
+
+      postFixup = ''
+        patchelf $out/bin/codchi \
+          --add-rpath ${lib.makeLibraryPath buildInputs}
+      '';
     };
   }.${platform};
 
 
 in
-rustPlatform.buildRustPackage (lib.recursiveUpdate
+native.passthru.rustPlatform.buildRustPackage (lib.recursiveUpdate
 {
   pname = Cargo.package.name;
   inherit (Cargo.package) version;
 
   src = ./.;
   cargoLock.lockFile = ./Cargo.lock;
-  cargoLock.outputHashes = {
-    # "tray-icon-0.11.0" = "";
-  };
+  # cargoLock.outputHashes = { "tray-icon-0.11.0" = ""; };
 
-  passthru = { inherit rust rustPlatform xwin; } // native;
-
+  passthru = { inherit nix-git; };
 }
   native)

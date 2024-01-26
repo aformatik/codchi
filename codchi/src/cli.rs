@@ -21,15 +21,9 @@ type DefaultLogLevel = WarnLevel;
 #[command(
     version, author, about, long_about = None,
     // infer_subcommands = true
-    long_version = format!(
-        r"{}
-commit={}
-branch={}
-dirty={}",
+    long_version = format!("v{}\n{}",
         option_env!("CARGO_PKG_VERSION").unwrap_or(""),
-        option_env!("GIT_BRANCH").unwrap_or(""),
         option_env!("GIT_COMMIT").unwrap_or(""),
-        option_env!("GIT_DIRTY").unwrap_or("")
     )
 )]
 pub struct Cli {

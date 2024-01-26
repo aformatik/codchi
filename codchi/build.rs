@@ -30,9 +30,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     {
-        build_data::set_GIT_BRANCH();
-        build_data::set_GIT_COMMIT();
-        build_data::set_GIT_DIRTY();
+        let commit = build_data::exec("nix-git-commit", &[]).unwrap();
+        println!("cargo:rustc-env=GIT_COMMIT={}", commit);
         build_data::set_SOURCE_TIMESTAMP();
         build_data::no_debug_rebuilds();
     }

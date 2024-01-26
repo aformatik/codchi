@@ -44,14 +44,14 @@
 
           packages.${system} = {
             inherit pkgs;
-            default = pkgs.callPackage ./codchi { platform = "linux"; };
-            windows = pkgs.callPackage ./codchi { platform = "win"; };
+            default = pkgs.callPackage ./codchi { inherit self; platform = "linux"; };
+            windows = pkgs.callPackage ./codchi { inherit self; platform = "win"; };
           }
           // pkgs.callPackages ./controller { inherit nixpkgs; };
 
           devShells.${system} = {
-            default = pkgs.callPackage ./codchi/shell.nix { platform = "linux"; };
-            windows = pkgs.callPackage ./codchi/shell.nix { platform = "win"; };
+            default = pkgs.callPackage ./codchi/shell.nix { inherit self; platform = "linux"; };
+            windows = pkgs.callPackage ./codchi/shell.nix { inherit self; platform = "win"; };
           };
 
           checks.${system}.populate-cache =

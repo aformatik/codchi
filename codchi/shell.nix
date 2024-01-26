@@ -1,4 +1,5 @@
-{ mkShell
+{ self
+, mkShell
 , writeShellScriptBin
 , lib
 , callPackage
@@ -20,24 +21,15 @@
 }:
 let
 
-  codchi = callPackage ./. { inherit platform; };
+  codchi = callPackage ./. { inherit self platform; };
 
   native = {
     win = {
-      inherit (codchi.passthru) CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER;
-      shellHook = ''
-        # export WINE_PREFIX="$(pwd)/.wine"
-        export XWIN_ARCH="x86_64"
-        export XWIN_CACHE_DIR="$(git rev-parse --show-toplevel)/.xwin"
-        if [ ! -d $XWIN_CACHE_DIR ]; then 
-          mkdir $XWIN_CACHE_DIR/xwin
-          cp -r ${codchi.passthru.splatted} $XWIN_CACHE_DIR
-          chmod -R +w $XWIN_CACHE_DIR
-        fi
-      '';
+      inherit (codchi) CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER;
+      shellHook = codchi.passthru.setupXWin "$(git rev-parse --show-toplevel)";
     };
     linux = {
-      LD_LIBRARY_PATH = lib.makeLibraryPath codchi.passthru.buildInputs;
+      LD_LIBRARY_PATH = lib.makeLibraryPath codchi.buildInputs;
     };
   }.${platform};
 
@@ -49,6 +41,7 @@ mkShell (lib.recursiveUpdate
 
   packages = [
     codchi.passthru.rust
+    codchi.passthru.nix-git
     nixpkgs-fmt
     strace
     gdb
@@ -71,7 +64,7 @@ mkShell (lib.recursiveUpdate
       ${codchi.passthru.xwin}/bin/xwin --accept-license --cache-dir "$CACHE" download
       cat "$CACHE"/dl/manifest*.json
     '')
-  ] ++ (codchi.passthru.nativeBuildInputs or [ ]);
+  ] ++ (codchi.nativeBuildInputs or [ ]);
 
   shellHook = ''
     export CODCHI_CONFIG_DIR="$(git rev-parse --show-toplevel)/.codchi/config"
@@ -79,6 +72,6 @@ mkShell (lib.recursiveUpdate
     export CODCHI_RUNTIME_DIR="$(git rev-parse --show-toplevel)/.codchi/runtime"
   '' + (native.shellHook or "");
 
-  inherit (codchi.passthru) CARGO_BUILD_TARGET;
+  inherit (codchi) CARGO_BUILD_TARGET;
 
 })
