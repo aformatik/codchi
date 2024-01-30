@@ -3,13 +3,14 @@ use crate::{
     config::{
         flake_attr, CodchiConfig, CodchiModule, CodeMachine, FlakeScheme, FlakeUrl, MutableConfig,
     },
+    consts::Dir,
     platform::{nix::NixDriver, *},
     util::UtilExt,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use git_url_parse::Scheme;
 use spinoff::{spinners, Color, Spinner};
-use std::fmt::Display;
+use std::{fmt::Display, fs};
 use toml_edit::{ser::to_document, Key};
 
 pub fn init(empty: bool, opts: &AddModuleOptions) -> Result<()> {
@@ -27,17 +28,22 @@ pub fn init(empty: bool, opts: &AddModuleOptions) -> Result<()> {
         }
     } else {
         let (module, has_nixpkgs) = fetch_module(&opts)?;
-        let bare_url = module.with_attr(());
+        let bare_url: FlakeUrl<flake_attr::Without> = module.with_attr(());
         let nixpkgs_from = if has_nixpkgs {
             if opts.dont_prompt {
-                Some(bare_url)
+                Some(0)
             } else {
                 // TODO move to docs?
                 if inquire::Confirm::new(&format!("Use nixpkgs from '{}'", bare_url.pretty_print()))
-                    .with_help_message("This codchi module has a nixpkgs input. Do you want to use it for the code machine? Otherwise the shared nixpkgs of codchi is used, which might decrease reproducibility but is faster.")
+                    .with_help_message(
+                        "This codchi module has a nixpkgs input. \
+Do you want to use it for the code machine? \
+Otherwise the shared nixpkgs of codchi is used, \
+which might decrease reproducibility but is faster.",
+                    )
                     .prompt()?
                 {
-                    Some(bare_url)
+                    Some(0)
                 } else {
                     None
                 }
@@ -51,11 +57,14 @@ pub fn init(empty: bool, opts: &AddModuleOptions) -> Result<()> {
         }
     };
 
+    println!("{}", machine.gen_flake());
+
     machines.insert_formatted(
         &Key::new(&opts.name),
         to_document(&machine)?.as_item().clone(),
     );
     cfg.write()?;
+    write_flake(&opts.name, &machine)?;
 
     Ok(())
 }
@@ -91,6 +100,12 @@ pub fn add(opts: &AddModuleOptions) -> std::result::Result<(), anyhow::Error> {
 
     modules.push(mod_str);
     cfg.write()?;
+
+    write_flake(
+        &opts.name,
+        &CodeMachine::read_config(&opts.name)?.expect("Failed to read just created machine."),
+    )?;
+
     Ok(())
 }
 
@@ -147,6 +162,8 @@ pub fn delete(name: &str, id: usize) -> std::result::Result<(), anyhow::Error> {
 
     cfg.write()?;
 
+    // TODO properly delete machine (Driver)
+
     Ok(())
 }
 
@@ -166,6 +183,7 @@ pub fn fetch_module(opts: &AddModuleOptions) -> Result<(CodchiModule, HasNixpkgs
         spinoff::Streams::Stderr,
     );
     let available_modules = DRIVER
+        .ctrl_cmd()
         .list_nixos_modules(&nix_url)
         .finally(|| spinner.clear())?;
 
@@ -195,7 +213,7 @@ pub fn fetch_module(opts: &AddModuleOptions) -> Result<(CodchiModule, HasNixpkgs
         }
     };
 
-    let has_nixpkgs = DRIVER.has_nixpkgs_input(&nix_url)?;
+    let has_nixpkgs = DRIVER.ctrl_cmd().has_nixpkgs_input(&nix_url)?;
     // TODO check capabilities / secrets
     Ok((flake_url.with_attr(flake_module.to_string()), has_nixpkgs))
 }
@@ -322,4 +340,25 @@ fn inquire_module_url(opts: &AddModuleOptions) -> Result<FlakeUrl<flake_attr::Wi
         //        OR
         //        git@github.com:aformatik/codchi"
     }
+}
+
+fn write_flake(name: &str, machine: &CodeMachine) -> Result<()> {
+    let machine_dir = DRIVER
+        .ctrl_cmd()
+        .inner_to_outer(PathBase::Machines)?
+        .join(name);
+
+    if !fs::metadata(&machine_dir).is_ok() {
+        fs::create_dir_all(&machine_dir)?;
+    }
+    if !fs::metadata(&machine_dir.join(".git")).is_ok() {
+        DRIVER.ctrl_cmd().spawn(
+            Command::new("git", &["init"])
+                .cwd(format!("/machines/{name}"))
+                .verbose(),
+        )?;
+    }
+    fs::write(&machine_dir.join("flake.nix"), machine.gen_flake())?;
+
+    Ok(())
 }

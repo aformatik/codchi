@@ -1,4 +1,8 @@
-use crate::{consts::Dir, util::UtilExt};
+use crate::{
+    consts::{Dir, NIX_SYSTEM},
+    platform::{Driver, DRIVER},
+    util::UtilExt,
+};
 use anyhow::{Context, Result};
 use fs4::FileExt;
 use itertools::Itertools;
@@ -89,8 +93,10 @@ impl Drop for MutableConfig {
     }
 }
 
+// #[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct CodchiConfig {
+    // #[serde_as(as = "HashMap<DisplayFromStr, _>")]
     pub machines: HashMap<String, CodeMachine>,
 }
 
@@ -118,10 +124,67 @@ impl CodchiConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CodeMachine {
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde_as(as = "Option<DisplayFromStr>")]
-    pub nixpkgs_from: Option<FlakeUrl<flake_attr::Without>>,
+    // #[serde_as(as = "Option<DisplayFromStr>")]
+    pub nixpkgs_from: Option<usize>,
     #[serde_as(as = "Vec<DisplayFromStr>")]
     pub modules: Vec<CodchiModule>,
+}
+
+impl CodeMachine {
+    pub fn read_config(name: &str) -> Result<Option<Self>> {
+        Ok(CodchiConfig::read_config()?.machines.get(name).cloned())
+    }
+
+    pub fn gen_flake(&self) -> String {
+        // #[cfg(profile = "release")]
+        let codchi_url = {
+            use crate::consts::GIT_BRANCH;
+            format!("github:aformatik/codchi/{GIT_BRANCH}")
+        };
+        // #[cfg(profile = "debug")]
+        // let codchi_url = "git+file:..".to_string();
+        let module_inputs = self
+            .modules
+            .iter()
+            .enumerate()
+            .map(|(idx, url)| format!(r#"    "{idx}".url = "{}";"#, url.to_nix_url()))
+            .join("\n");
+        let driver = DRIVER.internal_nixos_name();
+        let nixpkgs = if let Some(idx) = self.nixpkgs_from {
+            format!(r#"inputs."{idx}".inputs.nixpkgs"#)
+        } else {
+            "inputs.codchi.inputs.nixpkgs".to_string()
+        };
+        let modules = self
+            .modules
+            .iter()
+            .enumerate()
+            .map(|(idx, url)| {
+                format!(
+                    r#"        {{ module = inputs."{idx}".{module_name}; }}"#,
+                    module_name = url.flake_attr.0
+                )
+            })
+            .join("\n");
+        format!(
+            r#"{{
+  inputs = {{
+    codchi.url = "{codchi_url}";
+{module_inputs}
+  }};
+  outputs = inputs: {{
+    nixosConfigurations.default = inputs.codchi.lib.codeMachine {{
+      driver = "{driver}";
+      system = "{NIX_SYSTEM}";
+      nixpkgs = {nixpkgs};
+      modules = [
+{modules}
+      ];
+    }};
+  }};
+}}"#
+        )
+    }
 }
 
 pub type CodchiModule = FlakeUrl<flake_attr::With>;

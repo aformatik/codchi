@@ -3,10 +3,14 @@
 #[cfg_attr(target_os = "windows", path = "windows/mod.rs")]
 mod platform;
 
+pub use self::cmd::*;
+pub use self::nix::NixDriver;
+pub use self::path::*;
 pub use self::platform::*;
 
 use anyhow::Result;
-use std::{io, path::PathBuf, process::Output};
+use std::{io, process::ExitStatus, process::Output};
+use thiserror::Error;
 
 /// The interface to a platform specific driver. This driver holds the nix store, runs the nix
 /// daemon and executes nix commands
@@ -15,13 +19,132 @@ pub trait Driver {
     /// already installed). Implementations must be idempotent.
     fn init_controller(&self) -> Result<()>;
 
-    /// Get local filepath to archive with controller rootfs. This might fetch from the internet or
-    /// locate it in the packaged codchi (MSIX / ...)
-    fn get_controller_fs(&self) -> Result<PathBuf>;
+    fn ctrl_cmd(&self) -> impl CommandDriver + NixDriver + PathDriver;
 
-    fn ctrl_cmd_spawn(&self, program: &str, args: &[&str]) -> io::Result<()>;
+    /// Name of NixOS driver
+    fn internal_nixos_name(&self) -> &'static str;
+}
 
-    fn ctrl_cmd_output(&self, program: &str, args: &[&str]) -> io::Result<Output>;
+pub mod path {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[derive(strum::Display, Clone)]
+    #[strum(serialize_all = "snake_case")]
+    pub enum PathBase {
+        Machines,
+        State,
+        Nix,
+    }
+
+    pub trait PathDriver {
+        fn resolve_root(&self) -> Result<PathBuf>;
+
+        fn inner_to_outer(&self, base: PathBase) -> Result<PathBuf> {
+            Ok(self.resolve_root()?.join(base.to_string()))
+        }
+    }
+}
+
+pub mod cmd {
+    use super::*;
+    use serde::Deserialize;
+    use std::process::Stdio;
+
+    #[derive(Error, Debug)]
+    pub enum Error {
+        #[error("Failed to call command.")]
+        IO(#[from] io::Error),
+
+        #[error("Failed parsing JSON output.")]
+        JSON(#[from] serde_json::Error),
+
+        #[error("{cmd:?} failed with exit status {exit_status:?}. Stderr was:\n{stderr}")]
+        Other {
+            cmd: Command,
+            exit_status: ExitStatus,
+            stderr: String,
+        },
+    }
+    pub type Result<T> = std::result::Result<T, Error>;
+
+    fn to_result(cmd: Command, output: Output) -> Result<Vec<u8>> {
+        if output.status.success() {
+            Ok(output.stdout)
+        } else {
+            Err(Error::Other {
+                cmd,
+                exit_status: output.status,
+                stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            })
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct Command {
+        pub program: String,
+        pub args: Vec<String>,
+        pub uid: Option<usize>,
+        pub cwd: Option<String>,
+        pub silence_out: bool,
+        pub silence_err: bool,
+    }
+
+    impl Command {
+        pub fn new(program: &str, args: &[&str]) -> Self {
+            Self {
+                program: program.to_string(),
+                args: args.iter().map(|arg| arg.to_string()).collect(),
+                uid: None,
+                cwd: None,
+                silence_out: true,
+                silence_err: true,
+            }
+        }
+
+        // pub fn uid(mut self, uid: usize) -> Self {
+        //     self.uid = Some(uid);
+        //     self
+        // }
+
+        pub fn cwd(mut self, cwd: String) -> Self {
+            self.cwd = Some(cwd);
+            self
+        }
+
+        pub fn verbose(mut self) -> Self {
+            self.silence_out = false;
+            self.silence_err = false;
+            self
+        }
+    }
+
+    pub trait CommandDriver {
+        fn build(spec: &Command) -> std::process::Command;
+
+        fn spawn(&self, spec: Command) -> Result<()> {
+            let mut cmd = Self::build(&spec);
+
+            if spec.silence_out {
+                cmd.stdout(Stdio::null());
+            }
+            if spec.silence_err {
+                cmd.stderr(Stdio::null());
+            }
+
+            to_result(spec, cmd.spawn()?.wait_with_output()?)?;
+            Ok(())
+        }
+
+        fn output_json<T>(&self, spec: Command) -> Result<T>
+        where
+            T: for<'de> Deserialize<'de>,
+        {
+            let mut cmd = Self::build(&spec);
+            let output = to_result(spec, cmd.output()?)?;
+            Ok(serde_json::from_slice(&output)?)
+        }
+    }
 }
 
 pub mod nix {
@@ -29,14 +152,9 @@ pub mod nix {
 
     use super::*;
     use serde_json::Value;
-    use std::{io, process::ExitStatus};
-    use thiserror::Error;
 
     #[derive(Error, Debug)]
     pub enum Error {
-        #[error("Failed to call Nix.")]
-        IO(#[from] io::Error),
-
         #[error("Nix eval didn't find attribute.")]
         EvalMissingAttr,
 
@@ -45,58 +163,42 @@ pub mod nix {
         InvalidRemoteSSLOrSSH,
 
         // TODO: link to docs
-        #[error("Couldn't access repository at '{url}'. If the repository is private you need to provide the correct credentials.")]
-        InvalidURLOrCredentials { url: String },
+        #[error("Couldn't access repository. If the repository is private you need to provide the correct credentials.")]
+        InvalidURLOrCredentials,
 
-        #[error("Failed parsing JSON output from Nix")]
-        JSON(#[from] serde_json::Error),
-
-        #[error("Nix {args:?} failed with exit status {exit_status:?}. Stderr was:\n{stderr}")]
-        Other {
-            args: String,
-            exit_status: ExitStatus,
-            stderr: String,
-        },
+        #[error("Nix command failed: {0}")]
+        Command(super::cmd::Error),
     }
     pub type Result<T> = std::result::Result<T, Error>;
 
-    fn output_to_result(args: &[&str], url: Option<&str>, output: Output) -> Result<Vec<u8>> {
-        if output.status.success() {
-            Ok(output.stdout)
-        } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            if stderr.contains("SSL peer certificate or SSH remote key was not OK") {
-                Err(Error::InvalidRemoteSSLOrSSH)
-            } else if url.is_some()
-                && /* http / ssh      */ (stderr.contains("program 'git' failed with exit code 128")
-                || /* gitlab / github */ stderr.contains("HTTP error 404")
-                || /* srht            */ stderr.contains("HTTP error 403"))
-            {
-                Err(Error::InvalidURLOrCredentials {
-                    url: url.unwrap().to_string(),
-                })
-            } else if stderr.contains("does not provide attribute") {
-                Err(Error::EvalMissingAttr)
+    impl From<cmd::Error> for Error {
+        fn from(err: cmd::Error) -> Self {
+            if let cmd::Error::Other { stderr, .. } = &err {
+                if stderr.contains("SSL peer certificate or SSH remote key was not OK") {
+                    Error::InvalidRemoteSSLOrSSH
+                } else if
+                // http / ssh
+                stderr.contains("program 'git' failed with exit code 128")
+                // gitlab / github
+                || stderr.contains("HTTP error 404")
+                // srht
+                || stderr.contains("HTTP error 403")
+                {
+                    Error::InvalidURLOrCredentials
+                } else if stderr.contains("does not provide attribute") {
+                    Error::EvalMissingAttr
+                } else {
+                    Error::Command(err)
+                }
             } else {
-                Err(Error::Other {
-                    args: format!("{args:?}"),
-                    exit_status: output.status,
-                    stderr: stderr.to_string(),
-                })
+                Error::Command(err)
             }
-            // codchi init flow
-            //  -> fetch module flow
-            //  -> add another module?
-            //  -> build now? (as controller job? => progress?)
-            // codchi add module flow
-            //  -> fetch module flow
         }
     }
 
-    impl<T: Driver> NixDriver for T {}
-    pub trait NixDriver: Driver {
+    pub trait NixDriver: CommandDriver {
         fn list_nixos_modules(&self, url: &str) -> Result<Vec<ModuleAttrPath>> {
-            let list_attr_names = |attr_path: &str| {
+            let list_attr_names = |attr_path: &str| -> Result<Vec<String>> {
                 let args = [
                     "eval",
                     "--json",
@@ -106,16 +208,14 @@ pub mod nix {
                     "--apply",
                     "builtins.attrNames",
                 ];
-                let json = match output_to_result(
-                    &args,
-                    Some(&url),
-                    self.ctrl_cmd_output("nix", &args)?,
-                ) {
-                    Err(Error::EvalMissingAttr) => Ok("[]".as_bytes().to_vec()),
-                    res => res,
-                }?;
-
-                serde_json::from_slice::<Vec<String>>(&json).map_err(Error::JSON)
+                match self
+                    .output_json::<Vec<String>>(Command::new("nix", &args))
+                    .map_err(|err| err.into())
+                {
+                    Ok(attrs) => Ok(attrs),
+                    Err(Error::EvalMissingAttr) => Ok(Vec::new()),
+                    Err(err) => Err(err),
+                }
             };
             let modules = list_attr_names("codchiModules")?
                 .iter()
@@ -137,10 +237,7 @@ pub mod nix {
 
         fn has_nixpkgs_input(&self, url: &str) -> Result<bool> {
             let args = ["flake", "metadata", "--json", "--no-write-lock-file", url];
-            let output = self.ctrl_cmd_output("nix", &args)?;
-
-            let metadata: Value =
-                serde_json::from_slice(&output_to_result(&args, Some(&url), output)?)?;
+            let metadata = self.output_json::<Value>(Command::new("nix", &args))?;
 
             Ok(metadata
                 .get("locks")

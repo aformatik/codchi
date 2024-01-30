@@ -38,8 +38,8 @@ rec {
     , system
       # nixpkgs :: Flake
     , nixpkgs
-      # codchiModules :: [{ module :: NixOS Module, extraArgs :: Attr Set }]
-    , codchiModules
+      # modules :: [{ module :: NixOS Module, extraArgs :: Attr Set }]
+    , modules
     , ...
     }: nixpkgs.lib.nixosSystem {
       inherit system;
@@ -48,7 +48,7 @@ rec {
           # TODO consider adding specialArgs of other codchiModules for example as global.NAME
           ({ module, specialArgs ? { } }: overrideModuleArgs specialArgs module)
           ([{ module = ../modules; specialArgs.inputs.nixpkgs = nixpkgs; }]
-          ++ codchiModules)
+          ++ modules)
         ++
         nixpkgs.lib.optional (driver != null) { codchi.internal.${driver}.enable = true; }
       ;

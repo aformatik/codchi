@@ -1,8 +1,8 @@
-{ self
-, mkShell
+{ mkShell
 , writeShellScriptBin
 , lib
-, callPackage
+
+, codchi
 
 , nixpkgs-fmt
 , strace
@@ -21,14 +21,13 @@
 }:
 let
 
-  codchi = callPackage ./. { inherit self platform; };
-
   native = {
     win = {
       inherit (codchi) CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER;
       shellHook = codchi.passthru.setupXWin "$(git rev-parse --show-toplevel)";
     };
     linux = {
+      inherit (codchi) CODCHI_LXD_CTRL_ROOTFS;
       LD_LIBRARY_PATH = lib.makeLibraryPath codchi.buildInputs;
     };
   }.${platform};

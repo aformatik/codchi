@@ -2,7 +2,7 @@
 
 use anyhow::Context;
 use clap::*;
-use colored::Colorize;
+use colored::Colorize as _;
 use log::*;
 use std::env;
 use tarpc::context;
@@ -18,13 +18,14 @@ mod nix;
 mod platform;
 mod util;
 
-fn real_main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
     human_panic::setup_panic!();
 
     let cli = Cli::parse();
 
     env_logger::Builder::new()
         .filter_level(cli.verbose.log_level_filter())
+        .parse_env("CODCHI_LOG")
         .init();
 
     trace!("Started codchi with args: {:?}", cli);
@@ -41,7 +42,7 @@ fn real_main() -> anyhow::Result<()> {
                     std::process::exit(0);
                 }
             }
-            ControllerCmd::Stop {} => ctrl::stop()?,
+            ControllerCmd::Stop {} => ctrl::stop(true)?,
         },
         Cmd::Status {} => {
             let status = ctrl::force_client(|client| async move {
@@ -64,15 +65,19 @@ fn real_main() -> anyhow::Result<()> {
 
     // TODO check for dirty machines and warn user
 
+    if cli.stop_ctrl {
+        ctrl::stop(false)?;
+    }
+
     Ok(())
 }
 
-fn main() {
-    match real_main() {
-        Ok(()) => {}
-        Err(err) => {
-            eprintln!("{}: {}", "ERROR".red(), err);
-            std::process::exit(1);
-        }
-    }
-}
+// fn main() {
+//     match real_main() {
+//         Ok(()) => {}
+//         Err(err) => {
+//             eprintln!("{}: {}", "ERROR".red(), err);
+//             std::process::exit(1);
+//         }
+//     }
+// }

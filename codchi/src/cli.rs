@@ -12,8 +12,6 @@ pub use self::module::*;
 
 pub static CLI_ARGS: OnceCell<Cli> = OnceCell::new();
 
-// static long_version: &'static str = ;
-
 type DefaultLogLevel = WarnLevel;
 
 /// codchi
@@ -23,12 +21,16 @@ type DefaultLogLevel = WarnLevel;
     // infer_subcommands = true
     long_version = format!("v{}\n{}",
         option_env!("CARGO_PKG_VERSION").unwrap_or(""),
-        option_env!("GIT_COMMIT").unwrap_or(""),
+        option_env!("CODCHI_GIT_COMMIT").unwrap_or(""),
     )
 )]
 pub struct Cli {
     #[command(flatten)]
     pub verbose: Verbosity<DefaultLogLevel>,
+
+    /// Dont keep the controller running in background
+    #[arg(long, short = 's')]
+    pub stop_ctrl: bool,
 
     #[command(subcommand)]
     pub command: Option<Cmd>,
@@ -148,7 +150,7 @@ mod module {
         },
     }
 
-    #[derive(clap::Args, Debug, Clone, Default)]
+    #[derive(clap::Args, Debug, Clone)]
     // branch an tag are mutually exclusive
     #[clap(group(ArgGroup::new("ref").args(&["branch", "tag"])))]
     pub struct AddModuleOptions {
@@ -184,6 +186,29 @@ mod module {
         /// Currently supported: 'codchiModules.<module>' or 'nixosModules.<module>'
         pub module_path: Option<ModuleAttrPath>,
     }
+
+    // TODO this is only neccessary when we have named modules. Currently they are refered to by
+    // their index
+    // #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+    // pub struct CodchiName(pub String);
+
+    // impl Display for CodchiName {
+    //     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    //         f.write_str(&self.0)
+    //     }
+    // }
+
+    // impl FromStr for CodchiName {
+    //     type Err = String;
+
+    //     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+    //         if s != "__codchi" {
+    //             Ok(CodchiName(s.to_string()))
+    //         } else {
+    //             Err("The name '__codchi' is a reserved keyword.".to_string())
+    //         }
+    //     }
+    // }
 
     #[derive(Clone, Debug, PartialEq)]
     pub struct ModuleAttrPath {

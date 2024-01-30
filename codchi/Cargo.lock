@@ -597,6 +597,7 @@ dependencies = [
  "colored",
  "comfy-table",
  "daemonize",
+ "dashmap",
  "directories",
  "env_logger",
  "fs4",
@@ -607,9 +608,7 @@ dependencies = [
  "inquire",
  "itertools",
  "lazy-regex",
- "lazy_static",
  "log",
- "lxd",
  "once_cell",
  "parity-tokio-ipc",
  "rustls-native-certs",
@@ -876,6 +875,20 @@ dependencies = [
  "darling_core",
  "quote",
  "syn 2.0.39",
+]
+
+[[package]]
+name = "dashmap"
+version = "5.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "978747c1d849a7d2ee5e8adc0159961c48fb7e5db2f06af6723b80123bb53856"
+dependencies = [
+ "cfg-if",
+ "hashbrown 0.14.3",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core",
+ "serde",
 ]
 
 [[package]]
@@ -1928,16 +1941,6 @@ name = "log"
 version = "0.4.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
-
-[[package]]
-name = "lxd"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "918a314b8eb7d4e19c3d154b4069b12aa37c25a68bae4f2c2a69f50bf47c7c5a"
-dependencies = [
- "serde",
- "serde_json",
-]
 
 [[package]]
 name = "malloc_buf"
@@ -3146,9 +3149,8 @@ checksum = "14c39fd04924ca3a864207c66fc2cd7d22d7c016007f9ce846cbb9326331930a"
 
 [[package]]
 name = "tarpc"
-version = "0.33.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f41bce44d290df0598ae4b9cd6ea7f58f651fd3aa4af1b26060c4fa32b08af7"
+version = "0.34.0"
+source = "git+https://github.com/google/tarpc#d91a9f88c9e8377b8ecba241290b81fd5c938a0b"
 dependencies = [
  "anyhow",
  "fnv",
@@ -3170,9 +3172,8 @@ dependencies = [
 
 [[package]]
 name = "tarpc-plugins"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ee42b4e559f17bce0385ebf511a7beb67d5cc33c12c96b7f4e9789919d9c10f"
+version = "0.13.1"
+source = "git+https://github.com/google/tarpc#d91a9f88c9e8377b8ecba241290b81fd5c938a0b"
 dependencies = [
  "proc-macro2",
  "quote",

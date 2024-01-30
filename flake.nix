@@ -3,7 +3,6 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
-    unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       flake = false; # prevent fetching transitive inputs
@@ -15,7 +14,15 @@
       system = "x86_64-linux";
       pkgs = import nixpkgs {
         inherit system;
-        overlays = [ (import rust-overlay) ];
+        overlays = [
+          (import rust-overlay)
+          (self: super: {
+            codchi = self.callPackage ./codchi { inherit (inputs) self; platform = "linux"; };
+            codchi-windows = self.callPackage ./codchi { inherit (inputs) self; platform = "win"; };
+            inherit (super.callPackage ./controller { inherit nixpkgs; }) lxd-ctrl-rootfs wsl-ctrl-rootfs;
+          }
+          )
+        ];
         config.allowUnfree = true;
       };
       drivers = [ "wsl" "lxd" ];
@@ -25,7 +32,6 @@
 
       lib = import ./nix/lib.nix;
 
-      unstable = import inputs.unstable { inherit system; config.allowUnfree = true; };
     in
     mergeAttrList
       [
@@ -35,7 +41,7 @@
           nixosModules.default = import ./modules;
           nixosModules.codchi = {
             nixpkgs.config.allowUnfree = true;
-            environment.systemPackages = [ unstable.jetbrains.rust-rover ];
+            environment.systemPackages = [ pkgs.vscodium ];
             programs.direnv = {
               enable = true;
               nix-direnv.enable = true;
@@ -43,15 +49,14 @@
           };
 
           packages.${system} = {
-            inherit pkgs;
-            default = pkgs.callPackage ./codchi { inherit self; platform = "linux"; };
-            windows = pkgs.callPackage ./codchi { inherit self; platform = "win"; };
-          }
-          // pkgs.callPackages ./controller { inherit nixpkgs; };
+            # inherit pkgs;
+            default = pkgs.codchi;
+            windows = pkgs.codchi-windows;
+          };
 
           devShells.${system} = {
-            default = pkgs.callPackage ./codchi/shell.nix { inherit self; platform = "linux"; };
-            windows = pkgs.callPackage ./codchi/shell.nix { inherit self; platform = "win"; };
+            default = pkgs.callPackage ./codchi/shell.nix { platform = "linux"; };
+            windows = pkgs.callPackage ./codchi/shell.nix { platform = "win"; codchi = pkgs.codchi-windows; };
           };
 
           checks.${system}.populate-cache =

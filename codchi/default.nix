@@ -5,25 +5,28 @@
 , writeShellScript
 , writeShellScriptBin
 , fetchFromGitHub
+
 , lib
 
+, lxd-ctrl-rootfs
 , platform
 
 , makeRustPlatform
 , rust-bin
 
+, makeWrapper
 , pkg-config
 , gtk3
-# , xdotool
+  # , xdotool
   # , libappindicator-gtk3
 , libayatana-appindicator
-# , libxkbcommon
+  # , libxkbcommon
   # , xorg
-# , vulkan-loader
-# , libGL
+  # , vulkan-loader
+  # , libGL
   # , webkitgtk_4_1
   # , libsoup
-# , libdbusmenu
+  # , libdbusmenu
 
 , llvmPackages
 , cargo-xwin
@@ -139,7 +142,6 @@ let
 
       auditable = false; # disable cargo auditable
 
-      # targetCargo = "X86_64_PC_WINDOWS_MSVC";
       CARGO_BUILD_TARGET = "x86_64-pc-windows-msvc";
       CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER = writeShellScript "wine-wsl" ''
         if ! command -v wslpath &> /dev/null; then
@@ -148,6 +150,10 @@ let
           "$@"
         fi
       '';
+
+      # On Windows MSVC, statically link the C runtime so that the resulting EXE does
+      # not depend on the vcruntime DLL.
+      RUSTFLAGS = "-C target-feature=+crt-static";
 
       nativeBuildInputs = [
         llvmPackages.llvm
@@ -169,6 +175,9 @@ let
     linux = rec {
       # targetCargo = "X86_64-UNKNOWN-LINUX-GNU";
       CARGO_BUILD_TARGET = "x86_64-unknown-linux-gnu";
+
+      CODCHI_LXD_CTRL_ROOTFS = lxd-ctrl-rootfs;
+
       passthru = {
         inherit xwin;
         rust = rustOrig;
@@ -185,6 +194,7 @@ let
         # gtk3
         # gtk3.debug
         nix-git
+        makeWrapper
       ];
       buildInputs = [
         gtk3
@@ -202,8 +212,10 @@ let
       ];
 
       postFixup = ''
-        patchelf $out/bin/codchi \
+        patchelf "$out/bin/codchi" \
           --add-rpath ${lib.makeLibraryPath buildInputs}
+        wrapProgram "$out/bin/codchi" \ 
+          --set CODCHI_LXD_CTRL_ROOTFS $CODCHI_LXD_CTRL_ROOTFS
       '';
     };
   }.${platform};
@@ -217,7 +229,9 @@ native.passthru.rustPlatform.buildRustPackage (lib.recursiveUpdate
 
   src = ./.;
   cargoLock.lockFile = ./Cargo.lock;
-  # cargoLock.outputHashes = { "tray-icon-0.11.0" = ""; };
+  cargoLock.outputHashes = {
+    "tarpc-0.34.0" = "";
+  };
 
   passthru = { inherit nix-git; };
 }

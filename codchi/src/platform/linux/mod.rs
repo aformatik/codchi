@@ -1,18 +1,12 @@
-use std::{fs, io, path::PathBuf, process::Output};
+use std::{env, fs, path::PathBuf};
 
-use crate::{
-    consts::{self, Dir},
-    nix,
-};
+use crate::consts::{self, Dir};
 
-use super::Driver;
+use super::{CommandDriver, Driver, NixDriver, PathBase, PathDriver};
 use anyhow::{Context, Result};
-use lazy_static::lazy_static;
 use log::*;
 
-lazy_static! {
-    pub static ref DRIVER: DriverImpl = DriverImpl {};
-}
+pub static DRIVER: DriverImpl = DriverImpl {};
 
 pub struct DriverImpl {}
 
@@ -28,7 +22,11 @@ Please see the codchi docs for the setup instructions!",
         match info {
             None => {
                 let try_import = || -> Result<()> {
-                    lxd::image::import(self.get_controller_fs()?, consts::CONTROLLER_NAME)
+                    let rootfs = env::var("CODCHI_LXD_CTRL_ROOTFS")
+                        .map(|dir| PathBuf::from(dir).join("controller.tar.gz"))
+                        .context("Failed reading $CODCHI_LXD_CTRL_ROOTFS from environment. This indicates a broken build.")?;
+
+                    lxd::image::import(rootfs, consts::CONTROLLER_NAME)
                         .context("Failed to import LXD controller image.")?;
 
                     // This might be not the best idea because root on host = root in LXD
@@ -45,28 +43,24 @@ gid 100 100";
                         &format!("raw.idmap={idmap}"),
                     )?;
 
-                    let ctrl_dir = Dir::Data.get_or_create()?.join("controller");
-
-                    let mount_local = |rel_path: &str| {
-                        let dir = ctrl_dir.join(rel_path);
+                    for base in vec![PathBase::Machines, PathBase::Nix, PathBase::State] {
+                        let dir = DRIVER.ctrl_cmd().inner_to_outer(base.clone())?;
+                        let base_dir = base.to_string();
                         fs::create_dir_all(&dir)?;
                         lxd::container::mount(
                             consts::CONTROLLER_NAME,
-                            rel_path,
+                            &base_dir,
                             &dir,
-                            &format!("/{}", rel_path),
+                            &format!("/{}", base_dir),
                         )
                         .with_context(|| {
                             format!(
                                 "Failed to mount LXD device '{}' at path {} to controller",
-                                rel_path,
+                                base_dir,
                                 dir.display()
                             )
-                        })
-                    };
-                    mount_local("nix")?;
-                    mount_local("instances")?;
-                    mount_local("instance_state")?;
+                        })?;
+                    }
                     //, "printf \"" <> _IDMAP <> "\" | lxc config set codchi-controller raw.idmap -" -- not sure if this is needed
                     lxd::image::delete(consts::CONTROLLER_NAME)?;
                     Ok(())
@@ -92,28 +86,55 @@ gid 100 100";
         Ok(())
     }
 
-    fn get_controller_fs(&self) -> Result<PathBuf> {
-        let dir = nix::cli::build(".#lxd-ctrl-rootfs")
-            .context("Failed to build LXD controller rootfs.")?;
-        Ok(dir.join("controller.tar.gz"))
+    // fn ctrl_cmd_spawn(&self, program: &str, args: &[&str]) -> io::Result<()> {
+    //     let mut lxd_args = vec!["exec", consts::CONTROLLER_NAME, "--", "run", program];
+    //     lxd_args.extend_from_slice(&args);
+    //     lxd::lxc(&lxd_args)
+    // }
+
+    // fn ctrl_cmd_output(&self, program: &str, args: &[&str]) -> io::Result<Output> {
+    //     let mut lxd_args = vec!["exec", consts::CONTROLLER_NAME, "--", "run", program];
+    //     lxd_args.extend_from_slice(&args);
+    //     lxd::lxc_output(&lxd_args)
+    // }
+
+    fn internal_nixos_name(&self) -> &'static str {
+        "lxd"
     }
 
-    fn ctrl_cmd_spawn(&self, program: &str, args: &[&str]) -> io::Result<()> {
-        let mut lxd_args = vec!["exec", consts::CONTROLLER_NAME, "--", program];
-        lxd_args.extend_from_slice(&args);
-        lxd::lxc(&lxd_args)
+    fn ctrl_cmd(&self) -> impl CommandDriver + NixDriver + PathDriver {
+        LxdCommandDriver
     }
+}
 
-    fn ctrl_cmd_output(&self, program: &str, args: &[&str]) -> io::Result<Output> {
-        let mut lxd_args = vec!["exec", consts::CONTROLLER_NAME, "--", "run", program];
-        lxd_args.extend_from_slice(&args);
-        lxd::lxc_output(&lxd_args)
+pub struct LxdCommandDriver;
+impl CommandDriver for LxdCommandDriver {
+    fn build(spec: &super::Command) -> std::process::Command {
+        let mut cmd = std::process::Command::new("lxc");
+        cmd.arg("-q");
+        cmd.args(&["exec", consts::CONTROLLER_NAME]);
+        if let Some(cwd) = &spec.cwd {
+            cmd.args(&["--cwd", &cwd]);
+        }
+        if let Some(uid) = &spec.uid {
+            cmd.args(&["--user", &uid.to_string()]);
+        }
+        cmd.args(&["--", "run", &spec.program]);
+        for arg in spec.args.iter() {
+            cmd.arg(arg);
+        }
+        cmd
+    }
+}
+impl NixDriver for LxdCommandDriver {}
+impl PathDriver for LxdCommandDriver {
+    fn resolve_root(&self) -> Result<PathBuf> {
+        Dir::Data.get_or_create()
     }
 }
 
 /// "inspired" by lxd-rs
 mod lxd {
-    pub use lxd::*;
     use std::path::Path;
     use std::process::Output;
     use std::{io, process::Command};
@@ -153,6 +174,17 @@ mod lxd {
 
         cmd.output()
     }
+    pub fn lxc_output_ok(args: &[&str]) -> io::Result<Vec<u8>> {
+        let output = lxc_output(&args)?;
+        if output.status.success() {
+            Ok(output.stdout)
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("LXD {:?} failed with {}", args, output.status),
+            ))
+        }
+    }
 
     pub mod image {
         use super::*;
@@ -178,16 +210,32 @@ mod lxd {
 
     pub mod container {
         use super::*;
+        use serde::{Deserialize, Serialize};
+
+        #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+        /// LXD container information
+        pub struct Info {
+            pub status: String,
+        }
 
         pub fn start(name: &str) -> io::Result<()> {
             lxc(&["start", name])
         }
 
         pub fn get_info(name: &str) -> io::Result<Option<Info>> {
-            match Info::new(Location::Local, name) {
-                Ok(info) => Ok(Some(info)),
-                Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
-                Err(e) => Err(e),
+            let json = lxc_output_ok(&["list", &format!("{}$", name), "--format", "json"])?;
+            match serde_json::from_slice::<Vec<Info>>(&json) {
+                Ok(mut list) => {
+                    if list.len() == 1 {
+                        Ok(Some(list.remove(0)))
+                    } else {
+                        Ok(None)
+                    }
+                }
+                Err(err) => Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("LXD info: failed to parse json: {}", err),
+                )),
             }
         }
 
