@@ -3,7 +3,7 @@ name: website
 on:
   push:
      paths:
-      - 'static/website/**'
+      - 'docs/website/**'
 
 permissions:
   contents: write
@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: static/website
+        working-directory: docs/website
     steps:
     - uses: actions/checkout@v3
     - uses: cachix/install-nix-action@v22
@@ -28,4 +28,4 @@ jobs:
     - name: Deploy 🚀
       uses: JamesIves/github-pages-deploy-action@v4
       with:
-        folder: static/website/result/
+        folder: docs/website/result/

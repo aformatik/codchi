@@ -69,6 +69,7 @@ mkShell (lib.recursiveUpdate
     export CODCHI_CONFIG_DIR="$(git rev-parse --show-toplevel)/.codchi/config"
     export CODCHI_DATA_DIR="$(git rev-parse --show-toplevel)/.codchi/data"
     export CODCHI_RUNTIME_DIR="$(git rev-parse --show-toplevel)/.codchi/runtime"
+    export CODCHI_NIX_DIR="$(git rev-parse --show-toplevel)/.codchi/nix"
   '' + (native.shellHook or "");
 
   inherit (codchi) CARGO_BUILD_TARGET;

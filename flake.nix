@@ -5,7 +5,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
-      flake = false; # prevent fetching transitive inputs
+      flake = false; # prevent fetching transitive inputs TODO
     };
   };
 
@@ -16,12 +16,30 @@
         inherit system;
         overlays = [
           (import rust-overlay)
-          (self: super: {
-            codchi = self.callPackage ./codchi { inherit (inputs) self; platform = "linux"; };
-            codchi-windows = self.callPackage ./codchi { inherit (inputs) self; platform = "win"; };
-            inherit (super.callPackage ./controller { inherit nixpkgs; }) lxd-ctrl-rootfs wsl-ctrl-rootfs;
-          }
-          )
+          (self: _:
+            let
+
+              mkStore = driver: (import ./nix/store
+                {
+                  inherit inputs;
+                  inherit (nixpkgs) lib;
+                  pkgs = self;
+                }
+                {
+                  config.driver.${driver}.enable = true;
+                }
+              );
+            in
+            {
+              codchi = self.callPackage ./codchi { inherit (inputs) self; platform = "linux"; };
+              codchi-windows = self.callPackage ./codchi { inherit (inputs) self; platform = "win"; };
+
+              store-lxd = mkStore "lxd";
+              store-lxd-tarball = self.store-lxd.config.system.build.tarball;
+              store-wsl = mkStore "wsl";
+              store-wsl-tarball = self.store-wsl.config.system.build.tarball;
+            })
+          (import ./nix/pkgs)
         ];
         config.allowUnfree = true;
       };
@@ -38,7 +56,7 @@
         {
           inherit lib;
 
-          nixosModules.default = import ./modules;
+          nixosModules.default = import ./nix/modules;
           nixosModules.codchi = {
             nixpkgs.config.allowUnfree = true;
             environment.systemPackages = [ pkgs.vscodium ];
@@ -49,7 +67,7 @@
           };
 
           packages.${system} = {
-            # inherit pkgs;
+            inherit (pkgs) store-lxd store-wsl;
             default = pkgs.codchi;
             windows = pkgs.codchi-windows;
           };
@@ -65,10 +83,10 @@
                 self.nixosConfigurations.lxd-base.config.system.build.toplevel
                 self.nixosConfigurations.wsl-base.config.system.build.toplevel
 
-                self.packages.${system}.wsl-ctrl-rootfs.passthru.createContents
-                self.packages.${system}.wsl-ctrl-rootfs
-                self.packages.${system}.lxd-ctrl-rootfs.passthru.createContents
-                self.packages.${system}.lxd-ctrl-rootfs
+                # self.packages.${system}.wsl-ctrl-rootfs.passthru.createContents
+                # self.packages.${system}.wsl-ctrl-rootfs
+                # self.packages.${system}.lxd-ctrl-rootfs.passthru.createContents
+                # self.packages.${system}.lxd-ctrl-rootfs
 
                 self.packages.${system}.default
                 self.packages.${system}.windows
@@ -85,7 +103,7 @@
             inherit (nixpkgs.lib) flip mapAttrs mapAttrs' nameValuePair;
             inherit (builtins) readDir;
 
-            examples = flip mapAttrs (readDir ./examples) (path: _: "${./examples}/${path}");
+            examples = flip mapAttrs (readDir ./nix/examples) (path: _: "${./nix/examples}/${path}");
             exampleModules = flip mapAttrs examples (_: path: import "${path}/configuration.nix");
             exampleTemplates = flip mapAttrs examples
               (name: path: {

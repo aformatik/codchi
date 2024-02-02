@@ -8,7 +8,7 @@
 
 , lib
 
-, lxd-ctrl-rootfs
+, store-lxd-tarball
 , platform
 
 , makeRustPlatform
@@ -36,7 +36,7 @@
 let
   Cargo = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 
-  rustOrig = rust-bin.stable.latest.default.override {
+  rustConfig = {
     extensions = [
       "rust-src"
       "rust-analyzer"
@@ -47,6 +47,8 @@ let
       "wasm32-wasi"
     ];
   };
+  # rustOrig = rust-bin.stable.latest.default.override rustConfig;
+  rustOrig = rust-bin.selectLatestNightlyWith (toolchain: toolchain.default.override rustConfig);
   rustPlatformOrig = makeRustPlatform { cargo = rustOrig; rustc = rustOrig; };
   xwin = rustPlatformOrig.buildRustPackage rec {
     name = "xwin";
@@ -176,7 +178,7 @@ let
       # targetCargo = "X86_64-UNKNOWN-LINUX-GNU";
       CARGO_BUILD_TARGET = "x86_64-unknown-linux-gnu";
 
-      CODCHI_LXD_CTRL_ROOTFS = lxd-ctrl-rootfs;
+      CODCHI_LXD_CTRL_ROOTFS = store-lxd-tarball;
 
       passthru = {
         inherit xwin;
@@ -214,7 +216,7 @@ let
       postFixup = ''
         patchelf "$out/bin/codchi" \
           --add-rpath ${lib.makeLibraryPath buildInputs}
-        wrapProgram "$out/bin/codchi" \ 
+        wrapProgram "$out/bin/codchi" \
           --set CODCHI_LXD_CTRL_ROOTFS $CODCHI_LXD_CTRL_ROOTFS
       '';
     };
@@ -224,13 +226,13 @@ let
 in
 native.passthru.rustPlatform.buildRustPackage (lib.recursiveUpdate
 {
-  pname = Cargo.package.name;
-  inherit (Cargo.package) version;
+  pname = "codchi";
+  inherit (Cargo.workspace.package) version;
 
   src = ./.;
   cargoLock.lockFile = ./Cargo.lock;
   cargoLock.outputHashes = {
-    "tarpc-0.34.0" = "";
+    # "tarpc-0.34.0" = "";
   };
 
   passthru = { inherit nix-git; };

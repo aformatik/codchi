@@ -47,7 +47,7 @@ rec {
         map
           # TODO consider adding specialArgs of other codchiModules for example as global.NAME
           ({ module, specialArgs ? { } }: overrideModuleArgs specialArgs module)
-          ([{ module = ../modules; specialArgs.inputs.nixpkgs = nixpkgs; }]
+          ([{ module = ./modules; specialArgs.inputs.nixpkgs = nixpkgs; }]
           ++ modules)
         ++
         nixpkgs.lib.optional (driver != null) { codchi.internal.${driver}.enable = true; }
