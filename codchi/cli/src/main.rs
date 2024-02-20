@@ -2,8 +2,8 @@
 #![deny(unused_crate_dependencies)]
 
 use crate::{
-    cli::{Cli, Cmd},
-    platform::{ConfigStatus, Driver, Machine, MachineDriver, PlatformStatus},
+    cli::{Cli, Cmd, CLI_ARGS},
+    platform::{ConfigStatus, Driver, Machine, PlatformStatus},
 };
 use base64::{prelude::BASE64_STANDARD, Engine};
 use clap::*;
@@ -30,28 +30,58 @@ fn main() -> anyhow::Result<()> {
 
     trace!("Started codchi with args: {:?}", cli);
 
-    // CLI_ARGS
-    //     .set(cli.clone())
-    //     .expect("Only main is allowed to set CLI_ARGS.");
+    CLI_ARGS
+        .set(cli.clone())
+        .expect("Only main is allowed to set CLI_ARGS.");
 
     let _ = Driver::store();
 
     match &cli.command.unwrap_or(Cmd::Status {}) {
         Cmd::Status {} => print_status(Machine::list()?),
-        Cmd::Init { empty, options } => module::init(*empty, &options)?,
-        Cmd::Rebuild { name } => Machine::build(name)?,
-        Cmd::Update { name } => Machine::update(name)?,
+        Cmd::Init { empty, options } => alert_dirty(module::init(*empty, &options)?),
+        Cmd::Rebuild { name } => Machine::by_name(name)?.build()?,
+        Cmd::Update { name } => alert_dirty(Machine::by_name(name)?.update()?),
+        Cmd::Exec { name, cmd } => Machine::by_name(name)?.exec(cmd)?,
+        Cmd::Delete {
+            name,
+            im_really_sure,
+        } => Machine::by_name(name)?.delete(*im_really_sure)?,
         Cmd::Module(cmd) => match cmd {
             cli::ModuleCmd::List { name } => module::list(name)?,
-            cli::ModuleCmd::Add(opts) => module::add(opts)?,
-            cli::ModuleCmd::Delete { name, id } => module::delete(name, *id)?,
-            cli::ModuleCmd::Update { name: _ } => todo!(),
+            cli::ModuleCmd::Add(opts) => alert_dirty(module::add(opts)?),
+            cli::ModuleCmd::Delete { name, id } => alert_dirty(module::delete(name, *id)?),
         },
     }
 
     // TODO check for dirty machines and warn user
 
     Ok(())
+}
+
+fn alert_dirty(machine: Machine) {
+    match machine.config_status {
+        ConfigStatus::NotInstalled => {
+            info!(
+                "{} is not installed yet. Install with `codchi rebuild {}`",
+                machine.name, machine.name
+            );
+        }
+        ConfigStatus::Modified => {
+            info!(
+                "{} was modified. Apply changes with `codchi rebuild {}`",
+                machine.name, machine.name
+            );
+        }
+        ConfigStatus::UpdatesAvailable => {
+            info!(
+                "{} has been updated upstream. Update with `codchi rebuild {}`",
+                machine.name, machine.name
+            );
+        }
+        ConfigStatus::UpToDate => {
+            info!("Everything up to date!");
+        }
+    }
 }
 
 fn print_status(machines: Vec<Machine>) {
@@ -67,7 +97,7 @@ fn print_status(machines: Vec<Machine>) {
         table.add_row(vec![
             Cell::new(&machine.name),
             match machine.config_status {
-                ConfigStatus::NotInstalled => Cell::new("Never built").fg(Color::DarkYellow),
+                ConfigStatus::NotInstalled => Cell::new("Not installed yet").fg(Color::Red),
                 ConfigStatus::Modified => Cell::new("Modified").fg(Color::Yellow),
                 ConfigStatus::UpdatesAvailable => Cell::new("Updates available").fg(Color::Yellow),
                 ConfigStatus::UpToDate => Cell::new("Up to date").fg(Color::Green),

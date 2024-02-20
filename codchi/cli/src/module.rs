@@ -1,7 +1,7 @@
 use crate::{
     cli::AddModuleOptions,
     config::{
-        flake_attr, Config, CodchiModule, FlakeScheme, FlakeUrl, MachineConfig, MutableConfig,
+        flake_attr, CodchiModule, Config, FlakeScheme, FlakeUrl, MachineConfig, MutableConfig,
     },
     platform::{nix::NixDriver, *},
     util::UtilExt,
@@ -12,7 +12,7 @@ use spinoff::{spinners, Color, Spinner};
 use std::fmt::Display;
 use toml_edit::{ser::to_document, Key};
 
-pub fn init(empty: bool, opts: &AddModuleOptions) -> Result<()> {
+pub fn init(empty: bool, opts: &AddModuleOptions) -> Result<Machine> {
     let mut cfg = MutableConfig::open()?;
     let machines = cfg.get_machines();
 
@@ -56,19 +56,23 @@ which might decrease reproducibility but is faster.",
         }
     };
 
-    println!("{}", machine.gen_flake());
-
     machines.insert_formatted(
         &Key::new(&opts.name),
         to_document(&machine)?.as_item().clone(),
     );
     cfg.write()?;
-    Machine::write(&opts.name, &machine)?;
 
-    Ok(())
+    let machine = Machine {
+        name: opts.name.to_string(),
+        config: machine,
+        config_status: ConfigStatus::NotInstalled,
+        platform_status: PlatformStatus::NotInstalled,
+    };
+    machine.write_flake()?;
+    Ok(machine)
 }
 
-pub fn add(opts: &AddModuleOptions) -> std::result::Result<(), anyhow::Error> {
+pub fn add(opts: &AddModuleOptions) -> Result<Machine> {
     let mut cfg = MutableConfig::open()?;
     let machine = cfg
         .get_machine(&opts.name)
@@ -100,12 +104,9 @@ pub fn add(opts: &AddModuleOptions) -> std::result::Result<(), anyhow::Error> {
     modules.push(mod_str);
     cfg.write()?;
 
-    Machine::write(
-        &opts.name,
-        &MachineConfig::read_config(&opts.name)?.expect("Failed to read just created machine."),
-    )?;
-
-    Ok(())
+    let machine = Machine::by_name(&opts.name)?;
+    machine.write_flake()?;
+    machine.update_status()
 }
 
 /// List modules of a code machine
@@ -140,7 +141,7 @@ pub fn list(name: &String) -> Result<()> {
     Ok(())
 }
 
-pub fn delete(name: &str, id: usize) -> std::result::Result<(), anyhow::Error> {
+pub fn delete(name: &str, id: usize) -> Result<Machine> {
     let mut cfg = MutableConfig::open()?;
     let machine = cfg
         .get_machine(name)
@@ -161,9 +162,9 @@ pub fn delete(name: &str, id: usize) -> std::result::Result<(), anyhow::Error> {
 
     cfg.write()?;
 
-    // TODO properly delete machine (Driver)
-
-    Ok(())
+    let machine = Machine::by_name(&name)?;
+    machine.write_flake()?;
+    machine.update_status()
 }
 
 type HasNixpkgs = bool;

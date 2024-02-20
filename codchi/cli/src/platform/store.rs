@@ -25,28 +25,27 @@ pub trait Store: Sized {
             r#"{{
   inputs.codchi.url = "{CODCHI_FLAKE_URL}";
   outputs = {{ codchi, ... }}: {{
-    packages.{NIX_SYSTEM}.default = codchi.packages.{NIX_SYSTEM}.{NIX_STORE_PACKAGE}.config.system.build.runtime;
+    packages.{NIX_SYSTEM}.default = codchi.packages.{NIX_SYSTEM}.{NIX_STORE_PACKAGE}.config.build.runtime;
   }};
 }}"#
         );
         fs::write(flake_path, flake_content)?;
 
-        with_spinner("Starting store container...", |spinner| {
-            spinner.update_after_time(
-                "Starting store container. This may take a while the first time...",
-                Duration::from_secs(10),
-            );
-            let store = Self::start_or_init_container(private::Private)?;
+        with_spinner(
+            "Starting store container. This may take a while the first time...",
+            |_| {
+                let store = Self::start_or_init_container(private::Private)?;
 
-            while store
-                .cmd()
-                .run(Command::new("nix", &["store", "ping", "--store", "daemon"]))
-                .is_err()
-            {
-                thread::sleep(Duration::from_millis(250));
-            }
-            Ok(store)
-        })
+                while store
+                    .cmd()
+                    .run(Command::new("nix", &["store", "ping", "--store", "daemon"]))
+                    .is_err()
+                {
+                    thread::sleep(Duration::from_millis(250));
+                }
+                Ok(store)
+            },
+        )
     }
 
     /// Get driver for running commands inside store

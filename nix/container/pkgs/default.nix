@@ -32,4 +32,18 @@ _self: super: {
     meta.mainProgram = name;
   };
 
+  writeLoginShellScriptBinStatic = name: text: super.writeTextFile {
+    inherit name;
+    executable = true;
+    destination = "/bin/${name}";
+    text = ''
+      #!/bin/bash -l
+      ${text}
+    '';
+    checkPhase = ''
+      ${super.stdenv.shellDryRun} "$target"
+    '';
+    meta.mainProgram = name;
+  };
+
 }

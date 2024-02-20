@@ -1,17 +1,27 @@
-use std::{fmt::Display, str::FromStr};
+pub use self::module::*;
 
 use clap::builder::*;
 use clap::*;
-use clap_verbosity_flag::{Verbosity, WarnLevel};
+use clap_verbosity_flag::{InfoLevel, LogLevel, Verbosity};
 use git_url_parse::GitUrl;
 use lazy_regex::regex_captures;
+use log::Level;
+use once_cell::sync::Lazy;
+use std::{fmt::Display, str::FromStr, sync::OnceLock};
 
-// pub use self::ctrl::*;
-pub use self::module::*;
+#[allow(dead_code)]
+pub static CLI_ARGS: OnceLock<Cli> = OnceLock::new();
+#[allow(dead_code)]
+pub static DEBUG: Lazy<bool> = Lazy::new(|| {
+    CLI_ARGS
+        .get()
+        .and_then(|cli| cli.verbose.log_level())
+        .or(<DefaultLogLevel as LogLevel>::default())
+        .unwrap()
+        > Level::Debug
+});
 
-// pub static CLI_ARGS: OnceCell<Cli> = OnceCell::new();
-
-type DefaultLogLevel = WarnLevel;
+type DefaultLogLevel = InfoLevel;
 
 /// codchi
 #[derive(Debug, Parser, Clone)]
@@ -21,7 +31,7 @@ type DefaultLogLevel = WarnLevel;
     long_version = format!("v{}\n{}",
         option_env!("CARGO_PKG_VERSION").unwrap_or(""),
         option_env!("CODCHI_GIT_COMMIT").unwrap_or(""),
-    )
+    ),
 )]
 pub struct Cli {
     #[command(flatten)]
@@ -40,7 +50,6 @@ pub enum Cmd {
     // #[command(subcommand)]
     // #[clap(aliases = &["ctrl"])]
     // Controller(ControllerCmd),
-
     Status {},
 
     /// Create a new code machine
@@ -53,6 +62,17 @@ pub enum Cmd {
         options: AddModuleOptions,
     },
 
+    /// Execute (interactive) command inside machine.
+    #[clap(aliases = &["run"])]
+    Exec {
+        /// Name of the code machine
+        name: String,
+
+        /// Command with arguments to run
+        #[arg(trailing_var_arg = true)]
+        cmd: Vec<String>,
+    },
+
     /// Apply changes to a code machine
     Rebuild {
         /// Name of the code machine
@@ -61,6 +81,16 @@ pub enum Cmd {
 
     /// Check for updates
     Update {
+        /// Name of the code machine
+        name: String,
+    },
+
+    /// Delete code machine with all associated files
+    Delete {
+        /// Don't prompt for confirmation and delete immediately
+        #[arg(long)]
+        im_really_sure: bool,
+
         /// Name of the code machine
         name: String,
     },
@@ -147,12 +177,11 @@ mod module {
             /// Id of the module (You can list them with `codchi module ls NAME`)
             id: usize,
         },
-
-        /// Fetch module updates
-        Update {
-            /// Name of the code machine
-            name: String,
-        },
+        // /// Fetch module updates
+        // Update {
+        // /// Name of the code machine
+        // name: String,
+        // },
     }
 
     #[derive(clap::Args, Debug, Clone)]

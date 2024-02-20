@@ -1,4 +1,8 @@
-use std::{io, process::ExitStatus, str::FromStr};
+use std::{
+    io,
+    process::{exit, ExitStatus},
+    str::FromStr,
+};
 use thiserror::Error;
 
 use crate::util::UtilExt;
@@ -49,25 +53,22 @@ fn to_result(cmd: Command, output: std::process::Output) -> Result<Vec<u8>> {
 #[derive(Debug, Clone)]
 pub struct Command {
     pub program: Program,
-    pub uid: Option<usize>,
+    pub user: Option<LinuxUser>,
     pub cwd: Option<String>,
-    pub input: Option<String>,
     pub output: Output,
 }
 
 #[derive(Debug, Clone)]
 pub enum Program {
-    Single { program: String, args: Vec<String> },
+    // Raw { program: String, args: Vec<String> },
+    Run { program: String, args: Vec<String> },
     Script(String),
 }
 
-impl Program {
-    fn needs_stdin(&self) -> bool {
-        match self {
-            Program::Script(_) => true,
-            _ => false,
-        }
-    }
+#[derive(Debug, Clone)]
+pub enum LinuxUser {
+    Root,
+    Default,
 }
 
 #[derive(Debug, Clone)]
@@ -80,13 +81,12 @@ pub enum Output {
 impl Command {
     pub fn new(program: &str, args: &[&str]) -> Self {
         Self {
-            program: Program::Single {
+            program: Program::Run {
                 program: program.to_string(),
                 args: args.iter().map(|arg| arg.to_string()).collect(),
             },
-            uid: None,
+            user: None,
             cwd: None,
-            input: None,
             output: Output::Collect,
         }
     }
@@ -94,17 +94,16 @@ impl Command {
     pub fn script(script: String) -> Self {
         Self {
             program: Program::Script(script),
-            uid: None,
+            user: None,
             cwd: None,
-            input: None,
             output: Output::Collect,
         }
     }
 
-    // pub fn uid(mut self, uid: usize) -> Self {
-    //     self.uid = Some(uid);
-    //     self
-    // }
+    pub fn user(mut self, user: LinuxUser) -> Self {
+        self.user = Some(user);
+        self
+    }
 
     pub fn cwd<P: AsRef<Path>>(mut self, cwd: P) -> Self {
         self.cwd = Some(
@@ -124,14 +123,21 @@ impl Command {
 }
 
 pub trait CommandDriver {
-    fn build(&self, uid: Option<usize>, cwd: Option<String>) -> std::process::Command;
+    fn build(&self, uid: Option<LinuxUser>, cwd: Option<String>) -> std::process::Command;
 
     fn spawn(&self, spec: Command) -> Result<Child> {
-        let mut cmd = self.build(spec.uid, spec.cwd);
+        let mut cmd = self.build(spec.user, spec.cwd);
         // let mut cmd = std::process::Command::new("cat");
 
         let stdin = match spec.program {
-            Program::Single { program, args } => {
+            // Program::Raw { program, args } => {
+            //     cmd.arg(program);
+            //     for arg in args.iter() {
+            //         cmd.arg(arg);
+            //     }
+            //     None
+            // }
+            Program::Run { program, args } => {
                 cmd.args(&["run", &program]);
                 for arg in args.iter() {
                     cmd.arg(arg);
@@ -182,6 +188,10 @@ pub trait CommandDriver {
     fn run(&self, spec: Command) -> Result<()> {
         self.output(spec)?;
         Ok(())
+    }
+
+    fn exec(&self, spec: Command) -> Result<()> {
+        exit(self.spawn(spec)?.wait()?.code().unwrap_or(1))
     }
 
     fn output_json<T>(&self, spec: Command) -> Result<T>

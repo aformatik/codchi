@@ -17,14 +17,14 @@ let inherit (lib) mkEnableOption mkIf;
 in
 {
 
-  options.driver.lxd = {
+  options.store.driver.lxd = {
     enable = mkEnableOption "LXD specific settings";
   };
 
-  config.system = mkIf config.driver.lxd.enable {
+  config = mkIf config.store.driver.lxd.enable {
     files."/usr/share/udhcpc/default.script" = udhcpcScript;
     # these should automatically fork to bg
-    init.filesystem = lib.mkAfter /* bash */ ''
+    store.init.filesystem = lib.mkAfter /* bash */ ''
       syslogd
       udhcpc -S -s /usr/share/udhcpc/default.script
     '';

@@ -9,6 +9,7 @@
 , lib
 
 , store-lxd-tarball
+, machine-lxd-tarball
 , platform
 
 , makeRustPlatform
@@ -178,7 +179,8 @@ let
       # targetCargo = "X86_64-UNKNOWN-LINUX-GNU";
       CARGO_BUILD_TARGET = "x86_64-unknown-linux-gnu";
 
-      CODCHI_LXD_CTRL_ROOTFS = store-lxd-tarball;
+      CODCHI_LXD_CONTAINER_STORE = store-lxd-tarball;
+      CODCHI_LXD_CONTAINER_MACHINE = machine-lxd-tarball;
 
       passthru = {
         inherit xwin;

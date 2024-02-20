@@ -4,6 +4,7 @@
 
 , codchi
 
+, nixd
 , nixpkgs-fmt
 , strace
 , gdb
@@ -27,7 +28,7 @@ let
       shellHook = codchi.passthru.setupXWin "$(git rev-parse --show-toplevel)";
     };
     linux = {
-      inherit (codchi) CODCHI_LXD_CTRL_ROOTFS;
+      inherit (codchi) CODCHI_LXD_CONTAINER_STORE CODCHI_LXD_CONTAINER_MACHINE;
       LD_LIBRARY_PATH = lib.makeLibraryPath codchi.buildInputs;
     };
   }.${platform};
@@ -39,9 +40,11 @@ mkShell (lib.recursiveUpdate
   inputsFrom = [ codchi ];
 
   packages = [
+    nixd
+    nixpkgs-fmt
+
     codchi.passthru.rust
     codchi.passthru.nix-git
-    nixpkgs-fmt
     strace
     gdb
     gdbgui
@@ -63,6 +66,7 @@ mkShell (lib.recursiveUpdate
       ${codchi.passthru.xwin}/bin/xwin --accept-license --cache-dir "$CACHE" download
       cat "$CACHE"/dl/manifest*.json
     '')
+
   ] ++ (codchi.nativeBuildInputs or [ ]);
 
   shellHook = ''

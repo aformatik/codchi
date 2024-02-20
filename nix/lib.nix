@@ -32,7 +32,7 @@ rec {
   codeMachine =
     {
       # driver :: null | "wsl" | "lxd"
-      # null is for migrating away from codchi
+      # TODO null is for migrating away from codchi
       driver
       # system :: "x86_64-linux" | "aarch64-linux"
     , system
@@ -40,17 +40,20 @@ rec {
     , nixpkgs
       # modules :: [{ module :: NixOS Module, extraArgs :: Attr Set }]
     , modules
-    , ...
+      # , ...
     }: nixpkgs.lib.nixosSystem {
       inherit system;
       modules =
-        map
-          # TODO consider adding specialArgs of other codchiModules for example as global.NAME
-          ({ module, specialArgs ? { } }: overrideModuleArgs specialArgs module)
-          ([{ module = ./modules; specialArgs.inputs.nixpkgs = nixpkgs; }]
-          ++ modules)
+        # map
+        #   # TODO consider adding specialArgs of other codchiModules for example as global.NAME
+        #   ({ module, specialArgs ? { } }: overrideModuleArgs specialArgs module)
+        #   ([{ module = ./nixos; specialArgs.inputs.nixpkgs = nixpkgs; }] ++ modules)
+        modules ++ [
+          ./nixos
+          { _module.args.inputs = { inherit nixpkgs; }; }
+        ]
         ++
-        nixpkgs.lib.optional (driver != null) { codchi.internal.${driver}.enable = true; }
+        nixpkgs.lib.optional (driver != null) { codchi.driver.${driver}.enable = true; }
       ;
     };
 

@@ -1,7 +1,7 @@
 { config, pkgs, lib, ... }:
 let
   inherit (lib) mkIf;
-  cfg = config.codchi.internal.wsl;
+  cfg = config.codchi.driver.wsl;
 in
 {
   config = mkIf cfg.enable {
@@ -60,9 +60,8 @@ in
           };
 
           wslExplorer = pkgs.writeShellScriptBin "wsl-explorer" ''
-            set -e
-            set -o pipefail
-            explorer.exe "$(wslpath -w "$1")"
+            set -euo pipefail
+            exec explorer.exe "$(wslpath -w "$1")"
           '';
         };
 

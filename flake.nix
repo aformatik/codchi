@@ -16,30 +16,33 @@
         inherit system;
         overlays = [
           (import rust-overlay)
-          (self: _:
-            let
+          (self: _: {
+            codchi = self.callPackage ./codchi { inherit (inputs) self; platform = "linux"; };
+            codchi-windows = self.callPackage ./codchi { inherit (inputs) self; platform = "win"; };
 
-              mkStore = driver: (import ./nix/store
-                {
-                  inherit inputs;
-                  inherit (nixpkgs) lib;
-                  pkgs = self;
-                }
-                {
-                  config.driver.${driver}.enable = true;
-                }
-              );
-            in
-            {
-              codchi = self.callPackage ./codchi { inherit (inputs) self; platform = "linux"; };
-              codchi-windows = self.callPackage ./codchi { inherit (inputs) self; platform = "win"; };
+            mkContainer = type: driver: (import ./nix/container
+              {
+                inherit inputs;
+                inherit (nixpkgs) lib;
+                pkgs = self;
+              }
+              {
+                config.${type} = {
+                  enable = true;
+                  driver.${driver}.enable = true;
+                };
+              }
+            );
+            store-lxd = self.mkContainer "store" "lxd";
+            store-lxd-tarball = self.store-lxd.config.build.tarball;
+            store-wsl = self.mkContainer "store" "wsl";
+            store-wsl-tarball = self.store-wsl.config.build.tarball;
 
-              store-lxd = mkStore "lxd";
-              store-lxd-tarball = self.store-lxd.config.system.build.tarball;
-              store-wsl = mkStore "wsl";
-              store-wsl-tarball = self.store-wsl.config.system.build.tarball;
-            })
-          (import ./nix/pkgs)
+            machine-lxd = self.mkContainer "machine" "lxd";
+            machine-lxd-tarball = self.machine-lxd.config.build.tarball;
+            machine-wsl = self.mkContainer "machine" "wsl";
+            machine-wsl-tarball = self.machine-wsl.config.build.tarball;
+          })
         ];
         config.allowUnfree = true;
       };
@@ -56,10 +59,11 @@
         {
           inherit lib;
 
-          nixosModules.default = import ./nix/modules;
+          nixosModules.default = import ./nix/nixos;
           nixosModules.codchi = {
             nixpkgs.config.allowUnfree = true;
             environment.systemPackages = [ pkgs.vscodium ];
+            programs.neovim.enable = true;
             programs.direnv = {
               enable = true;
               nix-direnv.enable = true;
@@ -67,7 +71,7 @@
           };
 
           packages.${system} = {
-            inherit (pkgs) store-lxd store-wsl;
+            inherit (pkgs) store-lxd store-wsl machine-lxd machine-wsl;
             default = pkgs.codchi;
             windows = pkgs.codchi-windows;
           };
@@ -114,8 +118,8 @@
               flip mapAttrs exampleModules
                 (_: module: lib.codeMachine {
                   inherit system driver nixpkgs;
-                  specialArgs.inputs = inputs;
-                  codchiModules = [{ inherit module; }];
+                  # specialArgs.inputs = inputs;
+                  modules = [ module ];
                 });
           in
           {

@@ -97,3 +97,14 @@ pub mod machine {
         format!("codchi-{name}")
     }
 }
+
+pub mod user {
+    pub const ROOT_UID: &str = "0";
+    pub const ROOT_GID: &str = "0";
+    pub const ROOT_HOME: &str = "/root";
+
+    pub const DEFAULT_NAME: &str = "codchi";
+    pub const DEFAULT_HOME: &str = "/home/codchi";
+    pub const DEFAULT_UID: &str = "1000";
+    pub const DEFAULT_GID: &str = "100";
+}

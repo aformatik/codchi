@@ -1,5 +1,6 @@
 use crate::{
-    consts::{self, host, ToPath, NIX_SYSTEM}, platform, util::UtilExt
+    consts::{host, ToPath},
+    util::UtilExt,
 };
 use anyhow::{Context, Result};
 use fs4::FileExt;
@@ -56,6 +57,8 @@ impl MutableConfig {
     }
 
     pub fn write(mut self) -> Result<()> {
+        self.get_machines().set_implicit(false);
+
         let res = self.doc.to_string();
         let bytes = res.as_bytes();
         self.file.set_len(bytes.len() as u64)?;
@@ -68,11 +71,9 @@ impl MutableConfig {
         if !self.doc.contains_table("machines") {
             self.doc["machines"] = table();
         }
-        let table = self.doc["machines"]
+        self.doc["machines"]
             .as_table_mut()
-            .expect("Config toml doesn't contain key 'machines'");
-        table.set_implicit(true);
-        table
+            .expect("Config toml doesn't contain key 'machines'")
     }
 
     pub fn get_machine(&mut self, name: &str) -> Option<&mut toml_edit::Table> {
@@ -133,57 +134,6 @@ pub struct MachineConfig {
     pub nixpkgs_from: Option<usize>,
     #[serde_as(as = "Vec<DisplayFromStr>")]
     pub modules: Vec<CodchiModule>,
-}
-
-impl MachineConfig {
-    pub fn read_config(name: &str) -> Result<Option<Self>> {
-        Ok(Config::read()?.machines.get(name).cloned())
-    }
-
-    pub fn gen_flake(&self) -> String {
-        let codchi_url = consts::CODCHI_FLAKE_URL;
-        let module_inputs = self
-            .modules
-            .iter()
-            .enumerate()
-            .map(|(idx, url)| format!(r#"    "{idx}".url = "{}";"#, url.to_nix_url()))
-            .join("\n");
-        let driver = platform::NIXOS_DRIVER_NAME;
-        let nixpkgs = if let Some(idx) = self.nixpkgs_from {
-            format!(r#"inputs."{idx}".inputs.nixpkgs"#)
-        } else {
-            "inputs.codchi.inputs.nixpkgs".to_string()
-        };
-        let modules = self
-            .modules
-            .iter()
-            .enumerate()
-            .map(|(idx, url)| {
-                format!(
-                    r#"        {{ module = inputs."{idx}".{module_name}; }}"#,
-                    module_name = url.flake_attr.0
-                )
-            })
-            .join("\n");
-        format!(
-            r#"{{
-  inputs = {{
-    codchi.url = "{codchi_url}";
-{module_inputs}
-  }};
-  outputs = inputs: {{
-    nixosConfigurations.default = inputs.codchi.lib.codeMachine {{
-      driver = "{driver}";
-      system = "{NIX_SYSTEM}";
-      nixpkgs = {nixpkgs};
-      modules = [
-{modules}
-      ];
-    }};
-  }};
-}}"#
-        )
-    }
 }
 
 pub type CodchiModule = FlakeUrl<flake_attr::With>;
