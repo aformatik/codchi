@@ -10,9 +10,9 @@ mod platform;
 pub use self::cmd::*;
 pub use self::machine::*;
 pub use self::nix::NixDriver;
-use self::platform::StoreImpl;
 pub use self::store::*;
 
+use self::platform::StoreImpl;
 use anyhow::Result;
 use std::sync::OnceLock;
 

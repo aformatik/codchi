@@ -4,11 +4,10 @@ use crate::{
         flake_attr, CodchiModule, Config, FlakeScheme, FlakeUrl, MachineConfig, MutableConfig,
     },
     platform::{nix::NixDriver, *},
-    util::UtilExt,
+    util::with_spinner,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use git_url_parse::Scheme;
-use spinoff::{spinners, Color, Spinner};
 use std::fmt::Display;
 use toml_edit::{ser::to_document, Key};
 
@@ -176,16 +175,9 @@ pub fn fetch_module(opts: &AddModuleOptions) -> Result<(CodchiModule, HasNixpkgs
     let flake_url = inquire_module_url(&opts)?;
     let nix_url = flake_url.to_nix_url();
 
-    let mut spinner = Spinner::new_with_stream(
-        spinners::Dots,
-        "Fetching available modules...",
-        Color::Blue,
-        spinoff::Streams::Stderr,
-    );
-    let available_modules = Driver::store()
-        .cmd()
-        .list_nixos_modules(&nix_url)
-        .finally(|| spinner.clear())?;
+    let available_modules = with_spinner("Fetching available modules...", |_| {
+        Driver::store().cmd().list_nixos_modules(&nix_url)
+    })?;
 
     if available_modules.is_empty() {
         bail!("The repository at '{nix_url}' contains no modules.");

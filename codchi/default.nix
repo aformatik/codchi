@@ -174,6 +174,9 @@ let
         cp target/${CARGO_BUILD_TARGET}/*/*.exe $out/bin
       '';
 
+      CODCHI_WSL_VERSION_MIN = "2.0.14";
+      CODCHI_WSL_VERSION_MAX = "2.0.14";
+
     };
     linux = rec {
       # targetCargo = "X86_64-UNKNOWN-LINUX-GNU";

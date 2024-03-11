@@ -1,6 +1,10 @@
-use super::{platform, private, Command, CommandDriver, NixDriver};
+use super::{
+    platform::{self},
+    private, CommandExt, LinuxCommandTarget, NixDriver,
+};
 use crate::{consts::*, util::with_spinner};
 use anyhow::Result;
+use log::info;
 use std::{fs, thread, time::Duration};
 
 /// Internal name of driver module in codchi's NixOS modules
@@ -38,7 +42,8 @@ pub trait Store: Sized {
 
                 while store
                     .cmd()
-                    .run(Command::new("nix", &["store", "ping", "--store", "daemon"]))
+                    .run("nix", &["store", "ping", "--store", "daemon"])
+                    .wait_ok()
                     .is_err()
                 {
                     thread::sleep(Duration::from_millis(250));
@@ -49,5 +54,5 @@ pub trait Store: Sized {
     }
 
     /// Get driver for running commands inside store
-    fn cmd(&self) -> impl CommandDriver + NixDriver;
+    fn cmd(&self) -> impl LinuxCommandTarget + NixDriver;
 }

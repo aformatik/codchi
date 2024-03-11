@@ -1,4 +1,8 @@
 {
     "editor.formatOnSave": true,
     "files.autoSave": "onFocusChange",
+    "rust-analyzer.linkedProjects": [
+        "./codchi/cli/Cargo.toml"
+    ],
+    "rust-analyzer.showUnlinkedFileNotification": false,
 }

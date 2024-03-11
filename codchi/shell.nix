@@ -24,7 +24,11 @@ let
 
   native = {
     win = {
-      inherit (codchi) CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER;
+      inherit (codchi)
+        CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER
+        CODCHI_WSL_VERSION_MIN
+        CODCHI_WSL_VERSION_MAX
+        ;
       shellHook = codchi.passthru.setupXWin "$(git rev-parse --show-toplevel)";
     };
     linux = {

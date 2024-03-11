@@ -77,7 +77,6 @@ pub mod container {
 
     use anyhow::Context;
     use itertools::Itertools;
-    use log::warn;
 
     use crate::{
         consts::{user, ToPath},
@@ -246,7 +245,7 @@ pub mod container {
             Ok(())
         })()
         .map_err(|err| {
-            warn!("Removing leftovers of LXD container {name}...");
+            log::error!("Removing leftovers of LXD container {name}...");
             let _ = image::delete(&name);
             let _ = container::delete(&name, true);
             err

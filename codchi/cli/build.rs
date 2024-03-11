@@ -30,6 +30,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     {
+        if let Ok(wsl_ver_min) = env::var("CODCHI_WSL_VERSION_MIN") {
+            println!("cargo:rustc-env=CODCHI_WSL_VERSION_MIN={wsl_ver_min}",);
+        }
+
+        if let Ok(wsl_ver_max) = env::var("CODCHI_WSL_VERSION_MAX") {
+            println!("cargo:rustc-env=CODCHI_WSL_VERSION_MAX={wsl_ver_max}",);
+        }
+
         let commit = build_data::exec("nix-git-commit", &[]).unwrap();
         println!("cargo:rustc-env=CODCHI_GIT_COMMIT={}", commit);
         build_data::set_SOURCE_TIMESTAMP();

@@ -7,6 +7,11 @@
       url = "github:oxalica/rust-overlay";
       flake = false; # prevent fetching transitive inputs TODO
     };
+    nixvim = {
+      url = "github:nix-community/nixvim";
+      # inputs.nixpkgs.follows = "nixpkgs";
+    };
+
   };
 
   outputs = inputs@{ self, nixpkgs, rust-overlay, ... }:
@@ -42,7 +47,11 @@
             machine-lxd-tarball = self.machine-lxd.config.build.tarball;
             machine-wsl = self.mkContainer "machine" "wsl";
             machine-wsl-tarball = self.machine-wsl.config.build.tarball;
+
+
+            nixvim = { inherit (inputs.nixvim.legacyPackages.${system}) makeNixvim; };
           })
+          #(inputs.nixvim.overlays.default)
         ];
         config.allowUnfree = true;
       };
@@ -60,10 +69,13 @@
           inherit lib;
 
           nixosModules.default = import ./nix/nixos;
-          nixosModules.codchi = {
+          nixosModules.codchi = { pkgs, ... }: {
             nixpkgs.config.allowUnfree = true;
             environment.systemPackages = [ pkgs.vscodium ];
-            programs.neovim.enable = true;
+            programs.neovim = {
+              enable = true;
+              package = pkgs.nixvim.makeNixvim (import ./editor.nix);
+            };
             programs.direnv = {
               enable = true;
               nix-direnv.enable = true;

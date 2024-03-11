@@ -1,5 +1,7 @@
-use spinoff::*;
-use std::{borrow::Cow, thread, time::Duration};
+use indicatif::ProgressBar;
+use std::{borrow::Cow, fs, io, path::Path, thread, time::Duration};
+
+use crate::ROOT_PROGRESS_BAR;
 
 pub trait UtilExt {
     fn finally<F>(self, f: F) -> Self
@@ -46,10 +48,27 @@ where
 pub fn with_spinner<A, E, T, F>(msg: T, f: F) -> Result<A, E>
 where
     T: Into<Cow<'static, str>>,
-    F: Fn(&mut Spinner) -> Result<A, E>,
+    F: Fn(&mut ProgressBar) -> Result<A, E>,
 {
-    let mut spinner =
-        Spinner::new_with_stream(spinners::Dots, msg, Color::Blue, spinoff::Streams::Stderr);
+    let root = ROOT_PROGRESS_BAR
+        .get()
+        .expect("Root progressbar for logger not initialized.");
+    let mut spinner = root.add(ProgressBar::new_spinner());
 
-    f(&mut spinner).finally(|| spinner.clear())
+    spinner.enable_steady_tick(Duration::from_millis(100));
+    spinner.set_message(msg);
+
+    f(&mut spinner).finally(|| {
+        spinner.finish();
+        root.remove(&spinner);
+    })
+}
+
+pub fn make_writeable_if_exists<P: AsRef<Path>>(path: P) -> io::Result<()> {
+    if let Ok(metadata) = fs::metadata(&path) {
+        let mut perms = metadata.permissions();
+        perms.set_readonly(false);
+        fs::set_permissions(&path, perms)?;
+    };
+    Ok(())
 }

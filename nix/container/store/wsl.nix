@@ -9,11 +9,13 @@ in {
   config = mkIf config.store.driver.wsl.enable {
     files."etc/wsl.conf" = pkgs.writeText "wsl.conf" (lib.generators.toINI { } {
       automount.mountFsTab = false;
-      boot.command = "/bin/run /sbin/init";
+      # WSL doesn't respect boot.command. Therefore we have no automatic init
+      # system and start services manually
+      # boot.command = "/bin/run /sbin/init";
     });
     store.init.filesystem = lib.mkAfter /* bash */ ''
-      if [ -z "$CODCHI_IS_STORE" ]; then
-        echo "This distribution is only meant to be started by codchi.exe!"
+      if [ -z "''${CODCHI_IS_STORE:-}" ]; then
+        logE "This distribution is only meant to be started by codchi.exe!"
         exit 1
       fi
     
@@ -42,5 +44,13 @@ in {
       fi
       trap "umount -f /mnt/wsl/codchi" EXIT
     '';
+
+    # this is needed to keep WSL running (otherwise it shuts down after 8 sec.)
+    runtimePackages = with pkgs; [ daemonize ];
+
+    store.init.services = lib.mkForce /* bash */ ''
+      daemonize $(which nix) daemon
+    '';
   };
 }
+

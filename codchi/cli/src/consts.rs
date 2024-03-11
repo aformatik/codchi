@@ -1,10 +1,11 @@
 // use anyhow::{Context, Result};
-use directories::ProjectDirs;
 use once_cell::sync::Lazy;
 use std::{
     env, fs, io,
     path::{Path, PathBuf},
 };
+
+pub const APP_NAME: &str = "codchi";
 
 pub static GIT_BRANCH: &str = env!("CODCHI_GIT_BRANCH");
 pub static CODCHI_FLAKE_URL: &str = concat!("github:aformatik/codchi/", env!("CODCHI_GIT_BRANCH"));
@@ -54,23 +55,24 @@ impl ToPath for PathBuf {
 }
 
 pub mod host {
+    use directories::BaseDirs;
+
     use super::*;
-    static CODCHI_PROJ_DIR: Lazy<ProjectDirs> =
-        Lazy::new(|| ProjectDirs::from("dev", "codchi", "codchi").unwrap());
+    static CODCHI_PROJ_DIR: Lazy<BaseDirs> = Lazy::new(|| BaseDirs::new().unwrap());
     pub static DIR_CONFIG: Lazy<PathBuf> = Lazy::new(|| {
         env::var_os("CODCHI_CONFIG_DIR")
             .map(PathBuf::from)
-            .unwrap_or_else(|| CODCHI_PROJ_DIR.config_dir().to_path_buf())
+            .unwrap_or_else(|| CODCHI_PROJ_DIR.config_dir().join(APP_NAME))
     });
     pub static DIR_DATA: Lazy<PathBuf> = Lazy::new(|| {
         env::var_os("CODCHI_DATA_DIR")
             .map(PathBuf::from)
-            .unwrap_or_else(|| CODCHI_PROJ_DIR.data_local_dir().to_path_buf())
+            .unwrap_or_else(|| CODCHI_PROJ_DIR.data_local_dir().join(APP_NAME))
     });
     pub static DIR_NIX: Lazy<PathBuf> = Lazy::new(|| {
         env::var_os("CODCHI_NIX_DIR")
             .map(PathBuf::from)
-            .unwrap_or_else(|| CODCHI_PROJ_DIR.cache_dir().join("/nix").to_path_buf())
+            .unwrap_or_else(|| CODCHI_PROJ_DIR.cache_dir().join(APP_NAME).join("/nix"))
     });
     pub static DIR_RUNTIME: Lazy<PathBuf> = Lazy::new(|| {
         env::var_os("CODCHI_RUNTIME_DIR")
@@ -79,7 +81,8 @@ pub mod host {
                 CODCHI_PROJ_DIR
                     .runtime_dir()
                     .map(Path::to_path_buf)
-                    .unwrap_or_else(|| env::temp_dir().join("codchi"))
+                    .unwrap_or_else(|| env::temp_dir())
+                    .join(APP_NAME)
             })
     });
 }
@@ -107,4 +110,9 @@ pub mod user {
     pub const DEFAULT_HOME: &str = "/home/codchi";
     pub const DEFAULT_UID: &str = "1000";
     pub const DEFAULT_GID: &str = "100";
+}
+
+pub mod files {
+    pub const STORE_ROOTFS_NAME: &str = "store.tar.gz";
+    pub const MACHINE_ROOTFS_NAME: &str = "machine.tar.gz";
 }

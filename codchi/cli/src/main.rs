@@ -5,11 +5,14 @@ use crate::{
     cli::{Cli, Cmd, CLI_ARGS},
     platform::{ConfigStatus, Driver, Machine, PlatformStatus},
 };
+use anyhow::Context;
 use base64::{prelude::BASE64_STANDARD, Engine};
 use clap::*;
 use colored as _;
+use indicatif::MultiProgress;
+use indicatif_log_bridge::LogWrapper;
 use log::*;
-use std::env;
+use std::{env, sync::OnceLock};
 
 pub mod cli;
 pub mod config;
@@ -18,15 +21,21 @@ pub mod module;
 pub mod platform;
 pub mod util;
 
+pub static ROOT_PROGRESS_BAR: OnceLock<MultiProgress> = OnceLock::new();
+
 fn main() -> anyhow::Result<()> {
     human_panic::setup_panic!();
 
     let cli = Cli::parse();
 
-    env_logger::Builder::new()
+    let logger = env_logger::Builder::new()
         .filter_level(cli.verbose.log_level_filter())
         .parse_env("CODCHI_LOG")
-        .init();
+        .build();
+    let root_pb = ROOT_PROGRESS_BAR.get_or_init(MultiProgress::new);
+    LogWrapper::new(root_pb.clone(), logger)
+        .try_init()
+        .context("Failed initializing logger")?;
 
     trace!("Started codchi with args: {:?}", cli);
 
@@ -38,7 +47,7 @@ fn main() -> anyhow::Result<()> {
 
     match &cli.command.unwrap_or(Cmd::Status {}) {
         Cmd::Status {} => print_status(Machine::list()?),
-        Cmd::Init { empty, options } => alert_dirty(module::init(*empty, &options)?),
+        Cmd::Init { empty, options } => alert_dirty(module::init(*empty, options)?),
         Cmd::Rebuild { name } => Machine::by_name(name)?.build()?,
         Cmd::Update { name } => alert_dirty(Machine::by_name(name)?.update()?),
         Cmd::Exec { name, cmd } => Machine::by_name(name)?.exec(cmd)?,

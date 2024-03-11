@@ -1,17 +1,16 @@
-use super::{private::Private, LinuxUser};
+use super::{private::Private, LinuxCommandTarget, LinuxUser};
 use crate::{
     config::{Config, MachineConfig, MutableConfig},
     consts::{self, host, store, user, ToPath},
-    platform::{self, Command, CommandDriver, Driver, Store},
+    platform::{self, CommandExt, Driver, Store},
     util::with_spinner,
 };
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
-use platform::Output;
 use std::{fs, thread, time::Duration};
 
 pub trait MachineDriver: Sized {
-    fn cmd(&self) -> impl CommandDriver;
+    fn cmd(&self) -> impl LinuxCommandTarget;
 
     /// Read if container is running / stopped / not installed
     fn read_platform_status(name: &str, _: Private) -> Result<PlatformStatus>;
@@ -71,8 +70,9 @@ impl Machine {
             {
                 NotInstalled
             } else {
-                Driver::store().cmd().output_from_str(
-                    Command::script(format!(
+                Driver::store()
+                    .cmd()
+                    .script(format!(
                         /* bash */
                         r#"
 set -x
@@ -85,8 +85,8 @@ else
 fi
 "#,
                     ))
-                    .cwd(store::DIR_CONFIG.join_machine(&self.name)),
-                )?
+                    .with_cwd(store::DIR_CONFIG.join_machine(&self.name))
+                    .output_from_str()?
             }
         };
         Ok(self)
@@ -171,8 +171,9 @@ fi
         fs::write(&machine_dir.join("flake.nix"), flake)?;
 
         with_spinner("Initializing machine...", |_| {
-            Driver::store().cmd().run(
-                Command::script(format!(
+            Driver::store()
+                .cmd()
+                .script(format!(
                     /* bash */
                     r#"
 if [ ! -d .git ]; then
@@ -181,8 +182,8 @@ if [ ! -d .git ]; then
 fi
 "#
                 ))
-                .cwd(store::DIR_CONFIG.join_machine(&self.name)),
-            )
+                .with_cwd(store::DIR_CONFIG.join_machine(&self.name))
+                .wait_ok()
         })?;
 
         Ok(())
@@ -191,8 +192,9 @@ fi
     pub fn build(&self) -> Result<()> {
         self.write_flake()?;
         with_spinner(format!("Building {}...", self.name), |spinner| {
-            Driver::store().cmd().run(
-                Command::script(format!(
+            Driver::store()
+                .cmd()
+                .script(format!(
                     /* bash */
                     r#"
 if [ ! -e system ]; then
@@ -204,32 +206,32 @@ pwd
 git add flake.*
 "#
                 ))
-                .cwd(store::DIR_CONFIG.join_machine(&self.name)),
-            )?;
+                .with_cwd(store::DIR_CONFIG.join_machine(&self.name))
+                .wait_ok()?;
 
-            spinner.update_text(format!("Building {}...", self.name));
+            spinner.set_message(format!("Building {}...", self.name));
 
             let status = Self::read_platform_status(&self.name, Private)?;
             if status == PlatformStatus::NotInstalled {
-                spinner.update_text(format!("Installing {}...", self.name));
+                spinner.set_message(format!("Installing {}...", self.name));
                 self.install(Private)?;
 
-                spinner.update_text(format!("Initializing {}...", self.name));
+                spinner.set_message(format!("Initializing {}...", self.name));
                 self.wait_online()?;
-                self.cmd().run(Command::new("poweroff", &[]))?;
+                self.cmd().run("poweroff", &[]).wait_ok()?;
             } else {
                 if status == PlatformStatus::Stopped {
-                    spinner.update_text(format!("Starting {}...", self.name));
+                    spinner.set_message(format!("Starting {}...", self.name));
                     self.start(Private)?;
                     self.wait_online()?;
                 }
-                self.cmd().run(
-                    Command::new(
+                self.cmd()
+                    .run(
                         "/nix/var/nix/profiles/system/bin/switch-to-configuration",
                         &["switch"],
                     )
-                    .user(LinuxUser::Root),
-                )?;
+                    .with_user(LinuxUser::Root)
+                    .wait_ok()?;
             }
             Ok(())
         })
@@ -238,7 +240,8 @@ git add flake.*
     pub fn wait_online(&self) -> Result<()> {
         while self
             .cmd()
-            .run(Command::new("nix", &["store", "ping", "--store", "daemon"]))
+            .run("nix", &["store", "ping", "--store", "daemon"])
+            .wait_ok()
             .is_err()
         {
             thread::sleep(Duration::from_millis(250));
@@ -249,10 +252,11 @@ git add flake.*
     pub fn update(self) -> Result<Self> {
         self.write_flake()?;
         with_spinner(format!("Checking for updates for {}...", self.name), |_| {
-            Driver::store().cmd().run(
-                Command::new("nix", &["flake", "update"])
-                    .cwd(store::DIR_CONFIG.join_machine(&self.name)),
-            )
+            Driver::store()
+                .cmd()
+                .run("nix", &["flake", "update"])
+                .with_cwd(store::DIR_CONFIG.join_machine(&self.name))
+                .wait_ok()
         })?;
 
         self.update_status()
@@ -271,26 +275,27 @@ git add flake.*
         }
 
         with_spinner("", |spinner| {
-            spinner.update_text(format!("Stopping {name}"));
+            spinner.set_message(format!("Stopping {name}"));
             if self.platform_status == PlatformStatus::Running {
                 self.force_stop(Private)?;
             }
-            spinner.update_text(format!("Deleting container of {name}"));
+            spinner.set_message(format!("Deleting container of {name}"));
             if self.platform_status != PlatformStatus::NotInstalled {
                 MachineDriver::delete_container(&self, Private)?;
             }
 
-            spinner.update_text(format!("Deleting files from {name}"));
+            spinner.set_message(format!("Deleting files from {name}"));
             Driver::store()
                 .cmd()
-                .run(Command::new(
+                .run(
                     "rm",
                     &[
                         "-rf",
                         store::DIR_DATA.join_machine(&self.name).to_str().unwrap(),
                         store::DIR_CONFIG.join_machine(&self.name).to_str().unwrap(),
                     ],
-                ))
+                )
+                .wait_ok()
                 .context("Failed deleting data.")?;
 
             let mut cfg = MutableConfig::open()?;
@@ -318,14 +323,13 @@ git add flake.*
         }
 
         let cmd = match cmd.split_first() {
-            Some((cmd, args)) => {
-                Command::new(cmd, &args.iter().map(|str| str.as_str()).collect_vec())
-                    .user(LinuxUser::Default)
-            }
-            None => Command::new("su", &["-l", user::DEFAULT_NAME]),
+            Some((cmd, args)) => self
+                .cmd()
+                .run(cmd, &args.iter().map(|str| str.as_str()).collect_vec())
+                .with_user(LinuxUser::Default),
+            None => self.cmd().run("su", &["-l", user::DEFAULT_NAME]),
         };
-        self.cmd()
-            .exec(cmd.output(Output::Inherit).cwd(user::DEFAULT_HOME))?;
+        cmd.with_cwd(user::DEFAULT_HOME).exec()?;
         Ok(())
     }
 }
