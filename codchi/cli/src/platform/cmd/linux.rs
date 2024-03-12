@@ -1,18 +1,15 @@
 use self::platform::LinuxCommandDriver;
-
 use super::*;
-use anyhow::Context;
 use std::fmt::Debug;
 use std::io::Write;
-use std::{
-    path::Path,
-    process::{Child, Stdio},
-};
+use std::process::{Child, Stdio};
 
 pub trait LinuxCommandTarget {
-    fn build(&self, uid: &Option<LinuxUser>, cwd: &Option<String>) -> std::process::Command;
+    fn build(&self, uid: &Option<LinuxUser>, cwd: &Option<LinuxPath>) -> std::process::Command;
 
     fn get_driver(&self) -> LinuxCommandDriver;
+
+    fn quote_shell_arg(&self, arg: &str) -> String;
 
     fn run(&self, program: &str, args: &[&str]) -> LinuxCommandBuilder {
         LinuxCommandBuilder {
@@ -43,7 +40,7 @@ pub struct LinuxCommandBuilder {
     driver: LinuxCommandDriver,
     program: Program,
     user: Option<LinuxUser>,
-    cwd: Option<String>,
+    cwd: Option<LinuxPath>,
     // output: Output,
 }
 
@@ -59,20 +56,17 @@ pub enum LinuxUser {
     Default,
 }
 
+#[derive(Debug, Clone)]
+pub struct LinuxPath(pub String);
+
 impl LinuxCommandBuilder {
     pub fn with_user(mut self, user: LinuxUser) -> Self {
         self.user = Some(user);
         self
     }
 
-    pub fn with_cwd<P: AsRef<Path>>(mut self, cwd: P) -> Self {
-        self.cwd = Some(
-            cwd.as_ref()
-                .to_str()
-                .with_context(|| format!("Invalid UTF in cwd: {self:?}."))
-                .unwrap()
-                .to_string(),
-        );
+    pub fn with_cwd(mut self, cwd: LinuxPath) -> Self {
+        self.cwd = Some(cwd);
         self
     }
 }

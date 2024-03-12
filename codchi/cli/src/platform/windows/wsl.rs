@@ -1,9 +1,14 @@
-use std::{io, process::Command, sync::OnceLock};
+use std::{fs, io, path::PathBuf, process::Command, sync::OnceLock};
 
-use crate::platform::{CommandExt, PlatformStatus};
+use crate::{
+    consts::{self, host, PathExt, ToPath},
+    platform::{CommandExt, PlatformStatus},
+    util::make_writeable_if_exists,
+};
 use anyhow::{anyhow, bail, Context, Result};
 // use codepage_strings::Coding as _;
 use itertools::Itertools;
+use known_folders::{get_known_folder_path, KnownFolder};
 use log::warn;
 use version_compare::Version;
 // use windows::Win32::System::Console::GetConsoleOutputCP as _;
@@ -98,4 +103,46 @@ pub fn get_platform_status(container_name: &str) -> Result<PlatformStatus> {
     } else {
         Ok(PlatformStatus::Stopped)
     }
+}
+
+pub fn import<T, F: Fn() -> Result<T>>(
+    rootfs_name: &str,
+    name: &str,
+    installation_path: PathBuf,
+    additional_setup: F,
+) -> Result<T> {
+    (|| {
+        let msix_path = get_known_folder_path(KnownFolder::ProgramData)
+            .ok_or(anyhow!("FOLDERID_ProgramData missing"))?
+            .join(consts::APP_NAME)
+            .join(rootfs_name);
+        assert!(
+            fs::metadata(&msix_path).is_ok(),
+            "WSL rootfs for {name} missing in MSIX. Search path was: {msix_path:?}"
+        );
+
+        let tmp_path = host::DIR_RUNTIME
+            .join(consts::APP_NAME)
+            .get_or_create()?
+            .join(rootfs_name);
+        make_writeable_if_exists(&tmp_path)?;
+        fs::copy(msix_path, &tmp_path)?;
+
+        wsl_command()
+            .arg("--import")
+            .arg(name)
+            .arg(installation_path.get_or_create()?)
+            .arg(&tmp_path)
+            .wait_ok()?;
+
+        make_writeable_if_exists(&tmp_path)?;
+        fs::remove_file(&tmp_path)?;
+        additional_setup()
+    })()
+    .map_err(|err| {
+        log::error!("Removing leftovers of WSL container {name}...");
+        let _ = wsl_command().arg("--terminate").arg(name).wait_ok();
+        let _ = wsl_command().arg("--unregister").arg(name).wait_ok();
+        err
+    })
 }

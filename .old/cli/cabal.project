@@ -1,4 +1,0 @@
-packages: .
-
-allow-newer:
-    strong-path:template-haskell

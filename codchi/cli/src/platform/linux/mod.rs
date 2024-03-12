@@ -1,4 +1,4 @@
-use super::{private::Private, CommandDriver, LinuxUser, NixDriver, Store};
+use super::{private::Private, LinuxCommandTarget, LinuxPath, LinuxUser, NixDriver, Store};
 use crate::{
     cli::DEBUG,
     consts::{self, machine::machine_name, *},
@@ -6,7 +6,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use log::*;
-use std::{env, path::PathBuf};
+use std::{env, fs, path::PathBuf};
 
 pub mod lxd;
 
@@ -30,15 +30,19 @@ impl Store for StoreImpl {
                 let rootfs = env::var("CODCHI_LXD_CONTAINER_STORE")
                         .map(|dir| PathBuf::from(dir))
                         .context("Failed reading $CODCHI_LXD_CONTAINER_STORE from environment. This indicates a broken build.")?;
-                let mounts = vec![
-                    (
-                        host::DIR_CONFIG.clone(),
-                        store::DIR_CONFIG.to_str().unwrap(),
-                    ),
-                    (host::DIR_DATA.clone(), store::DIR_DATA.to_str().unwrap()),
-                    (host::DIR_NIX.clone(), store::DIR_NIX.to_str().unwrap()),
+                let mounts: Vec<(PathBuf, &str)> = vec![
+                    (host::DIR_CONFIG.clone(), &store::DIR_CONFIG.0),
+                    (host::DIR_DATA.clone(), &store::DIR_DATA.0),
+                    (host::DIR_NIX.clone(), &store::DIR_NIX.0),
                 ];
-                lxd::container::install(consts::CONTAINER_STORE_NAME, &rootfs, mounts)?;
+                lxd::container::install(consts::CONTAINER_STORE_NAME, &rootfs, mounts).map_err(
+                    |err| {
+                        log::error!("Removing leftovers of store files...");
+                        let _ = fs::remove_dir_all(host::DIR_CONFIG.join_store());
+                        let _ = fs::remove_dir_all(host::DIR_DATA.join_store());
+                        err
+                    },
+                )?;
                 Ok(StoreImpl {})
             }
             PlatformStatus::Stopped => {
@@ -51,16 +55,16 @@ impl Store for StoreImpl {
         }
     }
 
-    fn cmd(&self) -> impl CommandDriver + NixDriver {
-        LxdCommandDriver {
+    fn cmd(&self) -> impl LinuxCommandTarget + NixDriver {
+        LinuxCommandDriver {
             name: consts::CONTAINER_STORE_NAME.to_string(),
         }
     }
 }
 
 impl MachineDriver for Machine {
-    fn cmd(&self) -> impl CommandDriver {
-        LxdCommandDriver {
+    fn cmd(&self) -> impl LinuxCommandTarget {
+        LinuxCommandDriver {
             name: machine::machine_name(&self.name),
         }
     }
@@ -88,7 +92,10 @@ impl MachineDriver for Machine {
                 "/nix/var/nix/profiles",
             ),
             (host::DIR_CONFIG.clone(), "/nix/var/nix/profiles/codchi"),
-            (host::DIR_DATA.join_machine(&self.name), user::DEFAULT_HOME),
+            (
+                host::DIR_DATA.join_machine(&self.name),
+                &user::DEFAULT_HOME.0,
+            ),
         ];
         lxd::container::install(&lxd_name, &rootfs, mounts)?;
 
@@ -108,16 +115,18 @@ impl MachineDriver for Machine {
     }
 }
 
-pub struct LxdCommandDriver {
+#[derive(Debug, Clone)]
+pub struct LinuxCommandDriver {
     pub name: String,
 }
-impl CommandDriver for LxdCommandDriver {
-    fn build(&self, user: Option<LinuxUser>, cwd: Option<String>) -> std::process::Command {
+
+impl LinuxCommandTarget for LinuxCommandDriver {
+    fn build(&self, user: &Option<LinuxUser>, cwd: &Option<LinuxPath>) -> std::process::Command {
         let mut cmd = std::process::Command::new("lxc");
         cmd.arg("-q");
         cmd.args(&["exec", &self.name]);
         if let Some(cwd) = &cwd {
-            cmd.args(&["--cwd", &cwd]);
+            cmd.args(&["--cwd", &cwd.0]);
         }
         if *DEBUG {
             cmd.args(&["--env", "CODCHI_DEBUG=1"]);
@@ -142,8 +151,8 @@ impl CommandDriver for LxdCommandDriver {
                 &format!(
                     "HOME={}",
                     match user {
-                        LinuxUser::Root => consts::user::ROOT_HOME,
-                        LinuxUser::Default => consts::user::DEFAULT_HOME,
+                        LinuxUser::Root => &consts::user::ROOT_HOME.0,
+                        LinuxUser::Default => &consts::user::DEFAULT_HOME.0,
                     }
                 ),
             ]);
@@ -151,5 +160,12 @@ impl CommandDriver for LxdCommandDriver {
         cmd.arg("--");
         cmd
     }
+
+    fn get_driver(&self) -> Self {
+        self.clone()
+    }
+
+    fn quote_shell_arg(&self, arg: &str) -> String {
+        arg.to_string()
+    }
 }
-impl NixDriver for LxdCommandDriver {}

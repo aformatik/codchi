@@ -1,8 +1,6 @@
-use crate::cli::ModuleAttrPath;
-
 use self::platform::LinuxCommandDriver;
-
 use super::*;
+use crate::cli::ModuleAttrPath;
 use serde_json::Value;
 
 #[derive(Error, Debug)]
@@ -56,7 +54,7 @@ pub trait NixDriver: LinuxCommandTarget {
                 "--json",
                 "--quiet",
                 "--quiet",
-                &format!("{}#{}", url, attr_path),
+                &self.quote_shell_arg(&format!("{}#{}", url, attr_path)),
                 "--apply",
                 "builtins.attrNames",
             ];
@@ -89,7 +87,13 @@ pub trait NixDriver: LinuxCommandTarget {
     }
 
     fn has_nixpkgs_input(&self, url: &str) -> Result<bool> {
-        let args = ["flake", "metadata", "--json", "--no-write-lock-file", url];
+        let args = [
+            "flake",
+            "metadata",
+            "--json",
+            "--no-write-lock-file",
+            &self.quote_shell_arg(&format!("{url}")),
+        ];
         let metadata = self.run("nix", &args).output_json::<Value>()?;
 
         Ok(metadata

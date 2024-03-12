@@ -1,4 +1,4 @@
-{ pkgs, lib, config, ... }:
+{ pkgs, lib, config, consts, ... }:
 let
   inherit (lib) mkOption mkEnableOption types mkIf;
   cfg = config.machine;
@@ -51,30 +51,16 @@ in
       ''
         set -euo pipefail
 
-        if [ -n "''${CODCHI_DEBUG:-}" ]; then
-          set -x
-        fi
-
         # temporarily store host's $PATH (useful for WSL)
         export HOST_PATH="$PATH"
         # Use config.system.binPackages and PATH from host
         export LANG="C.UTF-8" HOME=/root PATH="/bin:$PATH"
 
-        # Log the script output to /dev/kmsg or /run/log/stage-2-init.log.
-        # Only at this point are all the necessary prerequisites ready for these commands.
-        exec {logOutFd}>&1 {logErrFd}>&2
-        if test -w /dev/kmsg; then
-            exec > >(tee -i /proc/self/fd/"$logOutFd" | while read -r line; do
-                if test -n "$line"; then
-                    echo "<7>stage-2-init: $line" > /dev/kmsg
-                fi
-            done) 2>&1
-        else
-            mkdir -p /run/log
-            exec > >(tee -i /run/log/stage-2-init.log) 2>&1
-        fi
-
         ${cfg.init.hostSetup}
+
+        if [ -n "''${CODCHI_DEBUG:-}" ]; then
+          set -x
+        fi
 
         # Required by the activation script
         install -m 0755 -d /etc /etc/nixos
@@ -99,10 +85,10 @@ in
         : >> /etc/machine-id
 
         # Reset the logging file descriptors.
-        exec 1>&$logOutFd 2>&$logErrFd
-        exec {logOutFd}>&- {logErrFd}>&-
 
         echo "starting systemd..."
+        echo ${consts.INIT_EXIT_SUCCESS}
+        echo
         exec /run/current-system/systemd/lib/systemd/systemd "$@"
       '';
   };

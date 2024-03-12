@@ -1,6 +1,5 @@
 use super::*;
 use crate::util::UtilExt;
-use crate::ROOT_PROGRESS_BAR;
 use anyhow::anyhow;
 use serde::Deserialize;
 use std::io::{BufRead, BufReader, Read};
@@ -87,10 +86,9 @@ pub trait CommandExt: Debug {
     }
 
     /// Wait for child to finish while streaming AND collecting both stderr and stdout.
-    fn outout_ok_streaming(&mut self, streamer: fn(String)) -> Result<String> {
+    fn output_ok_streaming(&mut self, streamer: fn(String)) -> Result<String> {
         log::trace!("Running command: {self:?}");
         let mut child = self.spawn(OutputType::Collect)?;
-
         fn stream(
             stream: impl Read,
             chan: Sender<(String, bool)>,

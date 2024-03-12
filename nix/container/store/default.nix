@@ -93,17 +93,6 @@ in
               echo "$@" >&2
             }
 
-            # exec {logOutFd}>&1 {logErrFd}>&2
-            # if test -w /dev/kmsg; then
-            #     exec > >(tee -i /proc/self/fd/"$logOutFd" | while read -r line; do
-            #         if test -n "$line"; then
-            #             echo "<7>stage-2-init: $line" > /dev/kmsg
-            #         fi
-            #     done) 2>&1
-            # else
-            #     mkdir -p /run/log
-            #     exec > >(tee -i /run/log/stage-2-init.log) 2>&1
-            # fi
           ''
           filesystem
           ssl

@@ -4,7 +4,6 @@ use super::{
 };
 use crate::{consts::*, util::with_spinner};
 use anyhow::Result;
-use log::info;
 use std::{fs, thread, time::Duration};
 
 /// Internal name of driver module in codchi's NixOS modules

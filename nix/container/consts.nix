@@ -13,6 +13,9 @@
     machine = {
       USER = "codchi";
     };
+
+    INIT_EXIT_ERR = "INIT_ERR";
+    INIT_EXIT_SUCCESS = "INIT_SUCCESS";
   };
 
 

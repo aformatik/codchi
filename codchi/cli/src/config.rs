@@ -1,5 +1,5 @@
 use crate::{
-    consts::{host, ToPath},
+    consts::{host, PathExt},
     util::UtilExt,
 };
 use anyhow::{Context, Result};

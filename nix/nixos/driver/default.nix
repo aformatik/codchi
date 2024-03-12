@@ -25,11 +25,16 @@ in
           };
         }).config.build.tarball;
       # Create files required by the driver
-      system.activationScripts.codchi-create-files = lib.stringAfter [ "etc" ] /* bash */ ''
-        ( cd / &&
-          ${lib.getExe config.system.build.codchi.container.passthru.createFiles}
-        )
-      '';
+      systemd.services."create-files" = {
+        after = [ "network.target" ];
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig.Type = "oneshot";
+        script = /* bash */ ''
+          ( cd / &&
+            ${lib.getExe config.system.build.codchi.container.passthru.createFiles}
+          )
+        '';
+      };
 
       # Make sure all profiles are recorded as gcroots
       systemd.tmpfiles.rules = [
@@ -39,14 +44,14 @@ in
       # disable nixos-rebuild
       system.disableInstallerTools = mkForce true;
 
-      systemd = {
-        services = {
-          nix-daemon.enable = mkForce false;
-          nix-gc.enable = mkForce false;
-          nix-optimize.enable = mkForce false;
-        };
-        sockets.nix-daemon.enable = mkForce false;
-      };
+
+
+      systemd.services.nix-daemon.enable = mkForce false;
+      systemd.services.nix-gc.enable = mkForce false;
+      systemd.services.nix-optimize.enable = mkForce false;
+
+      systemd.sockets.nix-daemon.enable = mkForce false;
+
 
       environment.variables.NIX_REMOTE = "daemon";
       # Setup nix flakes

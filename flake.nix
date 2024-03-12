@@ -95,9 +95,13 @@
 
           checks.${system}.populate-cache =
             let
+              container = base: [
+                base.config.build.tarball.passthru.createFiles
+                base.config.build.runtime
+              ];
               buildInputs = [
-                self.nixosConfigurations.lxd-base.config.system.build.toplevel
-                self.nixosConfigurations.wsl-base.config.system.build.toplevel
+                # self.nixosConfigurations.lxd-base.config.system.build.toplevel
+                # self.nixosConfigurations.wsl-base.config.system.build.toplevel
 
                 # self.packages.${system}.wsl-ctrl-rootfs.passthru.createContents
                 # self.packages.${system}.wsl-ctrl-rootfs
@@ -106,7 +110,12 @@
 
                 self.packages.${system}.default
                 self.packages.${system}.windows
-              ];
+              ]
+              ++ container self.packages.${system}.store-lxd
+              ++ container self.packages.${system}.store-wsl
+              ++ container self.packages.${system}.machine-lxd
+              ++ container self.packages.${system}.machine-wsl
+              ;
             in
             pkgs.runCommandLocal "populate-cache" { } ''
               echo ${toString buildInputs} > $out

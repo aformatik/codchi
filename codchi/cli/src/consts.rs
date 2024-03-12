@@ -1,4 +1,5 @@
 // use anyhow::{Context, Result};
+use crate::platform::LinuxPath;
 use once_cell::sync::Lazy;
 use std::{
     env, fs, io,
@@ -20,37 +21,36 @@ pub const NIX_SYSTEM: &str = "aarch64_linux";
 pub const STORE_NAME: &str = "store";
 pub const MACHINE_PREFIX: &str = "machine";
 
+// these are used for store / machine container init
+pub const INIT_EXIT_ERR: &str = "INIT_ERR";
+pub const INIT_EXIT_SUCCESS: &str = "INIT_SUCCESS";
+
 pub trait ToPath: Sized {
-    /// Get just the path without any IO
-    fn as_path_buf(&self) -> &PathBuf;
+    fn join_str(&self, name: &str) -> Self;
 
     /// Get store dir inside
-    fn join_store(&self) -> PathBuf {
-        self.as_path_buf().join(STORE_NAME)
+    fn join_store(&self) -> Self {
+        self.join_str(STORE_NAME)
     }
-
-    // /// Get store dir inside
-    // fn join<P: AsRef<Path>>(&self, path: P) -> PathBuf {
-    //     self.as_path_buf().join(path)
-    // }
 
     /// Get store dir inside
-    fn join_machine<P: AsRef<Path>>(&self, name: P) -> PathBuf {
-        self.as_path_buf().join(MACHINE_PREFIX).join(name)
-    }
-
-    /// Create the directory recursively if it doesn't exist and return its path
-    fn get_or_create(&self) -> io::Result<&PathBuf> {
-        let path = self.as_path_buf();
-        fs::create_dir_all(&path)?;
-        Ok(path)
+    fn join_machine(&self, name: &str) -> Self {
+        self.join_str(MACHINE_PREFIX).join_str(name)
     }
 }
 
+pub trait PathExt: AsRef<Path> {
+    /// Create the directory recursively if it doesn't exist and return its path
+    fn get_or_create(&self) -> io::Result<&Self> {
+        fs::create_dir_all(&self)?;
+        Ok(self)
+    }
+}
+
+impl<P: AsRef<Path>> PathExt for P {}
 impl ToPath for PathBuf {
-    #[inline]
-    fn as_path_buf(&self) -> &PathBuf {
-        self
+    fn join_str(&self, path: &str) -> Self {
+        self.join(path)
     }
 }
 
@@ -90,24 +90,39 @@ pub mod host {
 pub mod store {
     use super::*;
 
-    pub static DIR_CONFIG: Lazy<PathBuf> = Lazy::new(|| "/config".into());
-    pub static DIR_DATA: Lazy<PathBuf> = Lazy::new(|| "/data".into());
-    pub static DIR_NIX: Lazy<PathBuf> = Lazy::new(|| "/nix".into());
+    pub static DIR_CONFIG: Lazy<LinuxPath> = Lazy::new(|| LinuxPath("/config".to_string()));
+    pub static DIR_DATA: Lazy<LinuxPath> = Lazy::new(|| LinuxPath("/data".to_string()));
+    pub static DIR_NIX: Lazy<LinuxPath> = Lazy::new(|| LinuxPath("/nix".to_string()));
+
+    pub const INIT_ENV: &str = "/.store-init-env";
+    pub const INIT_LOG: &str = "/.store-init-log";
+
+    impl ToPath for LinuxPath {
+        fn join_str(&self, name: &str) -> Self {
+            LinuxPath(format!("{}/{}", self.0, name))
+        }
+    }
 }
 
 pub mod machine {
     pub fn machine_name(name: &str) -> String {
         format!("codchi-{name}")
     }
+    pub const INIT_ENV: &str = "/mnt/wsl/codchi/.machine-init-env";
+    pub fn init_log(name: &str) -> String {
+        format!("/mnt/wsl/codchi/.machine-init-log-{name}")
+    }
 }
 
 pub mod user {
+    use super::*;
+
     pub const ROOT_UID: &str = "0";
     pub const ROOT_GID: &str = "0";
-    pub const ROOT_HOME: &str = "/root";
+    pub static ROOT_HOME: Lazy<LinuxPath> = Lazy::new(|| LinuxPath("/root".to_string()));
 
     pub const DEFAULT_NAME: &str = "codchi";
-    pub const DEFAULT_HOME: &str = "/home/codchi";
+    pub static DEFAULT_HOME: Lazy<LinuxPath> = Lazy::new(|| LinuxPath("/home/codchi".to_string()));
     pub const DEFAULT_UID: &str = "1000";
     pub const DEFAULT_GID: &str = "100";
 }

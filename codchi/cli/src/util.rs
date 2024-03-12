@@ -59,7 +59,7 @@ where
     spinner.set_message(msg);
 
     f(&mut spinner).finally(|| {
-        spinner.finish();
+        spinner.finish_and_clear();
         root.remove(&spinner);
     })
 }

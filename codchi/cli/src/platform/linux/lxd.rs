@@ -73,17 +73,11 @@ pub mod image {
 }
 
 pub mod container {
-    use std::path::PathBuf;
-
+    use super::*;
+    use crate::{consts::{user, PathExt}, platform::PlatformStatus};
     use anyhow::Context;
     use itertools::Itertools;
-
-    use crate::{
-        consts::{user, ToPath},
-        platform::PlatformStatus,
-    };
-
-    use super::*;
+    use std::path::PathBuf;
 
     #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
     /// LXD container information

@@ -1,12 +1,13 @@
 use super::{private::Private, LinuxCommandTarget, LinuxUser};
 use crate::{
     config::{Config, MachineConfig, MutableConfig},
-    consts::{self, host, store, user, ToPath},
+    consts::{self, host, store, user, PathExt, ToPath},
     platform::{self, CommandExt, Driver, Store},
     util::with_spinner,
 };
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
+use log::info;
 use std::{fs, thread, time::Duration};
 
 pub trait MachineDriver: Sized {
@@ -207,18 +208,23 @@ git add flake.*
 "#
                 ))
                 .with_cwd(store::DIR_CONFIG.join_machine(&self.name))
-                .wait_ok()?;
+                .output_ok_streaming(|line| info!("{line}\r"))?;
 
             spinner.set_message(format!("Building {}...", self.name));
 
             let status = Self::read_platform_status(&self.name, Private)?;
             if status == PlatformStatus::NotInstalled {
                 spinner.set_message(format!("Installing {}...", self.name));
-                self.install(Private)?;
+                self.install(Private).map_err(|err| {
+                    log::error!("Removing leftovers of machine files for {}...", self.name);
+                    let _ = fs::remove_dir_all(host::DIR_CONFIG.join_machine(&self.name));
+                    let _ = fs::remove_dir_all(host::DIR_DATA.join_machine(&self.name));
+                    err
+                })?;
 
                 spinner.set_message(format!("Initializing {}...", self.name));
                 self.wait_online()?;
-                self.cmd().run("poweroff", &[]).wait_ok()?;
+                // self.cmd().run("sudo", &["poweroff"]).wait_ok()?;
             } else {
                 if status == PlatformStatus::Stopped {
                     spinner.set_message(format!("Starting {}...", self.name));
@@ -291,8 +297,8 @@ git add flake.*
                     "rm",
                     &[
                         "-rf",
-                        store::DIR_DATA.join_machine(&self.name).to_str().unwrap(),
-                        store::DIR_CONFIG.join_machine(&self.name).to_str().unwrap(),
+                        &store::DIR_DATA.join_machine(&self.name).0,
+                        &store::DIR_CONFIG.join_machine(&self.name).0,
                     ],
                 )
                 .wait_ok()
@@ -327,9 +333,10 @@ git add flake.*
                 .cmd()
                 .run(cmd, &args.iter().map(|str| str.as_str()).collect_vec())
                 .with_user(LinuxUser::Default),
-            None => self.cmd().run("su", &["-l", user::DEFAULT_NAME]),
+            None => self.cmd().run("bash", &["-l"]),
         };
-        cmd.with_cwd(user::DEFAULT_HOME).exec()?;
+        cmd.with_cwd(user::DEFAULT_HOME.clone())
+            .with_user(LinuxUser::Default).exec()?;
         Ok(())
     }
 }
