@@ -1,0 +1,106 @@
+name: build-windows
+on:
+  push: 
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  nix-build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: DeterminateSystems/nix-installer-action@main
+    - uses: DeterminateSystems/magic-nix-cache-action@main
+    - uses: cachix/cachix-action@v14
+      with:
+        name: nixos-devenv
+        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+    - run: |
+        nix build .#windows
+        cp result/bin/*.exe .
+        nix build .#store-wsl.config.build.tarball
+        cp result store.tar.gz
+        nix build .#machine-wsl.config.build.tarball
+        cp result machine.tar.gz
+    - uses: actions/upload-artifact@v4
+      with:
+          name: windows
+          path: |
+            *.exe
+            *.tar.gz
+          overwrite: true
+          if-no-files-found: error
+  windows:
+    runs-on: windows-latest
+    needs: 
+      - nix-build
+    permissions:
+      contents: write
+    env:
+      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        repository: 'aformatik/codchi-packaging'
+        ref: '${{ github.ref_name }}'
+    - uses: actions/download-artifact@v4
+      with:
+        name: windows
+        path: msix
+    - shell: bash
+      run: |
+        mkdir -p "msix/VFS/Common AppData/codchi/"
+        mv msix/store.tar.gz msix/machine.tar.gz "msix/VFS/Common AppData/codchi/"
+    - name: import certificate
+      run: |
+        New-Item -ItemType directory -Path certificate
+        Set-Content -Path certificate/tempCert.txt -Value $env:WINDOWS_CERTIFICATE
+        certutil -decode certificate/tempCert.txt certificate/certificate.pfx
+        Remove-Item -path certificate -include tempCert.txt
+        Import-PfxCertificate -FilePath certificate/certificate.pfx -CertStoreLocation Cert:\CurrentUser\My -Password (ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText)
+
+    - name: Parse Windows Version
+      uses: frabert/replace-string-action@v2
+      id: winver
+      with:
+        string: '${{ github.ref_name }}'
+        pattern: '^v(\d+).(\d+).(\d+)-?.*$'
+        replace-with: '$1.$2.$3.0'
+    - name: Insert version ${{ github.ref_name }} / ${{ steps.winver.outputs.replaced }}
+      env:
+        VERSION: ${{ github.ref_name }}
+        WINVER: ${{ steps.winver.outputs.replaced }}
+      shell: bash
+      run: |
+        for f in msix/{codchi.AppInstaller,AppxManifest.xml}; do
+            sed -i \
+                "s/@VERSION@/$WINVER/g
+                 s/@VERSION_TAG@/$VERSION/g" \
+                $f
+        done
+    - run: |
+        & "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\makeappx.exe" pack /o /d .\msix\ /p codchi.msix
+    - run: |
+        & "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\signtool.exe" sign -v -debug -n "nixos-devenv" -fd SHA256 -tr http://timestamp.digicert.com -td sha256 .\codchi.msix
+    - uses: softprops/action-gh-release@v2
+      with:
+        prerelease: true
+        fail_on_unmatched_files: true
+        files: |
+          codchi.msix
+          msix/codchi.AppInstaller
+          codchi.crt
+
+    # - uses: actions/upload-artifact@v4
+    #   with:
+    #       name: msix
+    #       path: |
+    #         codchi.msix
+    #         msix/codchi.AppInstaller
+    #         codchi.crt
+    #       overwrite: true
+    #       if-no-files-found: error
