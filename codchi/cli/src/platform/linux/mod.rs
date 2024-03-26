@@ -17,25 +17,23 @@ pub struct StoreImpl {}
 
 impl Store for StoreImpl {
     fn start_or_init_container(_: Private) -> Result<Self> {
-        // TODO add link to docs
         let status = lxd::container::get_platform_status(consts::CONTAINER_STORE_NAME).context(
-            "Failed to run LXD.
-    It seems like LXD is not installed or set up correctly!
-    Please see the codchi docs for the setup instructions!",
+            "Failed to run LXD. It seems like LXD is not installed or set up correctly! \
+Please see <https://codchi.dev/docs/start/installation.html#linux> for setup instructions!",
         )?;
         trace!("LXD store container status: {status:#?}");
 
         match status {
             PlatformStatus::NotInstalled => {
                 let rootfs = env::var("CODCHI_LXD_CONTAINER_STORE")
-                        .map(|dir| PathBuf::from(dir))
+                        .map(PathBuf::from)
                         .context("Failed reading $CODCHI_LXD_CONTAINER_STORE from environment. This indicates a broken build.")?;
                 let mounts: Vec<(PathBuf, &str)> = vec![
                     (host::DIR_CONFIG.clone(), &store::DIR_CONFIG.0),
                     (host::DIR_DATA.clone(), &store::DIR_DATA.0),
                     (host::DIR_NIX.clone(), &store::DIR_NIX.0),
                 ];
-                lxd::container::install(consts::CONTAINER_STORE_NAME, &rootfs, mounts).map_err(
+                lxd::container::install(consts::CONTAINER_STORE_NAME, rootfs, mounts).map_err(
                     |err| {
                         log::error!("Removing leftovers of store files...");
                         let _ = fs::remove_dir_all(host::DIR_CONFIG.join_store());
@@ -55,7 +53,7 @@ impl Store for StoreImpl {
         }
     }
 
-    fn cmd(&self) -> impl LinuxCommandTarget + NixDriver {
+    fn cmd(&self) -> impl NixDriver {
         LinuxCommandDriver {
             name: consts::CONTAINER_STORE_NAME.to_string(),
         }
@@ -78,7 +76,7 @@ impl MachineDriver for Machine {
     fn install(&self, _: Private) -> Result<()> {
         let lxd_name = machine_name(&self.name);
         let rootfs = env::var("CODCHI_LXD_CONTAINER_MACHINE")
-                .map(|dir| PathBuf::from(dir))
+                .map(PathBuf::from)
                 .context("Failed reading $CODCHI_LXD_CONTAINER_MACHINE from environment. This indicates a broken build.")?;
         let mounts = vec![
             (host::DIR_NIX.join("store"), "/nix/store"),
@@ -97,7 +95,7 @@ impl MachineDriver for Machine {
                 &user::DEFAULT_HOME.0,
             ),
         ];
-        lxd::container::install(&lxd_name, &rootfs, mounts)?;
+        lxd::container::install(&lxd_name, rootfs, mounts)?;
 
         Ok(())
     }
@@ -124,29 +122,29 @@ impl LinuxCommandTarget for LinuxCommandDriver {
     fn build(&self, user: &Option<LinuxUser>, cwd: &Option<LinuxPath>) -> std::process::Command {
         let mut cmd = std::process::Command::new("lxc");
         cmd.arg("-q");
-        cmd.args(&["exec", &self.name]);
+        cmd.args(["exec", &self.name]);
         if let Some(cwd) = &cwd {
-            cmd.args(&["--cwd", &cwd.0]);
+            cmd.args(["--cwd", &cwd.0]);
         }
         if *DEBUG {
-            cmd.args(&["--env", "CODCHI_DEBUG=1"]);
+            cmd.args(["--env", "CODCHI_DEBUG=1"]);
         }
         if let Some(user) = &user {
-            cmd.args(&[
+            cmd.args([
                 "--user",
                 match user {
                     LinuxUser::Root => consts::user::ROOT_UID,
                     LinuxUser::Default => consts::user::DEFAULT_UID,
                 },
             ]);
-            cmd.args(&[
+            cmd.args([
                 "--group",
                 match user {
                     LinuxUser::Root => consts::user::ROOT_GID,
                     LinuxUser::Default => consts::user::DEFAULT_GID,
                 },
             ]);
-            cmd.args(&[
+            cmd.args([
                 "--env",
                 &format!(
                     "HOME={}",

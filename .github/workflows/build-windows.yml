@@ -1,0 +1,94 @@
+name: build-windows
+on:
+  push: 
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  nix-build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: DeterminateSystems/nix-installer-action@main
+    - uses: DeterminateSystems/magic-nix-cache-action@main
+    - uses: cachix/cachix-action@v14
+      with:
+        name: nixos-devenv
+        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+    - run: |
+        nix build .#windows -L
+        cp result/bin/*.exe .
+        nix build .#store-wsl.config.build.tarball -L
+        cp result store.tar.gz
+        nix build .#machine-wsl.config.build.tarball -L
+        cp result machine.tar.gz
+    - uses: actions/upload-artifact@v4
+      with:
+          name: windows
+          path: |
+            *.exe
+            *.tar.gz
+          overwrite: true
+          if-no-files-found: error
+  windows:
+    runs-on: windows-latest
+    needs: 
+      - nix-build
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        repository: 'aformatik/codchi-packaging'
+        ref: '${{ github.ref_name }}'
+    - uses: actions/download-artifact@v4
+      with:
+        name: windows
+        path: msix
+    - shell: bash
+      run: |
+        mkdir -p "msix/VFS/Common AppData/codchi/"
+        mv msix/store.tar.gz msix/machine.tar.gz "msix/VFS/Common AppData/codchi/"
+    - name: Parse Windows Version
+      uses: frabert/replace-string-action@v2
+      id: winver
+      with:
+        string: '${{ github.ref_name }}'
+        pattern: '^v(\d+).(\d+).(\d+)-?.*$'
+        replace-with: '$1.$2.$3.0'
+    - name: Insert version ${{ github.ref_name }} / ${{ steps.winver.outputs.replaced }}
+      env:
+        VERSION: ${{ github.ref_name }}
+        WINVER: ${{ steps.winver.outputs.replaced }}
+      shell: bash
+      run: |
+        for f in msix/{codchi.AppInstaller,AppxManifest.xml}; do
+            sed -i \
+                "s/@VERSION@/$WINVER/g
+                 s/@VERSION_TAG@/$VERSION/g" \
+                $f
+        done
+    - run: |
+        & "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\makeappx.exe" pack /o /d .\msix\ /p codchi.msix
+    - name: Azure Trusted Signing
+      uses: azure/trusted-signing-action@v0.3.16
+      with:
+        azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+        endpoint: ${{ secrets.AZURE_ENDPOINT }}
+        code-signing-account-name: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
+        certificate-profile-name: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
+        files-folder: .
+        files-folder-filter: msix
+        file-digest: SHA256
+    - uses: softprops/action-gh-release@v2
+      with:
+        prerelease: true
+        fail_on_unmatched_files: true
+        files: |
+          codchi.msix
+          msix/codchi.AppInstaller

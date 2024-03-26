@@ -1,0 +1,16 @@
+{
+  "name": "codchi-docs",
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "rspress dev",
+    "build": "rspress build",
+    "preview": "rspress preview"
+  },
+  "devDependencies": {
+    "@mdx-js/language-server": "^0.4.2",
+    "@rspress/plugin-shiki": "^1.19.1",
+    "rspress": "^1.16.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.3"
+  }
+}

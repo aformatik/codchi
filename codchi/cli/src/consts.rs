@@ -1,5 +1,6 @@
 // use anyhow::{Context, Result};
 use crate::platform::LinuxPath;
+use itertools::Itertools;
 use once_cell::sync::Lazy;
 use std::{
     env, fs, io,
@@ -58,27 +59,27 @@ pub mod host {
     use directories::BaseDirs;
 
     use super::*;
-    static CODCHI_PROJ_DIR: Lazy<BaseDirs> = Lazy::new(|| BaseDirs::new().unwrap());
+    static BASE_DIR: Lazy<BaseDirs> = Lazy::new(|| BaseDirs::new().unwrap());
     pub static DIR_CONFIG: Lazy<PathBuf> = Lazy::new(|| {
         env::var_os("CODCHI_CONFIG_DIR")
             .map(PathBuf::from)
-            .unwrap_or_else(|| CODCHI_PROJ_DIR.config_dir().join(APP_NAME))
+            .unwrap_or_else(|| BASE_DIR.config_dir().join(APP_NAME))
     });
     pub static DIR_DATA: Lazy<PathBuf> = Lazy::new(|| {
         env::var_os("CODCHI_DATA_DIR")
             .map(PathBuf::from)
-            .unwrap_or_else(|| CODCHI_PROJ_DIR.data_local_dir().join(APP_NAME))
+            .unwrap_or_else(|| BASE_DIR.data_local_dir().join(APP_NAME))
     });
     pub static DIR_NIX: Lazy<PathBuf> = Lazy::new(|| {
         env::var_os("CODCHI_NIX_DIR")
             .map(PathBuf::from)
-            .unwrap_or_else(|| CODCHI_PROJ_DIR.cache_dir().join(APP_NAME).join("/nix"))
+            .unwrap_or_else(|| BASE_DIR.cache_dir().join(APP_NAME).join("/nix"))
     });
     pub static DIR_RUNTIME: Lazy<PathBuf> = Lazy::new(|| {
         env::var_os("CODCHI_RUNTIME_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
-                CODCHI_PROJ_DIR
+                BASE_DIR
                     .runtime_dir()
                     .map(Path::to_path_buf)
                     .unwrap_or_else(|| env::temp_dir())

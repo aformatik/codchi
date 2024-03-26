@@ -86,6 +86,7 @@
             inherit (pkgs) store-lxd store-wsl machine-lxd machine-wsl;
             default = pkgs.codchi;
             windows = pkgs.codchi-windows;
+            editor = pkgs.nixvim.makeNixvim (import ./editor.nix);
           };
 
           devShells.${system} = {
@@ -102,11 +103,6 @@
               buildInputs = [
                 # self.nixosConfigurations.lxd-base.config.system.build.toplevel
                 # self.nixosConfigurations.wsl-base.config.system.build.toplevel
-
-                # self.packages.${system}.wsl-ctrl-rootfs.passthru.createContents
-                # self.packages.${system}.wsl-ctrl-rootfs
-                # self.packages.${system}.lxd-ctrl-rootfs.passthru.createContents
-                # self.packages.${system}.lxd-ctrl-rootfs
 
                 self.packages.${system}.default
                 self.packages.${system}.windows

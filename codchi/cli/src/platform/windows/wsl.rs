@@ -33,10 +33,10 @@ pub fn wsl_command() -> Command {
 
 pub fn get_api() -> Result<&'static Library> {
     static WSLAPI: OnceLock<Library> = OnceLock::new();
-    // TODO ref to docs
     WSLAPI.get_or_try_init(Library::new).context(
         "Failed to load wslapi.dll. This usually means the Windows feature 'Windows Subsystem for \
-        Linux' is not active",
+        Linux' is not active. Please see <https://codchi.dev/docs/start/installation.html#prerequisites> \
+        for the installation instructions.",
     )
 }
 
@@ -56,9 +56,10 @@ pub fn get_wsl_version() -> Result<String> {
                 .map(|str| str.to_string())
         })
         .filter(|version| Version::from(version).is_some())
-        // TODO ref docs
         .ok_or(anyhow!(
-            "Failed to parse WSL's version from output '{version_line:?}'. Please update WSL or file a bug report."
+            "Failed to parse WSL's version from output '{version_line:?}'. \
+            Please see <https://codchi.dev/docs/start/installation.html#prerequisites> \
+            for the installation instructions."
         ))
 }
 
@@ -121,18 +122,16 @@ pub fn import<T, F: Fn() -> Result<T>>(
             "WSL rootfs for {name} missing in MSIX. Search path was: {msix_path:?}"
         );
 
-        let tmp_path = host::DIR_RUNTIME
-            .join(consts::APP_NAME)
-            .get_or_create()?
-            .join(rootfs_name);
+        let tmp_path = host::DIR_RUNTIME.get_or_create()?.join(rootfs_name);
         make_writeable_if_exists(&tmp_path)?;
-        fs::copy(msix_path, &tmp_path)?;
+        fs::copy(&msix_path, &tmp_path)?;
 
         wsl_command()
             .arg("--import")
             .arg(name)
-            .arg(installation_path.get_or_create()?)
+            .arg(installation_path)
             .arg(&tmp_path)
+            .args(&["--version", "2"])
             .wait_ok()?;
 
         make_writeable_if_exists(&tmp_path)?;

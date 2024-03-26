@@ -1,0 +1,21 @@
+[
+    {
+        "type": "dir",
+        "name": "start",
+        "label": "Getting Started"
+    },
+    {
+        "type": "dir",
+        "name": "config",
+        "label": "Module Configuration"
+    },
+    {
+        "type": "file",
+        "name": "options",
+        "label": "NixOS Options Reference"
+    },
+    {
+        "type": "dir",
+        "name": "contrib",
+        "label": "Contributing"
+    }]

@@ -52,7 +52,7 @@ pub enum Cmd {
     // Controller(ControllerCmd),
     Status {},
 
-    /// Create a new code machine
+    /// Create a new code machine. <https://codchi.dev/docs/start/usage.html#creating-a-machine>
     Init {
         /// Initialize this code machine without any modules
         #[arg(long, short)]
@@ -62,7 +62,8 @@ pub enum Cmd {
         options: AddModuleOptions,
     },
 
-    /// Execute (interactive) command inside machine.
+    /// Execute (interactive) command inside a machine.
+    /// <https://codchi.dev/docs/start/usage.html#running-programs>
     #[clap(aliases = &["run"])]
     Exec {
         /// Name of the code machine
@@ -73,7 +74,8 @@ pub enum Cmd {
         cmd: Vec<String>,
     },
 
-    /// Apply changes to a code machine
+    /// Apply changes to a code machine.
+    /// <https://codchi.dev/docs/start/usage.html#applying-changes>
     Rebuild {
         /// Name of the code machine
         name: String,
@@ -85,7 +87,8 @@ pub enum Cmd {
         name: String,
     },
 
-    /// Delete code machine with all associated files
+    /// Delete code machine with all associated files.
+    /// <https://codchi.dev/docs/start/usage.html#uninstalling-a-machine>
     Delete {
         /// Don't prompt for confirmation and delete immediately
         #[arg(long)]
@@ -95,7 +98,8 @@ pub enum Cmd {
         name: String,
     },
 
-    /// Manage modules of code machines
+    /// Manage modules of code machines.
+    /// <https://codchi.dev/docs/start/usage.html#managing-a-code-machine>
     #[command(subcommand)]
     #[clap(aliases = &["mod"])]
     Module(ModuleCmd),
@@ -161,14 +165,17 @@ mod module {
 
     #[derive(Debug, Subcommand, Clone)]
     pub enum ModuleCmd {
+        /// <https://codchi.dev/docs/start/usage.html#modules>
         #[clap(aliases = &["ls"])]
         List {
             /// Name of the code machine
             name: String,
         },
 
+        /// <https://codchi.dev/docs/start/usage.html#adding-modules>
         Add(AddModuleOptions),
 
+        /// <https://codchi.dev/docs/start/usage.html#delete-a-module>
         #[clap(aliases = &["rm", "remove"])]
         Delete {
             /// Name of the code machine
@@ -192,7 +199,6 @@ mod module {
         #[arg(long, short = 'y')]
         pub dont_prompt: bool,
 
-        // TODO examples gitlab / github (docs)
         /// Authorisation token for private repositories.
         #[arg(long, short)]
         pub token: Option<String>,
@@ -212,7 +218,6 @@ mod module {
         /// Name of the code machine
         pub name: String,
 
-        // TODO link to docs
         /// http(s) url to the codchi module
         pub url: GitUrl,
 
@@ -221,8 +226,8 @@ mod module {
         pub module_path: Option<ModuleAttrPath>,
     }
 
-    // TODO this is only neccessary when we have named modules. Currently they are refered to by
-    // their index
+    // this is only neccessary when we have named modules. Currently they are refered to by their
+    // index
     // #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
     // pub struct CodchiName(pub String);
 

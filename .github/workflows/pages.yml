@@ -2,8 +2,8 @@ name: website
 
 on:
   push:
-     paths:
-      - 'docs/website/**'
+     branches:
+      - 'master'
 
 permissions:
   contents: write
@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: docs/website
+        working-directory: docs
     steps:
     - uses: actions/checkout@v3
     - uses: cachix/install-nix-action@v22
@@ -24,8 +24,8 @@ jobs:
       with:
         name: nixos-devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - run: nix build
+    - run: nix build -L
     - name: Deploy 🚀
       uses: JamesIves/github-pages-deploy-action@v4
       with:
-        folder: docs/website/result/
+        folder: docs/result/

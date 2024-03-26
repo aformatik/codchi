@@ -1,5 +1,5 @@
 {
   imports = [
-
+    ./recommended-config.nix
   ];
 }

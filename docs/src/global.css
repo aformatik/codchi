@@ -1,0 +1,13 @@
+:root {
+  --rp-c-brand: #4F74BC;
+  --rp-c-brand-dark: #4F74BC;
+  --rp-c-brand-darker: #010104;
+  --rp-c-brand-light: #7DB5DF;
+  --rp-c-brand-lighter: #FE9E01;
+  --rp-home-hero-name-background: -webkit-linear-gradient( 120deg, var(--rp-c-brand) 30%, var(--rp-c-brand-light) )
+}
+
+a {
+    color: var(--rp-c-brand-dark);
+    font-weight: inherit !important;
+}

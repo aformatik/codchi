@@ -25,26 +25,24 @@ pub fn init(empty: bool, opts: &AddModuleOptions) -> Result<Machine> {
             modules: Vec::new(),
         }
     } else {
-        let (module, has_nixpkgs) = fetch_module(&opts)?;
+        let (module, has_nixpkgs) = fetch_module(opts)?;
         let bare_url: FlakeUrl<flake_attr::Without> = module.with_attr(());
         let nixpkgs_from = if has_nixpkgs {
-            if opts.dont_prompt {
-                Some(0)
-            } else {
-                // TODO move to docs?
-                if inquire::Confirm::new(&format!("Use nixpkgs from '{}'", bare_url.pretty_print()))
+            // TODO use_nixpkgs option
+            if opts.dont_prompt
+                || inquire::Confirm::new(&format!("Use nixpkgs from '{}'", bare_url.pretty_print()))
                     .with_help_message(
                         "This codchi module has a nixpkgs input. \
 Do you want to use it for the code machine? \
 Otherwise the shared nixpkgs of codchi is used, \
-which might decrease reproducibility but is faster.",
+which might decrease reproducibility but is faster. \
+See https://codchi.dev/docs/start/usage.html#which-nixpkgs-should-i-use for more information.",
                     )
                     .prompt()?
-                {
-                    Some(0)
-                } else {
-                    None
-                }
+            {
+                Some(0)
+            } else {
+                None
             }
         } else {
             None
@@ -85,7 +83,7 @@ pub fn add(opts: &AddModuleOptions) -> Result<Machine> {
             opts.name
         ))?;
 
-    let (module, _has_nixpkgs) = fetch_module(&opts)?;
+    let (module, _has_nixpkgs) = fetch_module(opts)?;
     let mod_str = module.to_string();
 
     if modules
@@ -161,7 +159,7 @@ pub fn delete(name: &str, id: usize) -> Result<Machine> {
 
     cfg.write()?;
 
-    let machine = Machine::by_name(&name)?;
+    let machine = Machine::by_name(name)?;
     machine.write_flake()?;
     machine.update_status()
 }
@@ -172,7 +170,7 @@ pub fn fetch_module(opts: &AddModuleOptions) -> Result<(CodchiModule, HasNixpkgs
         bail!("Please provide MODULE_PATH in non interactive mode.");
     }
 
-    let flake_url = inquire_module_url(&opts)?;
+    let flake_url = inquire_module_url(opts)?;
     let nix_url = flake_url.to_nix_url();
 
     let available_modules = with_spinner("Fetching available modules...", |_| {
@@ -323,7 +321,6 @@ fn inquire_module_url(opts: &AddModuleOptions) -> Result<FlakeUrl<flake_attr::Wi
         //     let path = url.path;
         //     Ok(format!("git+ssh://{user}{host}{port}/{path}?{reff}{commit}",))
         // }
-        // TODO move / refer to docs
         _ => bail!("Currently only http(s) urls are supported."),
         //            "This type of link is currently not supported. You can use on of the following types:
         //    - HTTP(s): 'https://github.com/aformatik/codchi

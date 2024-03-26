@@ -1,0 +1,73 @@
+name: test
+on:
+  workflow_run:
+    workflows: [build-windows]
+    types: [completed]
+  # pull_request:
+  #   branches:
+  #   - 'rust'
+  # workflow_dispatch: {}
+      
+#     paths:
+#       - 'cli/**'
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      latest_version: ${{ steps.get-latest-version.outputs.latest_version }}
+    steps:
+    - uses: actions/checkout@v4
+    - name: Get latest versioned commit ${{ github.event.workflow_run.name }}
+      id: get-latest-version
+      run: |
+        # Fetch all the tags
+        git fetch --tags
+        
+        # Get the latest commit matching the pattern 'v*.*.*'
+        echo "latest_version=$(git describe --tags --match "v*.*.*" $(git rev-list --tags --max-count=1))" >> $GITHUB_OUTPUT
+  windows:
+    needs: setup
+    if: ${{ github.event.workflow_run.name == 'build-windows' || github.event_name == 'push' }}
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download assets from prerelease@${{ needs.setup.outputs.latest_version }}
+      uses: robinraju/release-downloader@v1.9
+      with:
+        tag: ${{ needs.setup.outputs.latest_version }}
+    - name: Install codchi.msix
+      run: |
+        Install-Module Pester -Force
+        Import-Module Pester -PassThru
+        Import-Module appx -UseWindowsPowerShell 2>&1
+        Add-AppxPackage codchi.msix -AllowUnsigned 2>&1
+        wsl --update --web-download 2>&1
+        wsl --set-default-version 2 2>&1
+        Invoke-Pester ./tests/windows.ps1 2>&1
+    # - if: ${{ failure() }}
+    #   uses: mxschmitt/action-tmate@v3
+    #   timeout-minutes: 10
+  linux:
+    needs: setup
+    if: ${{ github.event.workflow_run.name == 'build-linux' || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: canonical/setup-lxd@main
+    - uses: DeterminateSystems/nix-installer-action@main
+    - uses: DeterminateSystems/magic-nix-cache-action@main
+    - name: Download assets from prerelease@${{ needs.setup.outputs.latest_version }}
+      uses: robinraju/release-downloader@v1.9
+      with:
+        tag: ${{ needs.setup.outputs.latest_version }}
+    - name: tests
+      run: |
+        cd codchi
+        nix develop . -c cargo run -- -vvv
+    # - if: ${{ failure() }}
+    #   uses: mxschmitt/action-tmate@v3
+    #   timeout-minutes: 15

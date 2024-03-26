@@ -135,7 +135,6 @@ in
       # add official ca certificates to enable https
       files."/etc/ssl/certs/nix.crt" = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
 
-      # TODO append custom certs to main bundle
       store.init.ssl = /* bash */ ''
         if [ -f "${consts.store.DIR_DATA}/certs/system.crt" ]; then
           cp -f "${consts.store.DIR_DATA}/certs/system.crt" /etc/ssl/certs/ca-certificates.crt

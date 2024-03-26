@@ -24,7 +24,7 @@ pub mod util;
 pub static ROOT_PROGRESS_BAR: OnceLock<MultiProgress> = OnceLock::new();
 
 fn main() -> anyhow::Result<()> {
-    human_panic::setup_panic!();
+    not_so_human_panic::setup_panic!();
 
     let cli = Cli::parse();
 
@@ -131,7 +131,7 @@ pub fn echo_ca_certs() -> anyhow::Result<()> {
             println!("{}", std::str::from_utf8(line).unwrap());
         }
         println!("-----END CERTIFICATE-----");
-        break;
+        // break;
     }
     Ok(())
 }

@@ -12,8 +12,8 @@ pub enum Error {
     #[error("SSL peer certificate or SSH remote key was not OK.")]
     InvalidRemoteSSLOrSSH,
 
-    // TODO: link to docs
-    #[error("Couldn't access repository. If the repository is private you need to provide the correct credentials.")]
+    #[error("Couldn't access repository. If the repository is private you need to provide the correct credentials.
+See <https://codchi.dev/docs/start/usage.html#creating-a-machine> on how to access private repositories.")]
     InvalidURLOrCredentials,
 
     #[error("Nix command failed: {0}")]
@@ -92,7 +92,7 @@ pub trait NixDriver: LinuxCommandTarget {
             "metadata",
             "--json",
             "--no-write-lock-file",
-            &self.quote_shell_arg(&format!("{url}")),
+            &self.quote_shell_arg(url),
         ];
         let metadata = self.run("nix", &args).output_json::<Value>()?;
 

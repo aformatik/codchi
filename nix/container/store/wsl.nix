@@ -76,7 +76,6 @@ in
         mount --bind "$src" "$target"
       }
 
-      # TODO check what happens if store stops and some machines continue to run
       mkMnt "/data" "/mnt/wsl/codchi/data"
       mkMnt "/nix"  "/mnt/wsl/codchi/nix"
     '';

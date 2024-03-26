@@ -66,7 +66,6 @@ let
     echo ${self.rev or self.dirtyRev or "dirty"}
   '';
 
-
   native = {
     win = rec {
       passthru = {
@@ -175,7 +174,7 @@ let
       '';
 
       CODCHI_WSL_VERSION_MIN = "2.0.14";
-      CODCHI_WSL_VERSION_MAX = "2.0.14";
+      CODCHI_WSL_VERSION_MAX = "2.1.5";
 
     };
     linux = rec {
@@ -234,7 +233,13 @@ native.passthru.rustPlatform.buildRustPackage (lib.recursiveUpdate
   pname = "codchi";
   inherit (Cargo.workspace.package) version;
 
-  src = ./.;
+  # src = lib.cleanSource ./.;
+  src = lib.sourceByRegex ./. [
+    "^cli.*$"
+    "^ui.*$"
+    "^Cargo\..*"
+    "^\.msvc_manifest.json$"
+  ];
   cargoLock.lockFile = ./Cargo.lock;
   cargoLock.outputHashes = {
     # "tarpc-0.34.0" = "";
