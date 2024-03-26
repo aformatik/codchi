@@ -122,16 +122,15 @@ pub fn import<T, F: Fn() -> Result<T>>(
         );
 
         let tmp_path = host::DIR_RUNTIME
-            .join(consts::APP_NAME)
             .get_or_create()?
             .join(rootfs_name);
         make_writeable_if_exists(&tmp_path)?;
-        fs::copy(msix_path, &tmp_path)?;
+        fs::copy(&msix_path, &tmp_path)?;
 
         wsl_command()
             .arg("--import")
             .arg(name)
-            .arg(installation_path.get_or_create()?)
+            .arg(installation_path)
             .arg(&tmp_path)
             .wait_ok()?;
 
