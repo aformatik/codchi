@@ -1,9 +1,10 @@
 #![feature(once_cell_try)]
 #![deny(unused_crate_dependencies)]
+// #![windows_subsystem = "windows"]
 
 use crate::{
     cli::{Cli, Cmd, CLI_ARGS},
-    platform::{ConfigStatus, Driver, Machine, PlatformStatus},
+    platform::{ConfigStatus, Driver, Machine, PlatformStatus, Store},
 };
 use anyhow::Context;
 use base64::{prelude::BASE64_STANDARD, Engine};
@@ -28,6 +29,23 @@ fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::{
+            System::Console::GetConsoleWindow,
+            UI::WindowsAndMessaging::{self, ShowWindow},
+        };
+        if cli.terminal == Some(false) {
+            let window = unsafe { GetConsoleWindow() };
+            if window.0 != 0 {
+                if let Err(err) = unsafe { ShowWindow(window, WindowsAndMessaging::SW_HIDE).ok() } {
+                    log::error!("Failed to hide console window. Reason: {err}");
+                }
+                println!("");
+            }
+        }
+    }
+
     let logger = env_logger::Builder::new()
         .filter_level(cli.verbose.log_level_filter())
         .parse_env("CODCHI_LOG")
@@ -47,22 +65,41 @@ fn main() -> anyhow::Result<()> {
 
     match &cli.command.unwrap_or(Cmd::Status {}) {
         Cmd::Status {} => print_status(Machine::list()?),
-        Cmd::Init { empty, options } => alert_dirty(module::init(*empty, options)?),
-        Cmd::Rebuild { name } => Machine::by_name(name)?.build()?,
+        Cmd::Init {
+            machine_name,
+            url,
+            options,
+        } => alert_dirty(module::init(machine_name, url, options)?),
+        Cmd::Rebuild { no_update, name } => Machine::by_name(name)?.build(*no_update)?,
         Cmd::Update { name } => alert_dirty(Machine::by_name(name)?.update()?),
         Cmd::Exec { name, cmd } => Machine::by_name(name)?.exec(cmd)?,
         Cmd::Delete {
             name,
-            im_really_sure,
-        } => Machine::by_name(name)?.delete(*im_really_sure)?,
+            i_am_really_sure,
+        } => Machine::by_name(name)?.delete(*i_am_really_sure)?,
         Cmd::Module(cmd) => match cmd {
             cli::ModuleCmd::List { name } => module::list(name)?,
-            cli::ModuleCmd::Add(opts) => alert_dirty(module::add(opts)?),
-            cli::ModuleCmd::Delete { name, id } => alert_dirty(module::delete(name, *id)?),
+            cli::ModuleCmd::Add {
+                machine_name,
+                options,
+                url,
+            } => alert_dirty(module::add(machine_name, url, options)?),
+            cli::ModuleCmd::Set {
+                machine_name,
+                module_name,
+                url,
+                options,
+            } => alert_dirty(module::set(machine_name, module_name, url, options)?),
+            cli::ModuleCmd::Delete { name, module_name } => {
+                alert_dirty(module::delete(name, module_name.clone())?)
+            }
         },
+        Cmd::GC {
+            older_than,
+            all,
+            machines,
+        } => Driver::store().gc(older_than.map(|x| x.unwrap_or_default()), *all, machines)?,
     }
-
-    // TODO check for dirty machines and warn user
 
     Ok(())
 }
@@ -70,25 +107,25 @@ fn main() -> anyhow::Result<()> {
 fn alert_dirty(machine: Machine) {
     match machine.config_status {
         ConfigStatus::NotInstalled => {
-            info!(
+            println!(
                 "{} is not installed yet. Install with `codchi rebuild {}`",
-                machine.name, machine.name
+                machine.config.name, machine.config.name
             );
         }
         ConfigStatus::Modified => {
-            info!(
+            println!(
                 "{} was modified. Apply changes with `codchi rebuild {}`",
-                machine.name, machine.name
+                machine.config.name, machine.config.name
             );
         }
         ConfigStatus::UpdatesAvailable => {
-            info!(
+            println!(
                 "{} has been updated upstream. Update with `codchi rebuild {}`",
-                machine.name, machine.name
+                machine.config.name, machine.config.name
             );
         }
         ConfigStatus::UpToDate => {
-            info!("Everything up to date!");
+            println!("Everything up to date!");
         }
     }
 }
@@ -104,7 +141,7 @@ fn print_status(machines: Vec<Machine>) {
 
     for machine in machines.iter() {
         table.add_row(vec![
-            Cell::new(&machine.name),
+            Cell::new(&machine.config.name),
             match machine.config_status {
                 ConfigStatus::NotInstalled => Cell::new("Not installed yet").fg(Color::Red),
                 ConfigStatus::Modified => Cell::new("Modified").fg(Color::Yellow),

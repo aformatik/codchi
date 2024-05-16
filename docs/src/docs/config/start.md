@@ -19,7 +19,7 @@ Make sure that the path to `configuration.nix` is correct. It must start with `.
 ```bash
 codchi init myMachine https://github.com/my/repo nixosModules.myModule
 ```
-Notice that `nixosModules.myModule` comes from `flake.nix`, so make sure they match! Now build the machine and run `neofetch`:
+Notice that `nixosModules.myModule` is from `flake.nix`, so make sure they match! Now build the machine and run `neofetch`:
 ```bash
 codchi rebuild myMachine
 codchi exec myMachine neofetch

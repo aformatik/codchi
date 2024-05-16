@@ -33,6 +33,17 @@ pub trait LinuxCommandTarget {
             // output: Output::Collect,
         }
     }
+
+    fn realpath(&self, path: &LinuxPath) -> anyhow::Result<LinuxPath> {
+        let realpath = self
+            .run("realpath", &[&path.0])
+            .output_utf8_ok()
+            .map(|path| path.trim().to_owned())?;
+
+        log::trace!("Resolved real path: '{path}' -> '{realpath}'");
+
+        Ok(LinuxPath(realpath))
+    }
 }
 
 #[derive(Clone)]
@@ -59,6 +70,12 @@ pub enum LinuxUser {
 #[derive(Debug, Clone)]
 pub struct LinuxPath(pub String);
 
+impl std::fmt::Display for LinuxPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl LinuxCommandBuilder {
     pub fn with_user(mut self, user: LinuxUser) -> Self {
         self.user = Some(user);
@@ -71,13 +88,13 @@ impl LinuxCommandBuilder {
     }
 }
 
-impl Into<Command> for LinuxCommandBuilder {
-    fn into(self) -> Command {
-        let mut cmd = self.driver.build(&self.user, &self.cwd);
+impl From<LinuxCommandBuilder> for Command {
+    fn from(val: LinuxCommandBuilder) -> Self {
+        let mut cmd = val.driver.build(&val.user, &val.cwd);
 
-        match &self.program {
+        match &val.program {
             Program::Run { program, args } => {
-                cmd.args(&["run", &program]);
+                cmd.args(["run", &program]);
                 for arg in args.iter() {
                     cmd.arg(arg);
                 }

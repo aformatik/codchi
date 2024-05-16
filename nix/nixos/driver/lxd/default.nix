@@ -11,6 +11,9 @@ in
   config = mkIf cfg.enable {
 
     codchi.driver.name = "lxd";
+    codchi.driver.iconCommand = lib.mkDefault ''
+      cp "$ICON_PATH" "codchi/icons/"
+    '';
 
     # Somehow setfacl -m fails during switch-to-configuration but succeedes on
     # container boot, so we mark them to only run on boot

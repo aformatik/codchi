@@ -1,9 +1,10 @@
 // use anyhow::{Context, Result};
 use crate::platform::LinuxPath;
-use itertools::Itertools;
 use once_cell::sync::Lazy;
 use std::{
-    env, fs, io,
+    env,
+    fmt::Debug,
+    fs, io,
     path::{Path, PathBuf},
 };
 
@@ -40,15 +41,42 @@ pub trait ToPath: Sized {
     }
 }
 
-pub trait PathExt: AsRef<Path> {
+pub trait PathExt: AsRef<Path> + Sized + core::fmt::Debug {
     /// Create the directory recursively if it doesn't exist and return its path
     fn get_or_create(&self) -> io::Result<&Self> {
+        if fs::metadata(self).is_err() {
+            fs::create_dir_all(self)?;
+        }
+        Ok(self)
+    }
+
+    /// Remove the directory and all of its contents if it exists and create an empty folder
+    fn cleanup_and_get(self) -> io::Result<Self> {
+        if fs::metadata(&self).is_ok() {
+            fs::remove_dir_all(&self)?;
+        }
         fs::create_dir_all(&self)?;
         Ok(self)
     }
+
+    /// Remove the directory and log::warn if an error occured
+    fn remove(self) {
+        if let Ok(meta) = fs::metadata(&self) {
+            let result = if meta.is_dir() {
+                fs::remove_dir_all(&self)
+            } else {
+                fs::remove_file(&self)
+            };
+            if let Err(err) = result {
+                log::warn!("Could not remove '{self:?}'. Reason: {err}");
+            }
+        } else {
+            log::trace!("Not removing non existant path '{self:?}'");
+        }
+    }
 }
 
-impl<P: AsRef<Path>> PathExt for P {}
+impl<P: AsRef<Path> + Debug> PathExt for P {}
 impl ToPath for PathBuf {
     fn join_str(&self, path: &str) -> Self {
         self.join(path)
@@ -59,32 +87,17 @@ pub mod host {
     use directories::BaseDirs;
 
     use super::*;
-    static BASE_DIR: Lazy<BaseDirs> = Lazy::new(|| BaseDirs::new().unwrap());
-    pub static DIR_CONFIG: Lazy<PathBuf> = Lazy::new(|| {
-        env::var_os("CODCHI_CONFIG_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| BASE_DIR.config_dir().join(APP_NAME))
-    });
-    pub static DIR_DATA: Lazy<PathBuf> = Lazy::new(|| {
-        env::var_os("CODCHI_DATA_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| BASE_DIR.data_local_dir().join(APP_NAME))
-    });
-    pub static DIR_NIX: Lazy<PathBuf> = Lazy::new(|| {
-        env::var_os("CODCHI_NIX_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| BASE_DIR.cache_dir().join(APP_NAME).join("/nix"))
-    });
+    pub static BASE_DIR: Lazy<BaseDirs> = Lazy::new(|| BaseDirs::new().unwrap());
+    pub static DIR_CONFIG: Lazy<PathBuf> = Lazy::new(|| BASE_DIR.config_dir().join(APP_NAME));
+    pub static DIR_DATA: Lazy<PathBuf> = Lazy::new(|| BASE_DIR.data_local_dir().join(APP_NAME));
+    pub static DIR_NIX: Lazy<PathBuf> =
+        Lazy::new(|| BASE_DIR.cache_dir().join(APP_NAME).join("nix"));
     pub static DIR_RUNTIME: Lazy<PathBuf> = Lazy::new(|| {
-        env::var_os("CODCHI_RUNTIME_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                BASE_DIR
-                    .runtime_dir()
-                    .map(Path::to_path_buf)
-                    .unwrap_or_else(|| env::temp_dir())
-                    .join(APP_NAME)
-            })
+        BASE_DIR
+            .runtime_dir()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(env::temp_dir)
+            .join(APP_NAME)
     });
 }
 

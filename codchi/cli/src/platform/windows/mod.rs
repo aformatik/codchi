@@ -1,3 +1,10 @@
+mod host;
+mod status;
+mod wsl;
+mod util;
+
+pub use host::*;
+
 use self::wsl::wsl_command;
 use super::{
     private::Private, Driver, LinuxCommandTarget, LinuxPath, LinuxUser, Machine, MachineDriver,
@@ -8,20 +15,16 @@ use crate::{
     consts::{
         self,
         files::{self},
-        host,
         machine::{self, machine_name},
         ToPath,
     },
     platform::CommandExt,
 };
-use anyhow::Result;
-use std::{env, fs, thread};
+use anyhow::{Context, Result};
+use std::{env, fs, path::PathBuf, thread};
 
 pub const NIX_STORE_PACKAGE: &str = "store-wsl";
 pub const NIXOS_DRIVER_NAME: &str = "wsl";
-
-mod status;
-mod wsl;
 
 pub struct StoreImpl {}
 
@@ -39,13 +42,16 @@ impl Store for StoreImpl {
             PlatformStatus::NotInstalled => wsl::import(
                 files::STORE_ROOTFS_NAME,
                 consts::CONTAINER_STORE_NAME,
-                host::DIR_DATA.join_store(),
-                || Self::start_or_init_container(Private),
+                consts::host::DIR_DATA.join_store(),
+                || {
+                    wsl::set_sparse(consts::CONTAINER_STORE_NAME)?;
+                    Self::start_or_init_container(Private)
+                },
             )
             .map_err(|err| {
                 log::error!("Removing leftovers of store files...");
-                let _ = fs::remove_dir_all(host::DIR_CONFIG.join_store());
-                let _ = fs::remove_dir_all(host::DIR_DATA.join_store());
+                let _ = fs::remove_dir_all(consts::host::DIR_CONFIG.join_store());
+                let _ = fs::remove_dir_all(consts::host::DIR_DATA.join_store());
                 err
             }),
             PlatformStatus::Running
@@ -90,17 +96,25 @@ impl Store for StoreImpl {
         }
     }
 
-    fn cmd(&self) -> impl LinuxCommandTarget + NixDriver {
+    fn cmd(&self) -> impl NixDriver {
         LinuxCommandDriver {
             instance_name: consts::CONTAINER_STORE_NAME.to_string(),
         }
+    }
+
+    fn _store_path_to_host(&self, path: &LinuxPath, _: Private) -> anyhow::Result<std::path::PathBuf> {
+        self.cmd()
+            .run("/bin/wslpath", &["-w", &path.0])
+            .output_utf8_ok()
+            .map(|path| PathBuf::from(path.trim()))
+            .with_context(|| format!("Failed to run 'wslpath' with path '{path}'."))
     }
 }
 
 impl MachineDriver for Machine {
     fn cmd(&self) -> impl LinuxCommandTarget {
         LinuxCommandDriver {
-            instance_name: machine::machine_name(&self.name),
+            instance_name: machine::machine_name(&self.config.name),
         }
     }
 
@@ -111,8 +125,8 @@ impl MachineDriver for Machine {
     fn install(&self, _: Private) -> Result<()> {
         wsl::import(
             files::MACHINE_ROOTFS_NAME,
-            &machine::machine_name(&self.name),
-            host::DIR_DATA.join_machine(&self.name),
+            &machine::machine_name(&self.config.name),
+            consts::host::DIR_DATA.join_machine(&self.config.name),
             || self.start(Private),
         )
     }
@@ -135,11 +149,11 @@ CODCHI_MACHINE_NAME="{name}"
 EOF
 "#,
                 debug = *DEBUG,
-                name = self.name,
+                name = self.config.name,
             ))
             .output_ok_streaming(|out| log::info!("{out}\r"))?;
 
-        let log_file = machine::init_log(&self.name);
+        let log_file = machine::init_log(&self.config.name);
         // let machine_log_prefix = machine_name(&self.name);
         thread::spawn(move || {
             // Tail the init log of the machine until the keyword MACHINE_HAS_STARTED
@@ -162,7 +176,7 @@ awk '/^{INIT_EXIT_ERR}$/{{ exit 1}};/^{INIT_EXIT_SUCCESS}$/{{exit 0}};1' < <(tai
     fn force_stop(&self, _: Private) -> Result<()> {
         wsl::wsl_command()
             .arg("--terminate")
-            .arg(machine_name(&self.name))
+            .arg(machine_name(&self.config.name))
             .wait_ok()?;
         Ok(())
     }
@@ -170,7 +184,7 @@ awk '/^{INIT_EXIT_ERR}$/{{ exit 1}};/^{INIT_EXIT_SUCCESS}$/{{exit 0}};1' < <(tai
     fn delete_container(&self, _: Private) -> Result<()> {
         wsl_command()
             .arg("--unregister")
-            .arg(machine_name(&self.name))
+            .arg(machine_name(&self.config.name))
             .wait_ok()?;
         Ok(())
     }
@@ -184,15 +198,18 @@ pub struct LinuxCommandDriver {
 impl LinuxCommandTarget for LinuxCommandDriver {
     fn build(&self, user: &Option<LinuxUser>, cwd: &Option<LinuxPath>) -> std::process::Command {
         let mut cmd = wsl_command();
-        cmd.args(&["-d", &self.instance_name]);
-        cmd.args(&["--cd", &cwd.clone().map(|p| p.0).unwrap_or("/".to_string())]);
+        cmd.args(["-d", &self.instance_name]);
+        cmd.args(["--cd", &cwd.clone().map(|p| p.0).unwrap_or("/".to_string())]);
 
         // https://devblogs.microsoft.com/commandline/share-environment-vars-between-wsl-and-windows/
         cmd.env("CODCHI_DEBUG", if *DEBUG { "1" } else { "" });
         cmd.env("CODCHI_MACHINE_NAME", &self.instance_name); // only neccessary for machines, ignored in store
         cmd.env("CODCHI_IS_STORE", "1"); // only neccessary for store, ignored in machines
-        cmd.env("WSL_CODCHI_DIR_CONFIG", host::DIR_CONFIG.as_os_str());
-        cmd.env("WSL_CODCHI_DIR_DATA", host::DIR_DATA.as_os_str());
+        cmd.env(
+            "WSL_CODCHI_DIR_CONFIG",
+            consts::host::DIR_CONFIG.as_os_str(),
+        );
+        cmd.env("WSL_CODCHI_DIR_DATA", consts::host::DIR_DATA.as_os_str());
         let mut wslenv = env::var_os("WSLENV").unwrap_or("".into());
         if !wslenv.is_empty() {
             wslenv.push(":");
@@ -204,10 +221,10 @@ impl LinuxCommandTarget for LinuxCommandDriver {
 
         match &user {
             Some(LinuxUser::Root) => {
-                cmd.args(&["--user", "root"]);
+                cmd.args(["--user", "root"]);
             }
             Some(LinuxUser::Default) => {
-                cmd.args(&["--user", consts::user::DEFAULT_NAME]);
+                cmd.args(["--user", consts::user::DEFAULT_NAME]);
             }
             None => {}
         };

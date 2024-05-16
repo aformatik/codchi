@@ -1,6 +1,6 @@
 { inputs, lib, pkgs, config, consts, ... }:
 let
-  inherit (lib) mkOption types mkDefault mkForce mkMerge;
+  inherit (lib) mkOption types mkDefault mkForce mkMerge mkIf;
 in
 {
   imports = [
@@ -8,9 +8,21 @@ in
     ./wsl
   ];
 
-  options.codchi.driver.name = mkOption {
-    type = types.str;
-    internal = true;
+  options.codchi.driver = {
+    name = mkOption {
+      type = types.str;
+      internal = true;
+    };
+    iconCommand = mkOption {
+      type = types.nullOr types.str;
+      description = ''
+        Bash command to convert XDG desktop icons to ones that the host platform understands.
+        Receives arguments `$ICON_PATH` and `$APP_NAME`. Result should be
+        written to `codchi/icons/$APP_NAME.<extension>`.
+
+        Use `null` to disable.
+      '';
+    };
   };
 
   config = mkMerge [
@@ -113,12 +125,12 @@ in
         ];
 
         # Copy .desktop files and corresponding icons (converted to .ico) to
-        # /run/current-system/sw/share/codchi. We copy instead of symlink them so
+        # /run/current-system/sw/share/codchi. Copy instead of symlink them, so
         # that drivers like WSL can see them.
-        extraSetup = /* bash */ ''
+        extraSetup = mkIf (config.codchi.driver.iconCommand != null) /* bash */ ''
           pushd $out/share
 
-          mkdir -p codchi/{icos,applications}
+          mkdir -p codchi/{icons,applications}
 
           for app_path in applications/*.desktop; do
             if grep -q ^NoDisplay=true "$app_path" || grep -q ^Hidden=true "$app_path"; then
@@ -131,10 +143,7 @@ in
               [ -d pixmaps ] && DIRS="$DIRS pixmaps"
               ICON_PATH="$(find -L $DIRS -name "$ICON_NAME.*" | sort -rV | head -n1)"
               if [ ! -z "$ICON_PATH" ]; then
-                ${pkgs.imagemagick}/bin/convert \
-                  -background transparent \
-                  -define icon:auto-resize=16,24,32,48,64,72,96,128,256 \
-                  "$ICON_PATH" "codchi/icos/$APP_NAME.ico"
+                ${config.codchi.driver.iconCommand}
               fi
               cp "$app_path" codchi/applications
             fi

@@ -39,7 +39,7 @@ pub fn lxc_output(args: &[&str]) -> io::Result<Output> {
     cmd.output()
 }
 pub fn lxc_output_ok(args: &[&str]) -> io::Result<Vec<u8>> {
-    let output = lxc_output(&args)?;
+    let output = lxc_output(args)?;
     if output.status.success() {
         Ok(output.stdout)
     } else {
@@ -75,8 +75,9 @@ pub mod image {
 pub mod container {
     use super::*;
     use crate::{consts::{user, PathExt}, platform::PlatformStatus};
-    use anyhow::Context;
+    use anyhow::{anyhow, Context};
     use itertools::Itertools;
+    use nix::unistd::{getgid, getuid, Group};
     use std::path::PathBuf;
 
     #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -141,22 +142,84 @@ pub mod container {
         lxc(&["config", "set", name, cfg])
     }
 
-    pub fn config_mount<P: AsRef<Path>>(
-        container_name: &str,
-        disk_name: &str,
-        source: P,
-        dest: &str,
-    ) -> io::Result<()> {
-        lxc(&[
-            "config",
-            "device",
-            "add",
-            container_name,
-            disk_name,
-            "disk",
-            &format!("source={}", source.as_ref().display()),
-            &format!("path={}", dest),
-        ])
+    #[derive(Debug, Clone)]
+    pub enum LxdDevice {
+        Disk {
+            source: PathBuf,
+            path: String,
+        },
+
+        InstanceProxy {
+            name: String,
+            listen: String,
+            connect: String,
+        },
+        #[allow(unused)]
+        Gpu,
+    }
+
+    pub fn config_mount(container_name: &str, device: &LxdDevice) -> anyhow::Result<()> {
+        match device {
+            LxdDevice::Disk { source, path } => {
+                let source = source.get_or_create()?.display();
+                lxc(&[
+                    "config",
+                    "device",
+                    "add",
+                    container_name,
+                    path.strip_prefix('/').unwrap_or(path),
+                    "disk",
+                    &format!("source={}", source),
+                    &format!("path={}", path),
+                ])
+                .with_context(|| {
+                    format!(
+                        "Failed to mount LXD device '{source}' at path '{path}' \
+to container {container_name}.",
+                    )
+                })
+            }
+            LxdDevice::InstanceProxy {
+                name,
+                listen,
+                connect,
+            } => lxc(&[
+                "config",
+                "device",
+                "add",
+                container_name,
+                name,
+                "proxy",
+                "bind=instance",
+                &format!("connect={}", connect),
+                &format!("listen={}", listen),
+                &format!("security.uid={}", getuid()),
+                &format!("security.gid={}", getgid()),
+            ])
+            .with_context(|| {
+                format!(
+                    "Failed to create LXD proxy '{name}' from '{listen}' \
+to '{connect}' in container {container_name}.",
+                )
+            }),
+            LxdDevice::Gpu => {
+                let video: Group = Group::from_name("video")?.ok_or(anyhow!(
+                    "Group 'video' (which is needed for GPU access) not found."
+                ))?;
+                lxc(&[
+                    "config",
+                    "device",
+                    "add",
+                    container_name,
+                    "gpu",
+                    "gpu",
+                    &format!("gid={}", video.gid),
+                ])
+                .with_context(|| {
+                    format!("Failed to create LXD GPU device in container {container_name}.",)
+                })
+            }
+        }
     }
 
     #[allow(dead_code)]
@@ -168,68 +231,45 @@ pub mod container {
     pub fn install<'a, P, I>(name: &str, rootfs: P, mounts: I) -> anyhow::Result<()>
     where
         P: AsRef<Path>,
-        I: IntoIterator<Item = (PathBuf, &'a str)>,
+        I: Iterator<Item = &'a LxdDevice>,
     {
         (|| {
-            image::import(&rootfs, &name).with_context(|| {
+            image::import(&rootfs, name).with_context(|| {
                 format!(
                     "Failed to import LXD image {name} from {}.",
                     rootfs.as_ref().to_string_lossy()
                 )
             })?;
 
-            image::init(&name, &name).with_context(|| {
+            image::init(name, name).with_context(|| {
                 format!(
                     "Failed to create LXD container {name} from {}.",
                     rootfs.as_ref().to_string_lossy()
                 )
             })?;
 
-            image::delete(&name)?;
+            image::delete(name)?;
 
-            container::config_set(&name, "security.nesting=true")?;
+            container::config_set(name, "security.nesting=true")?;
 
             // Map current host user to root in containers to allow accessing their files.
             // Although this prevents access to other users' files (like /home in a code
             // machine) from the host, root inside the container should be able to access
             // them. TODO: check /etc/sub{u,g}id for correctness
-            let idmap = {
-                #[link(name = "c")]
-                extern "C" {
-                    /// Get current uid via libc
-                    fn geteuid() -> u32;
-                    /// Get current gid via libc
-                    fn getegid() -> u32;
-                }
-                unsafe {
-                    format!(
-                        "uid {hostuid} {guestuid}\ngid {hostgid} {guestgid}",
-                        hostuid = geteuid(),
-                        guestuid = user::ROOT_UID,
-                        hostgid = getegid(),
-                        guestgid = user::ROOT_GID,
-                    )
-                }
-            };
-            container::config_set(&name, &format!("raw.idmap={idmap}"))?;
+            let idmap = format!(
+                "uid {hostuid} {guestuid}\ngid {hostgid} {guestgid}",
+                hostuid = getuid(),
+                guestuid = user::ROOT_UID,
+                hostgid = getgid(),
+                guestgid = user::ROOT_GID,
+            );
+            container::config_set(name, &format!("raw.idmap={idmap}"))?;
 
-            for (source, dest) in mounts {
-                let source = source.get_or_create()?;
-                container::config_mount(
-                    &name,
-                    dest.strip_prefix("/").unwrap_or(&dest),
-                    &source,
-                    &dest,
-                )
-                .with_context(|| {
-                    format!(
-                        "Failed to mount LXD device '{}' at path {dest} to container {name}.",
-                        source.to_string_lossy(),
-                    )
-                })?;
+            for mount in mounts {
+                container::config_mount(name, mount)?;
             }
 
-            container::start(&name).with_context(|| {
+            container::start(name).with_context(|| {
                 format!(
                     "Failed to start LXD container {name} from {}.",
                     rootfs.as_ref().to_string_lossy()
@@ -240,8 +280,8 @@ pub mod container {
         })()
         .map_err(|err| {
             log::error!("Removing leftovers of LXD container {name}...");
-            let _ = image::delete(&name);
-            let _ = container::delete(&name, true);
+            let _ = image::delete(name);
+            let _ = container::delete(name, true);
             err
         })
     }

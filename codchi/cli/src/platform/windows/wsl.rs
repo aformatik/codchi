@@ -1,18 +1,20 @@
-use std::{fs, io, path::PathBuf, process::Command, sync::OnceLock};
-
 use crate::{
-    consts::{self, host, PathExt, ToPath},
+    consts::{self, host, PathExt},
     platform::{CommandExt, PlatformStatus},
-    util::make_writeable_if_exists,
+    util::{make_writeable_if_exists, ResultExt},
+    ROOT_PROGRESS_BAR,
 };
 use anyhow::{anyhow, bail, Context, Result};
-// use codepage_strings::Coding as _;
+use inquire::InquireError;
 use itertools::Itertools;
 use known_folders::{get_known_folder_path, KnownFolder};
 use log::warn;
+use std::{fs, io, path::PathBuf, process::Command, sync::OnceLock};
+use sysinfo::System;
 use version_compare::Version;
-// use windows::Win32::System::Console::GetConsoleOutputCP as _;
 use wslapi::Library;
+// use windows::Win32::System::Console::GetConsoleOutputCP as _;
+// use codepage_strings::Coding as _;
 
 // #[derive(Error, Debug)]
 // pub enum Error {
@@ -27,6 +29,7 @@ const WSL_VERSION_MAX: &str = env!("CODCHI_WSL_VERSION_MAX");
 
 pub fn wsl_command() -> Command {
     let mut cmd = Command::new("wsl.exe");
+    // cmd.env("WSL_ENV", "WSL_UTF8");
     cmd.env("WSL_UTF8", "1");
     cmd
 }
@@ -95,7 +98,7 @@ pub fn get_platform_status(container_name: &str) -> Result<PlatformStatus> {
     if !get_api()?.is_distribution_registered(container_name) {
         Ok(PlatformStatus::NotInstalled)
     } else if wsl_command()
-        .args(&["--list", "--running", "--quiet"])
+        .args(["--list", "--running", "--quiet"])
         .output_utf8_ok()?
         .lines()
         .contains(&container_name)
@@ -131,7 +134,7 @@ pub fn import<T, F: Fn() -> Result<T>>(
             .arg(name)
             .arg(installation_path)
             .arg(&tmp_path)
-            .args(&["--version", "2"])
+            .args(["--version", "2"])
             .wait_ok()?;
 
         make_writeable_if_exists(&tmp_path)?;
@@ -144,4 +147,46 @@ pub fn import<T, F: Fn() -> Result<T>>(
         let _ = wsl_command().arg("--unregister").arg(name).wait_ok();
         err
     })
+}
+
+pub fn set_sparse(name: &str) -> Result<()> {
+    if System::new_all()
+        .processes()
+        .iter()
+        .filter(|(_, proc)| proc.name().contains("vmmem") || proc.name().contains("vmmemWSL"))
+        .next()
+        .is_some()
+    {
+        if ROOT_PROGRESS_BAR
+            .get()
+            .unwrap()
+            .suspend(|| {
+                inquire::Confirm::new(&format!(
+                    "Codchi needs to stop WSL in order to set \
+WSL distribution '{name}' to sparse mode. WARNING: This will stop all WSL distributions \
+including all running programs. Is this OK?",
+                ))
+                .with_help_message("You can also do this manually at a later time.")
+                .prompt()
+            })
+            .recover_err(|err| match err {
+                InquireError::NotTTY => Ok(false),
+                err => Err(err),
+            })?
+        {
+            wsl_command().arg("--shutdown").wait_ok()?;
+        } else {
+            log::warn!(
+                "WSL distro {name} was NOT set to sparse. \
+You can do this manually with `wsl.exe --manage {name} --set-sparse true`. \
+See <https://codchi.dev/docs/start/usage.html#large-wsl-distributions> for more information."
+            );
+            return Ok(());
+        }
+    }
+    wsl_command()
+        .args(&["--manage", name, "--set-sparse", "true"])
+        .wait_ok()?;
+
+    Ok(())
 }

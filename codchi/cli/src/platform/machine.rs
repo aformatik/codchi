@@ -1,6 +1,7 @@
-use super::{private::Private, LinuxCommandTarget, LinuxUser};
+use super::{platform::HostImpl, private::Private, Host, LinuxCommandTarget, LinuxUser};
 use crate::{
-    config::{Config, MachineConfig, MutableConfig},
+    cli::name,
+    config::MachineConfig,
     consts::{self, host, store, user, PathExt, ToPath},
     platform::{self, CommandExt, Driver, Store},
     util::with_spinner,
@@ -31,7 +32,6 @@ pub trait MachineDriver: Sized {
 
 #[derive(Debug, Clone)]
 pub struct Machine {
-    pub name: String,
     pub config: MachineConfig,
     pub config_status: ConfigStatus,
     pub platform_status: PlatformStatus,
@@ -62,10 +62,10 @@ pub enum PlatformStatus {
 
 impl Machine {
     pub fn update_status(mut self) -> Result<Self> {
-        self.platform_status = Self::read_platform_status(&self.name, Private)?;
+        self.platform_status = Self::read_platform_status(&self.config.name, Private)?;
         self.config_status = {
             use ConfigStatus::*;
-            let machine_dir = host::DIR_CONFIG.join_machine(&self.name);
+            let machine_dir = host::DIR_CONFIG.join_machine(&self.config.name);
             if self.platform_status == PlatformStatus::NotInstalled
                 || fs::symlink_metadata(machine_dir.join("system")).is_err()
             {
@@ -86,15 +86,14 @@ else
 fi
 "#,
                     ))
-                    .with_cwd(store::DIR_CONFIG.join_machine(&self.name))
+                    .with_cwd(store::DIR_CONFIG.join_machine(&self.config.name))
                     .output_from_str()?
             }
         };
         Ok(self)
     }
-    pub fn read(name: &str, config: MachineConfig, _: Private) -> Result<Self> {
+    pub fn read(config: MachineConfig, _: Private) -> Result<Self> {
         Self {
-            name: name.to_string(),
             config,
             config_status: ConfigStatus::NotInstalled,
             platform_status: PlatformStatus::NotInstalled,
@@ -104,60 +103,65 @@ fi
 
     /// Returns Err if machine doesn't exist
     pub fn by_name(name: &str) -> Result<Self> {
-        match Config::read()?.machines.get(name) {
-            Some(config) => Ok(Self::read(name, config.clone(), Private)?),
-            None => bail!("There is no machine with name '{name}'. List available machines with `codchi status`."),
+        match MachineConfig::read(name)? {
+            Some(config) => Ok(Self::read(config, Private)?),
+            None => bail!(
+                "Couldn't find machine '{name}'. List available machines with `codchi status`."
+            ),
         }
     }
 
     pub fn list() -> Result<Vec<Self>> {
-        Config::read()?
-            .machines
+        MachineConfig::list()?
             .into_iter()
-            .map(|(name, config)| Self::read(&name, config, Private))
+            .map(|cfg| Self::read(cfg, Private))
             .collect()
     }
 
     pub fn write_flake(&self) -> Result<()> {
-        let machine_dir = host::DIR_CONFIG.join_machine(&self.name);
+        let machine_dir = host::DIR_CONFIG.join_machine(&self.config.name);
         machine_dir.get_or_create()?;
 
         let flake = {
             let codchi_url = consts::CODCHI_FLAKE_URL;
+            let codchi_driver = name::CODCHI_DRIVER_MODULE;
             let module_inputs = self
                 .config
                 .modules
                 .iter()
-                .enumerate()
-                .map(|(idx, url)| format!(r#"    "{idx}".url = "{}";"#, url.to_nix_url()))
+                .map(|(name, url)| {
+                    format!(
+                        r#"    "{name}".url = "{}";"#,
+                        url.to_nix_url(&self.config.name)
+                    )
+                })
                 .join("\n");
             let driver = platform::NIXOS_DRIVER_NAME;
             let nix_system = consts::NIX_SYSTEM;
-            let nixpkgs = if let Some(idx) = self.config.nixpkgs_from {
-                format!(r#"inputs."{idx}".inputs.nixpkgs"#)
+            let nixpkgs = if let Some(name) = &self.config.nixpkgs_from {
+                format!(r#"inputs."{name}".inputs.nixpkgs"#)
             } else {
-                "inputs.codchi.inputs.nixpkgs".to_string()
+                "inputs.codchi_driver.inputs.nixpkgs".to_string()
             };
             let modules = self
                 .config
                 .modules
                 .iter()
-                .enumerate()
-                .map(|(idx, url)| {
+                .map(|(name, url)| {
                     format!(
-                        r#"        inputs."{idx}".{module_name}"#,
-                        module_name = url.flake_attr.0
+                        r#"        inputs."{name}".{module_name}"#,
+                        module_name = url.flake_attr
                     )
                 })
                 .join("\n");
             format!(
                 r#"{{
   inputs = {{
-    codchi.url = "{codchi_url}";
+    {codchi_driver}.url = "{codchi_url}";
 {module_inputs}
   }};
   outputs = inputs: {{
-    nixosConfigurations.default = inputs.codchi.lib.codeMachine {{
+    nixosConfigurations.default = inputs.{codchi_driver}.lib.codeMachine {{
       driver = "{driver}";
       system = "{nix_system}";
       nixpkgs = {nixpkgs};
@@ -169,65 +173,80 @@ fi
 }}"#
             )
         };
-        fs::write(&machine_dir.join("flake.nix"), flake)?;
+        fs::write(machine_dir.join("flake.nix"), flake)?;
 
         with_spinner("Initializing machine...", |_| {
             Driver::store()
                 .cmd()
-                .script(format!(
-                    /* bash */
+                .script(
                     r#"
 if [ ! -d .git ]; then
   git init -q
   git add flake.nix
 fi
 "#
-                ))
-                .with_cwd(store::DIR_CONFIG.join_machine(&self.name))
+                    .to_string(),
+                )
+                .with_cwd(store::DIR_CONFIG.join_machine(&self.config.name))
                 .wait_ok()
         })?;
 
         Ok(())
     }
 
-    pub fn build(&self) -> Result<()> {
+    pub fn build(&self, no_update: bool) -> Result<()> {
         self.write_flake()?;
-        with_spinner(format!("Building {}...", self.name), |spinner| {
+        with_spinner(format!("Building {}...", self.config.name), |spinner| {
+            let update = if no_update {
+                ""
+            } else {
+                "--recreate-lock-file"
+            };
             Driver::store()
                 .cmd()
                 .script(format!(
-                    /* bash */
                     r#"
 if [ ! -e system ]; then
-  nix profile install --profile system '.#nixosConfigurations.default.config.system.build.toplevel'
+  nix profile install {update} --profile system '.#nixosConfigurations.default.config.system.build.toplevel'
 else
-  nix profile upgrade --profile system '.*'
+  nix profile upgrade {update} --profile system '.*'
 fi
 pwd
 git add flake.*
 "#
                 ))
-                .with_cwd(store::DIR_CONFIG.join_machine(&self.name))
+                .with_cwd(store::DIR_CONFIG.join_machine(&self.config.name))
                 .output_ok_streaming(|line| info!("{line}\r"))?;
 
-            spinner.set_message(format!("Building {}...", self.name));
+            spinner.set_message(format!("Building {}...", self.config.name));
 
-            let status = Self::read_platform_status(&self.name, Private)?;
+            let status = Self::read_platform_status(&self.config.name, Private)?;
             if status == PlatformStatus::NotInstalled {
-                spinner.set_message(format!("Installing {}...", self.name));
+                spinner.set_message(format!("Installing {}...", self.config.name));
                 self.install(Private).map_err(|err| {
-                    log::error!("Removing leftovers of machine files for {}...", self.name);
-                    let _ = fs::remove_dir_all(host::DIR_CONFIG.join_machine(&self.name));
-                    let _ = fs::remove_dir_all(host::DIR_DATA.join_machine(&self.name));
+                    log::error!(
+                        "Removing leftovers of machine files for {}...",
+                        self.config.name
+                    );
+                    log::trace!(
+                        "Deleting config data for {}: {:?}",
+                        self.config.name,
+                        fs::remove_dir_all(host::DIR_CONFIG.join_machine(&self.config.name))
+                    );
+                    log::trace!(
+                        "Deleting data for {}: {:?}",
+                        self.config.name,
+                        fs::remove_dir_all(host::DIR_DATA.join_machine(&self.config.name))
+                    );
                     err
                 })?;
 
-                spinner.set_message(format!("Initializing {}...", self.name));
+                spinner.set_message(format!("Initializing {}...", self.config.name));
                 self.wait_online()?;
                 // self.cmd().run("sudo", &["poweroff"]).wait_ok()?;
             } else {
                 if status == PlatformStatus::Stopped {
-                    spinner.set_message(format!("Starting {}...", self.name));
+                    spinner.set_message(format!("Starting {}...", self.config.name));
                     self.start(Private)?;
                     self.wait_online()?;
                 }
@@ -239,6 +258,10 @@ git add flake.*
                     .with_user(LinuxUser::Root)
                     .wait_ok()?;
             }
+
+            spinner.set_message("Updating start menu shortcuts...");
+            HostImpl::write_machine_shortcuts(self)?;
+
             Ok(())
         })
     }
@@ -257,19 +280,22 @@ git add flake.*
 
     pub fn update(self) -> Result<Self> {
         self.write_flake()?;
-        with_spinner(format!("Checking for updates for {}...", self.name), |_| {
-            Driver::store()
-                .cmd()
-                .run("nix", &["flake", "update"])
-                .with_cwd(store::DIR_CONFIG.join_machine(&self.name))
-                .wait_ok()
-        })?;
+        with_spinner(
+            format!("Checking for updates for {}...", self.config.name),
+            |_| {
+                Driver::store()
+                    .cmd()
+                    .run("nix", &["flake", "update"])
+                    .with_cwd(store::DIR_CONFIG.join_machine(&self.config.name))
+                    .wait_ok()
+            },
+        )?;
 
         self.update_status()
     }
 
     pub fn delete(self, im_really_sure: bool) -> Result<()> {
-        let name = &self.name;
+        let name = &self.config.name;
         if !im_really_sure
             && !inquire::Confirm::new(&format!("Delete '{name}'?",))
                 .with_help_message(&format!(
@@ -297,16 +323,28 @@ git add flake.*
                     "rm",
                     &[
                         "-rf",
-                        &store::DIR_DATA.join_machine(&self.name).0,
-                        &store::DIR_CONFIG.join_machine(&self.name).0,
+                        &store::DIR_DATA.join_machine(&self.config.name).0,
+                        &store::DIR_CONFIG.join_machine(&self.config.name).0,
                     ],
                 )
                 .wait_ok()
                 .context("Failed deleting data.")?;
 
-            let mut cfg = MutableConfig::open()?;
-            cfg.get_machines().remove_entry(&name);
-            cfg.write()?;
+            log::trace!(
+                "Deleting config data for {}: {:?}",
+                self.config.name,
+                fs::remove_dir_all(host::DIR_CONFIG.join_machine(&self.config.name))
+            );
+            log::trace!(
+                "Deleting data for {}: {:?}",
+                self.config.name,
+                fs::remove_dir_all(host::DIR_DATA.join_machine(&self.config.name))
+            );
+
+            spinner.set_message("Deleting start menu shortcuts...");
+            HostImpl::delete_shortcuts(&self.config.name)?;
+
+            println!("Successfully deleted {}. You might also want to run a garbage collection (`codchi gc`).", self.config.name);
 
             Ok(())
         })
@@ -318,11 +356,11 @@ git add flake.*
         {
             bail!(
                 "Machine {} wasn't installed yet. Install with `codchi rebuild {}`.",
-                self.name,
-                self.name
+                self.config.name,
+                self.config.name
             );
         }
-
+        
         if self.platform_status == PlatformStatus::Stopped {
             self.start(Private)?;
             self.wait_online()?;
@@ -335,8 +373,10 @@ git add flake.*
                 .with_user(LinuxUser::Default),
             None => self.cmd().run("bash", &["-l"]),
         };
+
         cmd.with_cwd(user::DEFAULT_HOME.clone())
-            .with_user(LinuxUser::Default).exec()?;
+            .with_user(LinuxUser::Default)
+            .exec()?;
         Ok(())
     }
 }

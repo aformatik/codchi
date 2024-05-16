@@ -1,4 +1,5 @@
 mod cmd;
+mod host;
 mod machine;
 mod store;
 
@@ -8,6 +9,7 @@ mod store;
 mod platform;
 
 pub use self::cmd::*;
+pub use self::host::*;
 pub use self::machine::*;
 pub use self::nix::NixDriver;
 pub use self::store::*;
@@ -21,11 +23,12 @@ pub struct Driver {
 }
 
 impl Driver {
-    pub fn get() -> &'static Driver {
+    fn get() -> &'static Driver {
         static DRIVER: OnceLock<Driver> = OnceLock::new();
         let result: Result<&'static Driver> = DRIVER.get_or_try_init(|| {
-            let store = Store::init(private::Private)?;
-            Ok(Self { store })
+            Ok(Self {
+                store: Store::init(private::Private)?,
+            })
         });
         result.expect("Failed initializing Driver.")
     }

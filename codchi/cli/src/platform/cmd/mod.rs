@@ -30,7 +30,7 @@ pub enum Error {
     #[error("Failed parsing output string.")]
     Parse(#[from] anyhow::Error),
 
-    #[error("{cmd} failed with exit status {exit_status:?}. Stderr was:\n{stderr}")]
+    #[error("{cmd} failed with exit status {exit_status:?}. Stderr:\n{stderr}")]
     Other {
         cmd: String,
         exit_status: ExitStatus,
@@ -48,14 +48,19 @@ pub trait CommandExt: Debug {
             Ok(out.stdout)
         } else {
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-            log::trace!("Got error when running {self:?}:\n{stderr}");
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            log::trace!("Got error when running {self:?}:
+Stdout:
+{stdout}
+Stderr:
+{stderr}");
             Err(Error::Other {
                 cmd: format!("{self:?}"),
                 exit_status: out.status,
                 stderr,
             })
         }
-        .map(|out| out.peek(|out| log::trace!("Got output:\n{}", String::from_utf8_lossy(&out))))
+        .map(|out| out.peek(|out| log::trace!("Got output:\n{}", String::from_utf8_lossy(out))))
     }
     fn output_utf8_ok(&mut self) -> Result<String> {
         let output = self.output_ok()?;
@@ -175,9 +180,9 @@ impl CommandExt for Command {
     }
 }
 
-impl Into<Stdio> for OutputType {
-    fn into(self) -> Stdio {
-        match self {
+impl From<OutputType> for Stdio {
+    fn from(val: OutputType) -> Self {
+        match val {
             OutputType::Inherit => Stdio::inherit(),
             OutputType::Collect => Stdio::piped(),
             OutputType::Discard => Stdio::null(),

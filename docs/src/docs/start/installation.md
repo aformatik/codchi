@@ -106,7 +106,5 @@ In your NixOS configuration:
 ## MacOS
 
 ::: details
-Currently not implemented. Possible Drivers are <https://orbstack.dev/>
-(proprietary) and <https://lima-vm.io/> (open source, limited support for the
-newer faster virtualisation on Macs)
+Currently not implemented. Possible Drivers are <https://orbstack.dev/> (proprietary) and <https://lima-vm.io/> (open source, limited support for the newer faster virtualisation on Macs)
 :::

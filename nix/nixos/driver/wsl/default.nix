@@ -1,4 +1,4 @@
-{ config, pkgs, lib, ... }:
+{ config, lib, pkgs, ... }:
 let
   inherit (lib) mkEnableOption mkIf;
   cfg = config.codchi.driver.wsl;
@@ -13,6 +13,12 @@ in
   config = mkIf cfg.enable {
 
     codchi.driver.name = "wsl";
+    codchi.driver.iconCommand = lib.mkDefault ''
+      ${pkgs.imagemagick}/bin/convert \
+        -background transparent \
+        -define icon:auto-resize=16,24,32,48,64,72,96,128,256 \
+        "$ICON_PATH" "codchi/icons/$APP_NAME.ico"
+    '';
 
     environment.etc = {
       hosts.enable = false;

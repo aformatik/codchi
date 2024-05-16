@@ -1,10 +1,11 @@
 use super::{
-    platform::{self},
-    private, CommandExt, LinuxCommandTarget, NixDriver,
+    platform,
+    private::{self, Private},
+    CommandExt, LinuxCommandTarget, LinuxPath, NixDriver,
 };
-use crate::{consts::*, util::with_spinner};
-use anyhow::Result;
-use std::{fs, thread, time::Duration};
+use crate::{config::MachineConfig, consts::*, util::with_spinner};
+use anyhow::{bail, Context, Result};
+use std::{collections::HashMap, fs, path::PathBuf, thread, time::Duration};
 
 /// Internal name of driver module in codchi's NixOS modules
 pub const NIXOS_DRIVER_NAME: &str = platform::NIXOS_DRIVER_NAME;
@@ -53,5 +54,58 @@ pub trait Store: Sized {
     }
 
     /// Get driver for running commands inside store
-    fn cmd(&self) -> impl LinuxCommandTarget + NixDriver;
+    fn cmd(&self) -> impl NixDriver;
+
+    fn gc(&self, min_age: Option<u16>, all: bool, machine_names: &Vec<String>) -> Result<()> {
+        with_spinner("Deleting dead store paths...", |_| {
+            if let Some(min_age) = min_age {
+                let mut args = vec!["profile", "wipe-history", "--profile", "system"];
+                let min_age_str = format!("{}d", min_age);
+                if min_age > 0 {
+                    args.extend(["--older-than", &min_age_str]);
+                }
+
+                let machines = if all {
+                    MachineConfig::list()?
+                } else {
+                    let all_machines: HashMap<String, MachineConfig> = MachineConfig::list()?
+                        .into_iter()
+                        .map(|cfg| (cfg.name.clone(), cfg))
+                        .collect();
+                    let mut machines = Vec::with_capacity(all_machines.len());
+                    for name in machine_names {
+                        match all_machines.get(name) {
+                            Some(cfg) => machines.push(cfg.clone()),
+                            None => bail!("Machine {name} doesn't exist."),
+                        }
+                    }
+                    machines
+                };
+                for machine in machines {
+                    self.cmd()
+                        .run("nix", &args)
+                        .with_cwd(store::DIR_CONFIG.join_machine(&machine.name))
+                        .wait_ok()?;
+                }
+            }
+            self.cmd()
+                .run("nix", &["store", "gc"])
+                .output_ok_streaming(|line| log::info!("{line}\r"))?;
+            Ok(())
+        })
+    }
+
+    fn _store_path_to_host(&self, path: &LinuxPath, _: Private) -> anyhow::Result<PathBuf>;
+
+    /// Resolve an absolute path with all symlinks resolved on the host. This only works reliable
+    /// for nix store paths
+    /// * `path` - Store path starting with '/nix/'
+    fn store_path_to_host(&self, path: &LinuxPath) -> anyhow::Result<PathBuf> {
+        let host_path = self._store_path_to_host(path, Private)?;
+
+        fs::metadata(&host_path)
+            .with_context(|| format!("Store path '{path}', resolved to '{host_path:?}', is not accessible from your host."))?;
+
+        Ok(host_path)
+    }
 }

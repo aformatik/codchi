@@ -1,6 +1,26 @@
 # Architecture
 
 
+
+
+
+<!--
+Codchi = driver
+    - 1. OS => WSL, LXD - Linux
+        - 
+        - Nix store sharing
+    - 2. NixOS
+
+Code / design guidelines
+    - Easy to use
+    - Simplicity
+        - no daemon neccessary
+    - Performant
+    - plain NixOS
+    - No vendor lockin
+
+
+
 - Testing
 
 ## Codchi Drivers
@@ -151,3 +171,5 @@ Examples for capabilities:
     - USB?
     - SSH Agent?
     - Sound / Video?
+
+    -->

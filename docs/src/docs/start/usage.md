@@ -1,39 +1,30 @@
 # Using Codchi
 
 ::: info
-Each machine is identified by a `<name>`.
+Each machine is identified by a `MACHINE_NAME`.
 :::
 
 ## Creating a Machine
 
-A code machine usually has one module that resides in the repository of the
-project you want to develop. To create a machine with this module, use the
-following command. Only the url to the repository is mandatory. Codchi will try
-to guess the rest of the information and prompt you if neccessary.
+A code machine usually has one module that resides in the repository of the project you want to develop. To create a machine with this module, use the following command. Only the url to the repository is mandatory. Codchi will try to guess the rest of the information and prompt you if neccessary.
 ```bash
-codchi init <name> https://github.com/link/to/repo <module name>
+codchi init MACHINE_NAME https://github.com/link/to/repo [MODULE_PATH]
 ```
-`<module name>` is the identifier of the NixOS module inside the repo's
-`flake.nix` and looks like `nixosModules.<name>` or `codchiModules.<name>`. If
-you're not sure which module to use, omit this argument. Codchi will prompt you
-with a list of possible options.
+`MODULE_PATH` is the path of the NixOS module inside the repo's `flake.nix` and looks like `nixosModules.<name>` or `codchiModules.<name>`. If you're not sure which module to use, omit this argument. Codchi will prompt you with a list of possible options.
 
 To prevent prompts or to specify a branch or commit, use the following options:
 
-- **`-y` or `--dont-prompt`:** Dont prompt under any circumstances. Usefull for
-  scripts. Codchi will throw an error if information is missing.
+- **`-y` or `--dont-prompt`:** Dont prompt interactively. Usefull for scripts. Codchi will throw an error if information is missing. Note that this requires `MODULE_PATH` and **`--use-nixpkgs`**.
+- **`--use-nixpkgs <location>` or `-p <location>`** where location can be `local` or `remote`: See [Which nixpkgs should I use?](#which-nixpkgs-should-i-use).
 - **`-b <branch>` or `--branch <branch>`:** The git branch to use.
 - **`-r <tag>` or `--tag <tag>`:** The git tag to use.
 - **`-c <commit>` or `--commit <commit>`:** The git commit to use.
-- **`-t <token>` or `--token <token>`:** An authentication token for private
-  repositories. Here are some examples:
+- **`-t <token>` or `--token <token>`:** An authentication token for private repositories. Here are some examples:
   ```bash
   oauth2:glpat-asf9k20afl20faf022fe         # GitLab
   ghp_af9afsfawe9faefjkfea92jadwjj29adjjad  # GitHub
   <user>:<password>                         # General syntax
   ```
-
-  <!-- TODO use nixpkgs option -->
 
 After successfull creation, [apply your changes](#applying-changes)!
 
@@ -53,14 +44,14 @@ Since every code machine is a NixOS system, it needs a version of nixpkgs (the c
 ### Get a shell into a machine
 
 ```bash
-codchi exec <name>
+codchi exec MACHINE_NAME
 ```
 
 ### Run a command-line program
 
 ```bash
-codchi exec <name> <program>
-# For example: codchi exec <name> uname -a
+codchi exec MACHINE_NAME PROGRAM [ARGS...]
+# For example: codchi exec MACHINE_NAME uname -a
 ```
 
 ### Run a graphical program
@@ -71,41 +62,35 @@ your host system menu as shortcuts.
 
 ## Codchi Modules
 
-Each code machine has a list of modules (often just one). List them with:
+Each code machine has a list of modules (often just one) which are identified by a name. List them with:
 ```bash
-codchi module list <name>
+codchi module list MACHINE_NAME
 ```
-You'll need the module index to modify it.
 
 ::: warning
 Dont forget to [apply changes](#applying-changes) you make!
 :::
 
 ### Adding modules
-Sometimes you might want to customize a code machine, but don't want to commit
-it to upstream.  For example, you might want to use a different editor than the
-rest of the project's contributors. Fortunately, you can add as many modules to
-a machine as you like! This is especially handy for sharing your personal
-configuration between different projects/code machines.
+Sometimes you might want to customize a code machine, but don't want to commit it to upstream.  For example, you might want to use a different editor than the rest of the project's contributors. Fortunately, you can add as many modules to a machine as you like! This is especially handy for sharing your personal configuration between different projects/code machines.
 ```bash
-codchi module add <name> https://github.com/my/module
+codchi module add MACHINE_NAME https://github.com/my/module
 ```
 The options are the same as for [`codchi init`](#creating-a-machine).
 
 
 ### Modifying a module
-<!-- TODO module edit -->
-To edit a module, for example to switch to a different branch, use `codchi module set`:
+To edit a module, for example to switch to a different branch, use `codchi module set`. The options are the same as for [`codchi init`](#creating-a-machine).
+
 ```bash
-codchi module set <name> <module index>
+codchi module set MACHINE_NAME MODULE_NAME [URL] [MODULE_PATH]
 ```
-The options are the same as for [`codchi init`](#creating-a-machine).
 
 
 #### Local Configuration
 
 While working on a code machine module, any change to the code must first be pushed online before Codchi can pull and apply the change. This can quickly become annoying, especially if you're actively developing the module or experimenting a lot. Luckily, a machine module can be switched to local repository inside the code machine.
-The following example is based on `myMachine` with the module `myModule` from chapter [Your first Module](../config/start.md).
+The following example is based on `myMachine` from chapter [Your first Module](../config/start.md).
 
 ::: tip
 It's good practise to have the `.nix` configuration files in the repository of your project itself. This way Codchi can spin up a machine for every commit of your project. Also you'll have the project checked out in your code machine anyway, so step 1 shouldn't be neccessary.
@@ -119,31 +104,32 @@ git clone https://github.com/my/repo ~/my-project-name
 nix run nixpkgs\#git -- clone https://github.com/my/repo ~/my-project-name
 ```
 
-2. Now you can tell Codchi to switch `myModule` to the local repository by using [`codchi module set`](#modifying-a-module). `<module-index>` is the index of `myModule` and should be `0` if this is the only module.
+2. Upon creation of `myMachine`, if you didn't explicitly specify a module name for your repository, Codchi guesses a name from its url. List `myMachine`'s modules to get the actual module name.
 ```bash
-codchi module set myMachine <module-index> ~/path/to/repo
+codchi module mod ls myMachine
+```
+3. Now you can tell Codchi to switch the module pointing to the remote repository to your local copy. 
+```bash
+codchi module set myMachine MODULE_NAME path/to/repo
 ```
 
 ### Delete a module
 This will not delete your files, even if its the last remaining module! It will
 only remove programs, services and other configuration defined in that module.
 ```bash
-codchi module delete <name> <module index>
+codchi module delete MACHINE_NAME MODULE_NAME
 ```
 
 ### Applying changes
 
 After the modules of a machine were modified, the modifications need to be applied:
-<!-- TODO consistent update checks / notifications -->
 ```bash
-codchi rebuild <name>
+codchi rebuild MACHINE_NAME
 ```
-This will also fetch upstream module changes (or in case of a local module it
-will use the current HEAD). If you dont want to fetch the latest updates, use:
+This will also fetch upstream module changes (or in case of a local module it will use the current HEAD). If you dont want to fetch the latest updates, use:
 ```bash
-codchi rebuild <name> --no-update
+codchi rebuild MACHINE_NAME --no-update
 ```
-<!-- TODO --no-update -->
 
 ## Uninstalling a code machine
 
@@ -152,17 +138,39 @@ This will irrevocably delete all files belonging to the code machine!
 :::
 
 ```bash
-codchi delete <name>
-```
-Although all files of the machine will be deleted, the programs and system
-files of the machine will still occupy disk space. This is because they reside
-inside the [Nix store](https://nixos.org/guides/how-nix-works/). To reclaim
-disk space, run a garbage collection:
-<!-- TODO (extra gc page) -->
-<!-- TODO implement gc -->
-```bash
-codchi gc
+codchi delete MACHINE_NAME
 ```
 
+## Garbage Collection
+
+All programs and system files reside in the append-only Nix Store. Over time the store will grow in size noticably, because everytime a `codchi rebuild` is run, new files get added to the store. Therefore you might want to perform a garbage collection from time to time:
+```bash
+codchi gc [MACHINE_NAME...]
+```
+
+Available options:
+
+- **`--older-than [<age>]` or `-d [<age>]`**: By default, garbage collection will **not** delete old machine generations in order to allow instantaneous rollbacks. The drawback is that the store paths refered to in the old generations never get freed. To also delete old generations, use this flag with an optional minimum age (in days). Note that only explicitly listed machines (`MACHINE_NAME...`) will be processed. For example, to delete generations older than one month in `myMachine` use:
+```bash
+codchi gc -d 30 myMachine
+```
+- **`--all` or `-a`** flag: Process all machines (only works with **`--older-than`**).
+
+### Large WSL Distributions
+
+On Windows, the store is inside the WSL distribution 'codchistore'. By default WSL distributions only grow in size, once used disk space is not automatically reclaimed. Codchi will try to set the distribution to sparse mode which should automatically free unused space. If this doesn't work, you can do it automatically with
+```bash
+wsl.exe --manage codchistore --set-sparse true
+```
+Beware that WSL needs to be shut down for this which will close all running Linux programs.
+
+If sparse mode somehow doesn't work correctly, you can manually shrink a WSL distribution like this:
+```ps1
+wsl.exe --terminate codchistore
+diskpart # this will need admin rights
+select vdisk file="C:\Users\YOUR_USER\AppData\Local\codchi\store\ext4.vhdx"
+compact vdisk
+exit
+```
 
 <!-- ## Uninstalling Codchi -->
