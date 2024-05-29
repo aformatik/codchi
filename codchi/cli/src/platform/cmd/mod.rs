@@ -43,17 +43,20 @@ pub trait CommandExt: Debug {
     fn spawn(&mut self, out_ty: OutputType) -> Result<Child>;
     fn output_ok(&mut self) -> Result<Vec<u8>> {
         log::trace!("Running command: {self:?}");
+
         let out = self.spawn(OutputType::Collect)?.wait_with_output()?;
         if out.status.success() {
             Ok(out.stdout)
         } else {
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
             let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-            log::trace!("Got error when running {self:?}:
+            log::trace!(
+                "Got error when running {self:?}:
 Stdout:
 {stdout}
 Stderr:
-{stderr}");
+{stderr}"
+            );
             Err(Error::Other {
                 cmd: format!("{self:?}"),
                 exit_status: out.status,

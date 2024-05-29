@@ -7,6 +7,11 @@
     - Demo Video
     - [ ] Configuring Codchi
         - ~~[x] Config / State dirs~~
+    - [ ] NixOS options
+        - timezone
+        - hosts / resolv.conf
+
+    
 
 - MVP Features
     - [/] Shortcuts => Windows test
@@ -21,12 +26,12 @@
     - [ ] Graphical Launcher
         - codchiw.exe?
         - Logging / Error message via popup?
-    - [X] gc
-        - WSL: shrink vhdx => Docs
+    - gc
+        - [X] WSL: sparse vhdx => Docs
+        - [ ] keep user-roots by direnv / nix build
     - [/] simple tray icon
     - [/] WSL
-        - switch vcxsrv / wslg
-        - (pulseaudio switch)
+        - [x] switch vcxsrv / wslg
         - vcxsrv tray icon switch
 
 - Release v0.2.0

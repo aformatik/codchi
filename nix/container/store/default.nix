@@ -1,6 +1,5 @@
 { inputs, pkgs, lib, config, consts, ... }:
-let
-  inherit (lib) mkOption mkEnableOption types mkIf;
+let inherit (lib) mkOption mkEnableOption types mkIf;
   cfg = config.store;
 in
 {
@@ -49,8 +48,10 @@ in
       build.shellInit = /* bash */ ''
         set -euo pipefail
 
+        export NIX_VERBOSITY=
         if [ -n "''${CODCHI_DEBUG:-}" ]; then
           set -x
+          export NIX_VERBOSITY="-v"
         fi
 
         # Use config.system.binPackages and PATH from parent
@@ -155,7 +156,7 @@ in
           # git is needed for first `nix profile install` from flake
           _GIT_IMPURE=1
           mkdir -p "${consts.store.DIR_CONFIG_STORE}"
-          nix profile install nixpkgs#git
+          nix $NIX_VERBOSITY profile install nixpkgs#git
         fi
         if [ ! -d "${consts.store.DIR_CONFIG_STORE}/.git" ]; then
           logE "Initializing store..."
@@ -167,21 +168,22 @@ in
         if [ -n "$(git -C "${consts.store.DIR_CONFIG_STORE}" diff)" ]; then
           logE "Checking for updates..."
           ( cd "${consts.store.DIR_CONFIG_STORE}"
-            nix flake update
+            nix $NIX_VERBOSITY flake update
             git add flake.*
           )
         fi
         if [ -n "$_GIT_IMPURE" ]; then
           logE "Installing store..."
           mkdir -p "${consts.store.DIR_CONFIG_STORE}"
-          nix profile install --profile "${consts.store.PROFILE_STORE}" "${consts.store.DIR_CONFIG_STORE}"
+          nix $NIX_VERBOSITY profile install --profile "${consts.store.PROFILE_STORE}" "${consts.store.DIR_CONFIG_STORE}"
 
           # remove impure git from default profile
-          nix profile remove '.*'
-          nix profile wipe-history
+          nix $NIX_VERBOSITY profile remove '.*'
+          nix $NIX_VERBOSITY profile wipe-history
         else
           logE "Updating store..."
-          nix profile upgrade --profile "${consts.store.PROFILE_STORE}" '.*'
+          nix flake update $NIX_VERBOSITY "${consts.store.DIR_CONFIG_STORE}"
+          nix $NIX_VERBOSITY profile upgrade --profile "${consts.store.PROFILE_STORE}" '.*'
         fi
       '';
     }

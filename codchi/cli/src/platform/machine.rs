@@ -8,8 +8,11 @@ use crate::{
 };
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
-use log::info;
-use std::{fs, thread, time::Duration};
+use std::{
+    fs,
+    thread::{self},
+    time::Duration,
+};
 
 pub trait MachineDriver: Sized {
     fn cmd(&self) -> impl LinuxCommandTarget;
@@ -103,12 +106,8 @@ fi
 
     /// Returns Err if machine doesn't exist
     pub fn by_name(name: &str) -> Result<Self> {
-        match MachineConfig::read(name)? {
-            Some(config) => Ok(Self::read(config, Private)?),
-            None => bail!(
-                "Couldn't find machine '{name}'. List available machines with `codchi status`."
-            ),
-        }
+        let (_, cfg) = MachineConfig::open_existing(name, false)?;
+        Self::read(cfg, Private)
     }
 
     pub fn list() -> Result<Vec<Self>> {
@@ -197,26 +196,51 @@ fi
     pub fn build(&self, no_update: bool) -> Result<()> {
         self.write_flake()?;
         with_spinner(format!("Building {}...", self.config.name), |spinner| {
+            let has_local = self.config.modules.iter().any(|(_, flake)| {
+                matches!(flake.location, crate::config::FlakeLocation::Local { .. })
+            });
+            let awaker = if has_local {
+                spinner.set_message(format!("Starting {}...", self.config.name));
+                self.start(Private)?;
+                self.wait_online()?;
+                let mut cmd = self.cmd().run("sleep", &["infinity"]);
+                Some(thread::spawn(move || {
+                    log::trace!("Keeping machine awake: {:?}", cmd.wait_ok().unwrap());
+                }))
+            } else {
+                None
+            };
+            spinner.set_message(format!("Building {}...", self.config.name));
+
             let update = if no_update {
                 ""
             } else {
-                "--recreate-lock-file"
+                "--refresh --recreate-lock-file"
             };
             Driver::store()
                 .cmd()
                 .script(format!(
                     r#"
+NIX_CFG_FILE="$(nix build --no-link --print-out-paths '.#nixosConfigurations.default.config.environment.etc."nix/nix.conf".source')"
+export NIX_CONFIG="$(cat $NIX_CFG_FILE)"
 if [ ! -e system ]; then
-  nix profile install {update} --profile system '.#nixosConfigurations.default.config.system.build.toplevel'
+  nix $NIX_VERBOSITY profile install {update} --option warn-dirty false --profile system '.#nixosConfigurations.default.config.system.build.toplevel'
 else
-  nix profile upgrade {update} --profile system '.*'
+  nix $NIX_VERBOSITY profile upgrade {update} --option warn-dirty false --profile system '.*'
 fi
 pwd
 git add flake.*
 "#
                 ))
                 .with_cwd(store::DIR_CONFIG.join_machine(&self.config.name))
-                .output_ok_streaming(|line| info!("{line}\r"))?;
+                .output_ok_streaming(|line| log::info!("{line}\r"))?;
+
+            if awaker.is_some() {
+                log::trace!(
+                    "Killing awaker: {:?}",
+                    self.cmd().run("pkill", &["sleep"]).wait_ok()
+                );
+            }
 
             spinner.set_message(format!("Building {}...", self.config.name));
 
@@ -360,7 +384,9 @@ git add flake.*
                 self.config.name
             );
         }
-        
+
+        HostImpl::pre_exec()?;
+
         if self.platform_status == PlatformStatus::Stopped {
             self.start(Private)?;
             self.wait_online()?;

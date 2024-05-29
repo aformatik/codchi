@@ -1,11 +1,17 @@
 use crate::{
+    cli::DEBUG,
+    config::CodchiConfig,
     consts::{self, PathExt},
     platform::{DesktopEntry, Host},
+    // util::dbg_duration,
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 use known_folders::{get_known_folder_path, KnownFolder};
 use mslnk::ShellLink;
-use std::{env, fs};
+use std::{env, fs, os::windows::process::CommandExt, process::Command};
+use sysinfo::System;
+use windows::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW};
+// use winreg::{enums::HKEY_CURRENT_USER, RegKey};
 
 pub struct HostImpl;
 impl HostImpl {}
@@ -62,6 +68,79 @@ impl Host for HostImpl {
             .join("icos")
             .join(machine_name)
             .remove();
+        Ok(())
+    }
+
+    fn pre_exec() -> Result<()> {
+        let cfg = CodchiConfig::get();
+        if cfg.vcxsrv.enable {
+            if System::new_all()
+                .processes_by_name("codchi_vcxsrv.exe")
+                .next()
+                .is_some()
+            {
+                log::debug!("VcXsrv is already running.");
+            } else {
+                let vcxsrv_exe = known_folders::get_known_folder_path(KnownFolder::ProgramFilesX64)
+                    .expect("Missing FOLDERID_ProgramFilesX64.")
+                    .join("VcXsrv")
+                    .join("codchi_vcxsrv.exe");
+                vcxsrv_exe
+                    .assert_exists()
+                    .context("VcXsrv executable not found.")?;
+
+                // dbg_duration("regedit for VcXsrv", || {
+                //     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+                //     let (key, _disp) = hkcu.create_subkey(
+                //         r"Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers",
+                //     )?;
+
+                //     let val = key.get_value::<String, _>(&vcxsrv_exe);
+                //     if val.as_ref().is_ok_and(|val| val != "~ HIGHDPIAWARE")
+                //         || val.is_err_and(|err| err.kind() == io::ErrorKind::NotFound)
+                //     {
+                //         log::debug!("Setting {vcxsrv_exe:?} to HIGHDPI mode");
+                //         key.set_value(&vcxsrv_exe, &"~ HIGHDPIAWARE")?;
+                //     };
+
+                //     anyhow::Ok(())
+                // })?;
+
+                let mut cmd = Command::new(vcxsrv_exe);
+                cmd.args([
+                    "-ac",          // disable access control
+                    "-noreset",     // dont restart after last client exits
+                    "-wgl",         // native opengl
+                    "-compositewm", // previews for windows
+                    "-dpi",
+                    "auto",
+                    "-multiwindow", // seamless mode
+                    "-clipboard",
+                    "-noprimary",
+                    "-logfile",
+                    &consts::host::DIR_DATA
+                        .get_or_create()?
+                        .join("vcxsrv.log")
+                        .to_string_lossy(),
+                    "-logverbose",
+                    if *DEBUG { "3" } else { "2" },
+                    // , "-vmid"
+                    // , "{" <> toText wslVmId <> "}"
+                    "-vsockport",
+                    "6000",
+                ]);
+                if !cfg.vcxsrv.tray_icon {
+                    cmd.arg("-notrayicon");
+                }
+                cmd.env("__COMPAT_LAYER", "HighDpiAware");
+                log::debug!("Starting VcXsrv with arguments: {cmd:?}");
+                cmd
+                    // .stdout(stdout)
+                    // .stderr(stderr)
+                    .creation_flags(CREATE_NEW_PROCESS_GROUP.0 | CREATE_NO_WINDOW.0)
+                    .spawn()?;
+            }
+        }
         Ok(())
     }
 }

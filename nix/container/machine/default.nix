@@ -51,8 +51,6 @@ in
       ''
         set -euo pipefail
 
-        # temporarily store host's $PATH (useful for WSL)
-        export HOST_PATH="$PATH"
         # Use config.system.binPackages and PATH from host
         export LANG="C.UTF-8" HOME=/root PATH="/bin:$PATH"
 
@@ -70,9 +68,6 @@ in
         # not have to be done at boot time.
         echo "running activation script..."
         /nix/var/nix/profiles/system/activate
-
-        # Append host's $PATH with lower priority than NixOS' $PATH
-        export PATH="$PATH:$HOST_PATH"
 
         # Record the boot configuration.
         ln -sfn "$(readlink -f /nix/var/nix/profiles/system)" /run/booted-system

@@ -1,5 +1,12 @@
 use indicatif::ProgressBar;
-use std::{borrow::Cow, fs, io, marker::PhantomData, path::Path, thread, time::Duration};
+use std::{
+    borrow::Cow,
+    fs, io,
+    marker::PhantomData,
+    path::Path,
+    thread,
+    time::{Duration, Instant},
+};
 
 use crate::ROOT_PROGRESS_BAR;
 
@@ -158,4 +165,17 @@ impl<T, E> ResultExt<E> for Result<T, E> {
             Err(err) => f(err),
         }
     }
+}
+
+pub fn dbg_duration<F, R>(title: &str, f: F) -> R
+where
+    F: FnOnce() -> R,
+{
+    let start = Instant::now();
+    let result = f();
+    let duration = start.elapsed();
+
+    log::debug!("Time elapsed in {title}: {duration:?}");
+
+    result
 }

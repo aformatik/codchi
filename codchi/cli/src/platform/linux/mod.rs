@@ -6,7 +6,7 @@ pub use host::*;
 use super::{private::Private, LinuxCommandTarget, LinuxPath, LinuxUser, NixDriver, Store};
 use crate::{
     cli::DEBUG,
-    consts::{self, machine::machine_name, ToPath},
+    consts::{self, machine::machine_name, PathExt, ToPath},
     platform::{platform::lxd::container::LxdDevice, Machine, MachineDriver, PlatformStatus},
 };
 use anyhow::{Context, Result};
@@ -33,15 +33,15 @@ Please see <https://codchi.dev/docs/start/installation.html#linux> for setup ins
                         .context("Failed reading $CODCHI_LXD_CONTAINER_STORE from environment. This indicates a broken build.")?;
                 let mounts = vec![
                     LxdDevice::Disk {
-                        source: consts::host::DIR_CONFIG.clone(),
+                        source: consts::host::DIR_CONFIG.get_or_create()?.clone(),
                         path: consts::store::DIR_CONFIG.0.clone(),
                     },
                     LxdDevice::Disk {
-                        source: consts::host::DIR_DATA.clone(),
+                        source: consts::host::DIR_DATA.get_or_create()?.clone(),
                         path: consts::store::DIR_DATA.0.clone(),
                     },
                     LxdDevice::Disk {
-                        source: consts::host::DIR_NIX.clone(),
+                        source: consts::host::DIR_NIX.get_or_create()?.clone(),
                         path: consts::store::DIR_NIX.0.clone(),
                     },
                 ];
@@ -70,7 +70,7 @@ Please see <https://codchi.dev/docs/start/installation.html#linux> for setup ins
         }
     }
 
-    fn store_path_to_host(&self, path: &LinuxPath) -> Result<PathBuf> {
+    fn _store_path_to_host(&self, path: &LinuxPath, _: Private) -> anyhow::Result<PathBuf> {
         Ok(consts::host::DIR_NIX.join(
             path.0
                 .strip_prefix("/nix/")

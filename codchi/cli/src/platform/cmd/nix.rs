@@ -8,6 +8,9 @@ pub enum Error {
     #[error("Nix eval didn't find attribute.")]
     EvalMissingAttr,
 
+    #[error("The 'flake.lock' inside this repository is out of date. Please run 'nix flake lock' inside this repository, commit the newly generated lockfile and try again.")]
+    LockOutOfDate,
+
     // TODO: docs
     #[error("SSL peer certificate or SSH remote key was not OK.")]
     InvalidRemoteSSLOrSSH,
@@ -41,6 +44,8 @@ impl From<cmd::Error> for Error {
                 Error::EvalMissingAttr
             } else if stderr.contains("No such file or directory") {
                 Error::FileMissing(stderr.lines().last().unwrap().to_owned())
+            } else if stderr.contains("cannot write modified lock file of flake") {
+                Error::LockOutOfDate
             } else {
                 Error::Command(err)
             }
@@ -105,6 +110,19 @@ pub trait NixDriver: LinuxCommandTarget {
             .and_then(|value| value.get("nodes"))
             .and_then(|value| value.get("nixpkgs"))
             .is_some())
+    }
+
+    fn eval<T>(&self, flake: LinuxPath, path: &str) -> Result<T>
+    where
+        T: for<'de> Deserialize<'de>,
+    {
+        Ok(self
+            .run(
+                "nix",
+                &["eval", &self.quote_shell_arg(&format!(".#{path}")), "--json"],
+            )
+            .with_cwd(flake)
+            .output_json::<T>()?)
     }
 }
 

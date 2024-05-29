@@ -12,7 +12,7 @@ export function global(): RspressPlugin {
 }
 
 export default defineConfig({
-    base: '/new/',
+    // base: '/new/',
     root: 'src',
     plugins: [
         global(),

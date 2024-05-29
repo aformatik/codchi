@@ -4,7 +4,7 @@ use self::name::{ModuleName, CODCHI_DRIVER_MODULE};
 use clap::builder::*;
 use clap::*;
 use clap_verbosity_flag::{InfoLevel, LogLevel, Verbosity};
-use git_url_parse::GitUrl;
+use git_url_parse::{GitUrl, Scheme};
 use lazy_regex::regex_captures;
 use log::Level;
 use once_cell::sync::Lazy;
@@ -19,7 +19,7 @@ pub static DEBUG: Lazy<bool> = Lazy::new(|| {
         .and_then(|cli| cli.verbose.log_level())
         .or(<DefaultLogLevel as LogLevel>::default())
         .unwrap()
-        > Level::Debug
+        >= Level::Debug
 });
 
 type DefaultLogLevel = InfoLevel;
@@ -68,7 +68,7 @@ pub enum Cmd {
         machine_name: String,
 
         /// http(s) url to the codchi module
-        url: Option<GitUrl>,
+        url: Option<CodchiUrl>,
 
         #[command(flatten)]
         // #[group(requires = "url")]
@@ -216,7 +216,7 @@ mod module {
             machine_name: String,
 
             /// HTTP(S) URL or file path to the codchi module
-            url: GitUrl,
+            url: CodchiUrl,
 
             #[command(flatten)]
             options: Box<ModuleOptions>,
@@ -231,7 +231,7 @@ mod module {
             module_name: ModuleName,
 
             /// HTTP(S) URL or file path to the codchi module
-            url: Option<GitUrl>,
+            url: Option<CodchiUrl>,
 
             #[command(flatten)]
             options: Box<ModuleOptions>,
@@ -367,6 +367,38 @@ impl NixpkgsLocation {
             Some(Self::Remote) => Some(module_name.to_string()),
             Some(Self::Local) => Some(CODCHI_DRIVER_MODULE.to_owned()),
             None => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct CodchiUrl {
+    pub git_url: GitUrl,
+    pub original: String,
+}
+
+impl FromStr for CodchiUrl {
+    type Err = <GitUrl as FromStr>::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let git_url = GitUrl::from_str(s)?;
+
+        Ok(Self {
+            git_url,
+            original: s.to_owned(),
+        })
+    }
+}
+
+impl From<&CodchiUrl> for GitUrl {
+    fn from(val: &CodchiUrl) -> Self {
+        match val.git_url.scheme {
+            Scheme::File => {
+                let mut url = val.git_url.clone();
+                url.path = val.original.clone();
+                url
+            },
+            _ => val.git_url.clone(),
         }
     }
 }

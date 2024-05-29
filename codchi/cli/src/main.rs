@@ -1,4 +1,5 @@
 #![feature(once_cell_try)]
+#![feature(let_chains)]
 #![deny(unused_crate_dependencies)]
 // #![windows_subsystem = "windows"]
 
@@ -10,6 +11,8 @@ use anyhow::Context;
 use base64::{prelude::BASE64_STANDARD, Engine};
 use clap::*;
 use colored as _;
+use config::CodchiConfig;
+use git_url_parse::GitUrl;
 use indicatif::MultiProgress;
 use indicatif_log_bridge::LogWrapper;
 use log::*;
@@ -31,18 +34,23 @@ fn main() -> anyhow::Result<()> {
 
     #[cfg(target_os = "windows")]
     {
+        use crate::util::dbg_duration;
         use windows::Win32::{
             System::Console::GetConsoleWindow,
             UI::WindowsAndMessaging::{self, ShowWindow},
         };
         if cli.terminal == Some(false) {
-            let window = unsafe { GetConsoleWindow() };
-            if window.0 != 0 {
-                if let Err(err) = unsafe { ShowWindow(window, WindowsAndMessaging::SW_HIDE).ok() } {
-                    log::error!("Failed to hide console window. Reason: {err}");
+            dbg_duration("hide console", || {
+                let window = unsafe { GetConsoleWindow() };
+                if window.0 != 0 {
+                    if let Err(err) =
+                        unsafe { ShowWindow(window, WindowsAndMessaging::SW_HIDE).ok() }
+                    {
+                        log::error!("Failed to hide console window. Reason: {err}");
+                    }
+                    println!();
                 }
-                println!("");
-            }
+            });
         }
     }
 
@@ -56,6 +64,8 @@ fn main() -> anyhow::Result<()> {
         .context("Failed initializing logger")?;
 
     trace!("Started codchi with args: {:?}", cli);
+    // preload config
+    CodchiConfig::get();
 
     CLI_ARGS
         .set(cli.clone())
@@ -69,7 +79,11 @@ fn main() -> anyhow::Result<()> {
             machine_name,
             url,
             options,
-        } => alert_dirty(module::init(machine_name, url, options)?),
+        } => alert_dirty(module::init(
+            machine_name,
+            url.as_ref().map(GitUrl::from),
+            options,
+        )?),
         Cmd::Rebuild { no_update, name } => Machine::by_name(name)?.build(*no_update)?,
         Cmd::Update { name } => alert_dirty(Machine::by_name(name)?.update()?),
         Cmd::Exec { name, cmd } => Machine::by_name(name)?.exec(cmd)?,
@@ -83,13 +97,18 @@ fn main() -> anyhow::Result<()> {
                 machine_name,
                 options,
                 url,
-            } => alert_dirty(module::add(machine_name, url, options)?),
+            } => alert_dirty(module::add(machine_name, GitUrl::from(url), options)?),
             cli::ModuleCmd::Set {
                 machine_name,
                 module_name,
                 url,
                 options,
-            } => alert_dirty(module::set(machine_name, module_name, url, options)?),
+            } => alert_dirty(module::set(
+                machine_name,
+                module_name,
+                url.as_ref().map(GitUrl::from),
+                options,
+            )?),
             cli::ModuleCmd::Delete { name, module_name } => {
                 alert_dirty(module::delete(name, module_name.clone())?)
             }

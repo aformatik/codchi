@@ -1,0 +1,72 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Package 
+	xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" 
+	xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" 
+	xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities" 
+	xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+	xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5" 
+	xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10" 
+    xmlns:uap13="http://schemas.microsoft.com/appx/manifest/uap/windows10/13" 
+	xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+	xmlns:desktop2="http://schemas.microsoft.com/appx/manifest/desktop/windows10/2"
+    xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
+    xmlns:virtualization="http://schemas.microsoft.com/appx/manifest/virtualization/windows10"
+	IgnorableNamespaces="uap uap3 uap5 uap10 uap13 desktop6 rescap virtualization">
+  <Identity Name="Codchi" Publisher="CN=aformatik Training u. Consulting GmbH u. Co. KG, O=aformatik Training u. Consulting GmbH u. Co. KG, L=Sindelfingen, S=Baden-Württemberg, C=DE" Version="@VERSION@" ProcessorArchitecture="x64" />
+  <Properties>
+    <DisplayName>Codchi</DisplayName>
+    <PublisherDisplayName>Codchi</PublisherDisplayName>
+    <Description>Declarative and Reproducible Development Environments as Code</Description>
+    <Logo>Assets\StoreLogo.jpg</Logo>
+    <uap10:PackageIntegrity>
+      <uap10:Content Enforcement="on" />
+    </uap10:PackageIntegrity>
+    <uap13:AutoUpdate>
+        <uap13:AppInstaller File="codchi.AppInstaller" />
+    </uap13:AutoUpdate>
+    <desktop6:FileSystemWriteVirtualization>disabled</desktop6:FileSystemWriteVirtualization>
+    <!-- <desktop6:RegistryWriteVirtualization>disabled</desktop6:RegistryWriteVirtualization> -->
+    <!-- These seem to be ignored by windows... -->
+    <!-- <virtualization:FileSystemWriteVirtualization> -->
+    <!--   <virtualization:ExcludedDirectories> -->
+    <!--     <virtualization:ExcludedDirectory>$(KnownFolder:LocalAppData)\codchi</virtualization:ExcludedDirectory> -->
+    <!--     <virtualization:ExcludedDirectory>$(KnownFolder:RoamingAppData)\codchi</virtualization:ExcludedDirectory> -->
+    <!--   </virtualization:ExcludedDirectories> -->
+    <!-- </virtualization:FileSystemWriteVirtualization> -->
+  </Properties>
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22000.1" />
+  </Dependencies>
+  <Applications>
+    <Application Id="Codchi.Cli" Executable="codchi.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="Codchi" Description="Codchi" 
+			Square150x150Logo="Assets\favicon150.png"  Square44x44Logo="Assets\favicon44.png" 
+			BackgroundColor="transparent" AppListEntry="none"/>
+      <Extensions>
+        <uap5:Extension Category="windows.appExecutionAlias" Executable="codchi.exe" EntryPoint="Windows.FullTrustApplication">
+          <uap5:AppExecutionAlias>
+            <uap5:ExecutionAlias Alias="codchi.exe" />
+          </uap5:AppExecutionAlias>
+        </uap5:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+  <Capabilities>
+    <!-- Needed for firewall -->
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="unvirtualizedResources" />
+    <!-- <DeviceCapability Name="microphone" /> -->
+    <!-- <DeviceCapability Name="webcam" /> -->
+    <!-- <DeviceCapability Name="bluetooth" /> -->
+  </Capabilities>
+  <Extensions>
+	<desktop2:Extension Category="windows.firewallRules">
+  	  <desktop2:FirewallRules Executable="VFS\ProgramFilesX64\VcXsrv\codchi_vcxsrv.exe">
+        <desktop2:Rule Direction="in" IPProtocol="TCP" LocalPortMax="6000" LocalPortMin="6000" Profile="all"/>
+  	  </desktop2:FirewallRules>
+	</desktop2:Extension>
+  </Extensions>
+</Package>

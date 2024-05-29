@@ -83,6 +83,10 @@ pub trait Host: Sized {
 
         Self::write_shortcuts(&machine.config.name, desktop_entries.iter())
     }
+
+    fn pre_exec() -> Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug)]

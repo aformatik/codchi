@@ -2,6 +2,10 @@ use std::{env, error::Error, fs, path::PathBuf};
 
 use clap::CommandFactory;
 use clap_complete::{generate_to, Shell::*};
+use embed_manifest::{
+    manifest::{ActiveCodePage, DpiAwareness, Setting},
+    new_manifest,
+};
 
 #[path = "src/cli.rs"]
 mod cli;
@@ -57,6 +61,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     // #[cfg(target_os = "linux")]
     // {}
+
+    if std::env::var_os("CARGO_CFG_WINDOWS").is_some() {
+        embed_manifest::embed_manifest(
+            new_manifest("Codchi")
+                .dpi_awareness(DpiAwareness::PerMonitorV2)
+                .gdi_scaling(Setting::Enabled)
+                .active_code_page(ActiveCodePage::Utf8),
+        )
+        .expect("unable to embed manifest file");
+    }
+    println!("cargo:rerun-if-changed=build.rs");
 
     Ok(())
 }

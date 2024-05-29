@@ -111,6 +111,7 @@ impl<W: Hkd> FlakeUrl<W> {
                             .unwrap_or((Some(token.to_owned()), None))
                     })
                     .unwrap_or((None, None));
+                // let repo = repo.strip_suffix(".git").unwrap_or(repo).to_string();
                 GitUrl {
                     host: Some(host.clone()),
                     name,

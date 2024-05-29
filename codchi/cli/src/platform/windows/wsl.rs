@@ -153,9 +153,7 @@ pub fn set_sparse(name: &str) -> Result<()> {
     if System::new_all()
         .processes()
         .iter()
-        .filter(|(_, proc)| proc.name().contains("vmmem") || proc.name().contains("vmmemWSL"))
-        .next()
-        .is_some()
+        .any(|(_, proc)| proc.name().contains("vmmem") || proc.name().contains("vmmemWSL"))
     {
         if ROOT_PROGRESS_BAR
             .get()
@@ -185,7 +183,7 @@ See <https://codchi.dev/docs/start/usage.html#large-wsl-distributions> for more 
         }
     }
     wsl_command()
-        .args(&["--manage", name, "--set-sparse", "true"])
+        .args(["--manage", name, "--set-sparse", "true"])
         .wait_ok()?;
 
     Ok(())

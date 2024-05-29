@@ -74,6 +74,11 @@ pub trait PathExt: AsRef<Path> + Sized + core::fmt::Debug {
             log::trace!("Not removing non existant path '{self:?}'");
         }
     }
+
+    fn assert_exists(&self) -> io::Result<()> {
+        fs::metadata(self)?;
+        Ok(())
+    }
 }
 
 impl<P: AsRef<Path> + Debug> PathExt for P {}
@@ -86,10 +91,18 @@ impl ToPath for PathBuf {
 pub mod host {
     use directories::BaseDirs;
 
+    use crate::config::CodchiConfig;
+
     use super::*;
     pub static BASE_DIR: Lazy<BaseDirs> = Lazy::new(|| BaseDirs::new().unwrap());
     pub static DIR_CONFIG: Lazy<PathBuf> = Lazy::new(|| BASE_DIR.config_dir().join(APP_NAME));
-    pub static DIR_DATA: Lazy<PathBuf> = Lazy::new(|| BASE_DIR.data_local_dir().join(APP_NAME));
+    pub static DIR_DATA: Lazy<PathBuf> = Lazy::new(|| {
+        CodchiConfig::get()
+            .data_dir
+            .clone()
+            .map(PathBuf::from)
+            .unwrap_or(BASE_DIR.data_local_dir().join(APP_NAME))
+    });
     pub static DIR_NIX: Lazy<PathBuf> =
         Lazy::new(|| BASE_DIR.cache_dir().join(APP_NAME).join("nix"));
     pub static DIR_RUNTIME: Lazy<PathBuf> = Lazy::new(|| {

@@ -25,6 +25,8 @@ jobs:
         cp result store.tar.gz
         nix build .#machine-wsl.config.build.tarball -L
         cp result machine.tar.gz
+        nix build ./build#vcxsrv-bin -L
+        cp result vcxsrv-installer.exe
     - uses: actions/upload-artifact@v4
       with:
           name: windows
@@ -35,23 +37,35 @@ jobs:
           if-no-files-found: error
   windows:
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: build
     needs: 
       - nix-build
     permissions:
       contents: write
     steps:
     - uses: actions/checkout@v4
-      with:
-        repository: 'aformatik/codchi-packaging'
-        ref: '${{ github.ref_name }}'
     - uses: actions/download-artifact@v4
       with:
         name: windows
-        path: msix
-    - shell: bash
-      run: |
+        path: build/msix
+    - run: |
         mkdir -p "msix/VFS/Common AppData/codchi/"
-        mv msix/store.tar.gz msix/machine.tar.gz "msix/VFS/Common AppData/codchi/"
+        mv .\msix\*.tar.gz "msix/VFS/Common AppData/codchi/"
+
+        .\msix\vcxsrv-installer.exe /S | Out-Null # wait for installer to finish...
+        mkdir -p "msix/VFS/ProgramFilesX64"
+        cp -r "${env:ProgramFiles}\VcXsrv" "msix/VFS/ProgramFilesX64"
+        rm .\msix\vcxsrv-installer.exe
+        mv .\msix\VFS\ProgramFilesX64\VcXsrv\vcxsrv.exe .\msix\VFS\ProgramFilesX64\VcXsrv\codchi_vcxsrv.exe
+    # - run: |
+    #     reg add "HKCU\ROOT\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers" /v "[{ProgramFilesX64}]\VcXsrv\codchi_vcxsrv.exe" /t REG_SZ /d "~ HIGHDPIAWARE"
+    #     reg save "HKCU\ROOT" .\msix\User.dat
+
+    # - run: |
+        # & "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.22621.0\x64\mt.exe" -manifest msix\vcxsrv.manifest.xml -outputresource:msix\VFS\ProgramFilesX64\VcXsrv\codchi_vcxsrv.exe
+        # rm msix\vcxsrv.manifest.xml 
     - name: Parse Windows Version
       uses: frabert/replace-string-action@v2
       id: winver
@@ -82,13 +96,15 @@ jobs:
         endpoint: ${{ secrets.AZURE_ENDPOINT }}
         code-signing-account-name: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
         certificate-profile-name: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
-        files-folder: .
+        files-folder: build
         files-folder-filter: msix
         file-digest: SHA256
+    # - if: ${{ failure() }}
+    #   uses: mxschmitt/action-tmate@v3
     - uses: softprops/action-gh-release@v2
       with:
         prerelease: true
         fail_on_unmatched_files: true
         files: |
-          codchi.msix
-          msix/codchi.AppInstaller
+          build/codchi.msix
+          build/msix/codchi.AppInstaller

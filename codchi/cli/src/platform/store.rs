@@ -57,6 +57,14 @@ pub trait Store: Sized {
     fn cmd(&self) -> impl NixDriver;
 
     fn gc(&self, min_age: Option<u16>, all: bool, machine_names: &Vec<String>) -> Result<()> {
+        if !inquire::Confirm::new(
+            "Currently, garbage collection will delete user-created roots for example when \
+            using 'nix build' or direnv. Still procceed?",
+        )
+        .prompt()?
+        {
+            bail!("Operation was canceled by the user");
+        }
         with_spinner("Deleting dead store paths...", |_| {
             if let Some(min_age) = min_age {
                 let mut args = vec!["profile", "wipe-history", "--profile", "system"];
@@ -108,4 +116,54 @@ pub trait Store: Sized {
 
         Ok(host_path)
     }
+
+    // Collect substituters from all machines and add to stores' nix.conf
+    // fn write_nix_conf(&self) -> Result<()> {
+    //     let mut all = NixSettings {
+    //         substituters: vec![
+    //             "https://cache.nixos.org/".to_owned(),
+    //             "https://nixos-devenv.cachix.org".to_owned(),
+    //         ]
+    //         .into_iter()
+    //         .collect(),
+
+    //         trusted_public_keys: vec![
+    //             "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=".to_owned(),
+    //             "nixos-devenv.cachix.org-1:TfcIbSCGLCufAt9UCxzBTi3ekrzgI3HAHX73VWpByoE=".to_owned(),
+    //         ]
+    //         .into_iter()
+    //         .collect(),
+    //     };
+    //     for machine in MachineConfig::list()? {
+    //         let settings: NixSettings = self.cmd().eval(
+    //             store::DIR_CONFIG.join_machine(&machine.name),
+    //             "nixosConfigurations.default.config.nix.settings",
+    //         )?;
+
+    //         all.substituters.extend(settings.substituters);
+    //         all.trusted_public_keys.extend(settings.trusted_public_keys);
+    //     }
+
+    //     log::trace!("All substituters: {all:?}");
+
+    //     self.cmd()
+    //         .script(format!(
+    //             r#"
+
+    // "#
+    //         ))
+    //         .with_cwd("/etc/nix")
+    //         .wait_ok()?;
+
+    //     Ok(())
+    // }
 }
+
+// #[derive(Deserialize, Debug, Clone, Default)]
+// #[serde(rename_all = "kebab-case")]
+// struct NixSettings {
+//     #[serde(default)]
+//     substituters: HashSet<String>,
+//     #[serde(default)]
+//     trusted_public_keys: HashSet<String>,
+// }

@@ -1,3 +1,6 @@
+use anyhow::anyhow;
+use std::path;
+
 use super::*;
 use crate::{
     consts::{host, PathExt, ToPath, MACHINE_PREFIX},
@@ -18,26 +21,76 @@ pub struct MachineConfig {
     pub modules: HashMap<ModuleName, CodchiModule>,
 }
 
+pub enum ConfigResult {
+    Exists,
+    /// Paths are case insensitive on windows but not in wsl, which leads to errors. Therefore we
+    /// can't allow machines with case insensitive matching names. Returns real path of matching
+    /// machine.
+    SimilarExists(String),
+    None,
+}
+
 impl MachineConfig {
-    pub fn read(name: &str) -> Result<Option<MachineConfig>> {
-        let (_, cfg) = Self::open(name, false)?;
-        Ok(cfg)
+    pub fn find(name: &str) -> Result<ConfigResult> {
+        let path = host::DIR_CONFIG.join_machine(name).join("config.json");
+        if fs::metadata(&path).is_err() {
+            Ok(ConfigResult::None)
+        } else if path
+            .canonicalize()?
+            .display()
+            .to_string()
+            .ends_with(&format!("{name}{}config.json", path::MAIN_SEPARATOR))
+        {
+            Ok(ConfigResult::Exists)
+        } else {
+            Ok(ConfigResult::SimilarExists(
+                path.iter()
+                    .nth_back(1)
+                    .ok_or(anyhow!(
+                        "Failed to extract machine name from path '{}'",
+                        path.display()
+                    ))?
+                    .to_string_lossy()
+                    .to_string(),
+            ))
+        }
     }
+
+    /// Creates empty config file if missing. Make sure that the machine with the exact `name`
+    /// (must match case sensitive!) exists
     pub fn open(name: &str, write_mode: bool) -> Result<(LockedConfig, Option<MachineConfig>)> {
         let path = host::DIR_CONFIG
             .join_machine(name)
             .get_or_create()?
             .join("config.json");
         LockedConfig::open_parse(
-            path,
+            &path,
             write_mode,
             |content| {
                 let mut cfg: MachineConfig = serde_json::from_str(content)?;
                 cfg.name = name.to_owned();
+                log::trace!("Read machine config from {path:?}: {cfg:?}");
                 Ok(Some(cfg))
             },
             || Ok(None),
         )
+    }
+
+    /// Only opens the config if it already exists
+    pub fn open_existing(name: &str, write_mode: bool) -> Result<(LockedConfig, MachineConfig)> {
+        match MachineConfig::find(name)? {
+            ConfigResult::Exists => {}
+            _ => anyhow::bail!("Machine '{name}' doesn't exist."),
+        }
+        let (lock, cfg) = Self::open(name, write_mode)?;
+        Ok((
+            lock,
+            cfg.unwrap_or(MachineConfig {
+                name: name.to_string(),
+                nixpkgs_from: Default::default(),
+                modules: Default::default(),
+            }),
+        ))
     }
 
     pub fn write(&self, lock: LockedConfig) -> Result<()> {
@@ -51,7 +104,8 @@ impl MachineConfig {
             let entry = entry?;
             if entry.metadata()?.is_dir() {
                 log::trace!("Found possible machine {:?}.", entry.file_name());
-                if let Some(machine) = Self::read(&entry.file_name().to_string_lossy())? {
+                if let (_, Some(machine)) = Self::open(&entry.file_name().to_string_lossy(), false)?
+                {
                     machines.push(machine);
                 }
             }

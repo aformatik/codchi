@@ -15,6 +15,7 @@ in
     };
     iconCommand = mkOption {
       type = types.nullOr types.str;
+      internal = true;
       description = ''
         Bash command to convert XDG desktop icons to ones that the host platform understands.
         Receives arguments `$ICON_PATH` and `$APP_NAME`. Result should be
@@ -22,6 +23,11 @@ in
 
         Use `null` to disable.
       '';
+    };
+    containerCfg = mkOption {
+      type = types.attrs;
+      internal = true;
+      default = { };
     };
   };
 
@@ -31,39 +37,45 @@ in
     {
       system.build.codchi.container = (import ../../container { inherit inputs pkgs lib; }
         {
-          config.machine = {
-            enable = true;
-            driver.${config.codchi.driver.name}.enable = true;
-          };
+          config = lib.recursiveUpdate
+            config.codchi.driver.containerCfg
+            {
+              machine = {
+                enable = true;
+                driver.${config.codchi.driver.name}.enable = true;
+              };
+            };
         }).config.build.tarball;
-      # Create files required by the driver
-      systemd.services."create-files" = {
-        after = [ "network.target" ];
-        wantedBy = [ "multi-user.target" ];
-        serviceConfig.Type = "oneshot";
-        script = /* bash */ ''
-          ( cd / &&
-            ${lib.getExe config.system.build.codchi.container.passthru.createFiles}
-          )
-        '';
-      };
 
-      # Make sure all profiles are recorded as gcroots
-      systemd.tmpfiles.rules = [
-        "L+ /nix/var/nix/gcroots/profiles 0755 root root - /nix/var/nix/profiles"
-      ];
+      systemd = {
+        services = {
+          # Create files required by the driver
+          "create-files" = {
+            after = [ "network.target" ];
+            wantedBy = [ "multi-user.target" ];
+            serviceConfig.Type = "oneshot";
+            script = /* bash */ ''
+              ( cd / &&
+                ${lib.getExe config.system.build.codchi.container.passthru.createFiles}
+              )
+            '';
+          };
+
+          nix-daemon.enable = mkForce false;
+          nix-gc.enable = mkForce false;
+          nix-optimize.enable = mkForce false;
+        };
+
+        # Make sure all profiles are recorded as gcroots
+        tmpfiles.rules = [
+          "L+ /nix/var/nix/gcroots/profiles 0755 root root - /nix/var/nix/profiles"
+        ];
+
+        sockets.nix-daemon.enable = mkForce false;
+      };
 
       # disable nixos-rebuild
       system.disableInstallerTools = mkForce true;
-
-
-
-      systemd.services.nix-daemon.enable = mkForce false;
-      systemd.services.nix-gc.enable = mkForce false;
-      systemd.services.nix-optimize.enable = mkForce false;
-
-      systemd.sockets.nix-daemon.enable = mkForce false;
-
 
       environment.variables.NIX_REMOTE = "daemon";
       # Setup nix flakes
@@ -74,6 +86,11 @@ in
         '';
         registry.nixpkgs.flake = inputs.nixpkgs;
         nixPath = [ "nixpkgs=/etc/channels/nixpkgs" ];
+
+        settings = {
+          extra-substituters = [ "https://nixos-devenv.cachix.org" ];
+          trusted-public-keys = [ "nixos-devenv.cachix.org-1:TfcIbSCGLCufAt9UCxzBTi3ekrzgI3HAHX73VWpByoE=" ];
+        };
       };
       environment.etc."channels/nixpkgs".source = inputs.nixpkgs;
     }
@@ -105,6 +122,10 @@ in
         initialPassword = consts.machine.USER;
       };
       security.sudo.wheelNeedsPassword = mkDefault false;
+
+      hardware.opengl.enable = lib.mkDefault true; # Enable GPU acceleration
+      # powerManagement.enable = false;
+
     }
 
     # Desktop stuff

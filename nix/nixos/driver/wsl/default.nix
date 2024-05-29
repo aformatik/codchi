@@ -12,18 +12,22 @@ in
 
   config = mkIf cfg.enable {
 
-    codchi.driver.name = "wsl";
-    codchi.driver.iconCommand = lib.mkDefault ''
-      ${pkgs.imagemagick}/bin/convert \
-        -background transparent \
-        -define icon:auto-resize=16,24,32,48,64,72,96,128,256 \
-        "$ICON_PATH" "codchi/icons/$APP_NAME.ico"
-    '';
-
-    environment.etc = {
-      hosts.enable = false;
-      "resolv.conf".enable = false;
+    codchi.driver = {
+      name = "wsl";
+      iconCommand = lib.mkDefault ''
+        ${pkgs.imagemagick}/bin/convert \
+          -background transparent \
+          -define icon:auto-resize=16,24,32,48,64,72,96,128,256 \
+          "$ICON_PATH" "codchi/icons/$APP_NAME.ico"
+      '';
+      containerCfg = {
+        machine.driver.wsl.wslConf.network = {
+          generateHosts = !config.environment.etc.hosts.enable;
+          generateResolvConf = !config.environment.etc."resolv.conf".enable;
+        };
+      };
     };
+
     networking.dhcpcd.enable = false; # dhcp is handled by windows
 
     # Otherwise WSL fails to login as root with "initgroups failed 5"
@@ -42,7 +46,6 @@ in
     };
 
     # prevent clockshift
-    services.timesyncd.enable = true;
     systemd.services.systemd-timesyncd.unitConfig.ConditionVirtualization = "";
 
     systemd.tmpfiles.settings = {
@@ -55,22 +58,49 @@ in
           };
         };
       };
-      "11-wslpath" = {
-        "/bin/wslpath" = {
-          L = {
-            argument = "/init";
-          };
-        };
+      # "11-wslpath" = {
+      #   "/bin/wslpath" = {
+      #     L = {
+      #       argument = "/init";
+      #     };
+      #   };
+      # };
+    };
+    environment = {
+      systemPackages = [
+        (pkgs.writeShellScriptBin "wslpath" ''
+          ${lib.getExe pkgs.bashInteractive} -c "exec -a wslpath /init $@"
+        '')
+      ];
+      etc = {
+        # use our own /etc/hosts by default
+        hosts.enable = lib.mkDefault true;
+        # DNS by windows
+        "resolv.conf".enable = lib.mkDefault false;
       };
+      variables = {
+        LIBGL_ALWAYS_INDIRECT = "1"; # Allow OpenGL in WSL
+        DONT_PROMPT_WSL_INSTALL = "1"; # Don't prompt for VS code server when running `code`
+
+        # https://wiki.archlinux.org/title/Java#Better_font_rendering TODO include by default?
+        JDK_JAVA_OPTIONS = "-Dawt.useSystemAAFontSettings=on, -Dswing.aatext=true";
+      };
+      extraInit = /* bash */ ''
+        # append Windows' path
+        export PATH="$PATH:$HOST_PATH"
+
+        # Configure VcXsrv
+        if [ -n "''${CODCHI_WSL_USE_VCXSRV:-}" ]; then
+          export DISPLAY=$(ip route | awk '/^default/{print $3; exit}'):0
+          unset WAYLAND_DISPLAY
+        fi
+      '';
     };
 
-    environment.variables = {
-      LIBGL_ALWAYS_INDIRECT = "1"; # Allow OpenGL in WSL
-      DONT_PROMPT_WSL_INSTALL = "1"; # Don't prompt for VS code server when running `code`
-
-      # https://wiki.archlinux.org/title/Java#Better_font_rendering TODO include by default?
-      JDK_JAVA_OPTIONS = "-Dawt.useSystemAAFontSettings=on, -Dswing.aatext=true";
-    };
+    programs.bash.shellInit = lib.mkBefore ''
+      # get windows path from WSL
+      HOST_PATH="$PATH"
+    '';
 
   };
 

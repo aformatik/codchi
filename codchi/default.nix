@@ -146,7 +146,7 @@ let
 
       CARGO_BUILD_TARGET = "x86_64-pc-windows-msvc";
       CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER = writeShellScript "wine-wsl" ''
-        if ! command -v wslpath &> /dev/null; then
+        if ! command -v /bin/wslpath &> /dev/null; then
           ${wine64}/bin/wine64 "$@"
         else
           "$@"

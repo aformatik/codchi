@@ -1,24 +1,26 @@
 use crate::{
     cli::{name::ModuleName, ModuleAttrPath, ModuleOptions, NixpkgsLocation},
-    config::{CodchiModule, FlakeLocation, FlakeScheme, FlakeUrl, MachineConfig},
+    config::{CodchiModule, ConfigResult, FlakeLocation, FlakeScheme, FlakeUrl, MachineConfig},
     consts::user,
     platform::{nix::NixDriver, *},
     util::{with_spinner, Empty, StringExt},
 };
 use anyhow::{bail, Context, Result};
 use git_url_parse::{GitUrl, Scheme};
-use indoc::indoc;
 use itertools::Itertools;
 use lazy_regex::regex_is_match;
 use petname::petname;
 use std::{collections::HashMap, fmt::Display, marker::PhantomData, str::FromStr};
 
-pub fn init(machine_name: &str, url: &Option<GitUrl>, opts: &ModuleOptions) -> Result<Machine> {
-    let (lock, cfg) = MachineConfig::open(machine_name, true)?;
-    if cfg.is_some() {
-        bail!("Code machine '{}' already exists.", machine_name)
+pub fn init(machine_name: &str, url: Option<GitUrl>, opts: &ModuleOptions) -> Result<Machine> {
+    match MachineConfig::find(machine_name)? {
+        ConfigResult::Exists => bail!("Code machine '{}' already exists.", machine_name),
+        ConfigResult::SimilarExists(other) => {
+            bail!("A machine with a similar name ({other}) already exists.")
+        }
+        ConfigResult::None => {}
     }
-
+    let (lock, _) = MachineConfig::open(machine_name, true)?;
     if *opts != ModuleOptions::default() && url.is_none() {
         bail!("<URL> is missing.");
     }
@@ -31,8 +33,8 @@ pub fn init(machine_name: &str, url: &Option<GitUrl>, opts: &ModuleOptions) -> R
     let cfg = match url {
         None => empty,
         Some(url) => {
-            let module_name = resolve_module_name(opts, url);
-            let (module, use_nixpkgs) = fetch_module(&empty, &module_name, opts, url, false)?;
+            let module_name = resolve_module_name(opts, &url);
+            let (module, use_nixpkgs) = fetch_module(&empty, &module_name, opts, &url, false)?;
 
             MachineConfig {
                 name: machine_name.to_owned(),
@@ -58,12 +60,9 @@ pub fn init(machine_name: &str, url: &Option<GitUrl>, opts: &ModuleOptions) -> R
 }
 
 /// List modules of a code machine
-pub fn list(name: &str) -> Result<()> {
+pub fn list(machine_name: &str) -> Result<()> {
     use comfy_table::*;
-    let (_, cfg) = MachineConfig::open(name, false)?;
-    let Some(cfg) = cfg else {
-        bail!("Machine '{name}' doesn't exist.")
-    };
+    let (_, cfg) = MachineConfig::open_existing(machine_name, false)?;
 
     let mut table = Table::new();
     table.load_preset(presets::UTF8_FULL).set_header(vec![
@@ -88,13 +87,10 @@ pub fn list(name: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn add(machine_name: &str, url: &GitUrl, opts: &ModuleOptions) -> Result<Machine> {
-    let (lock, cfg) = MachineConfig::open(machine_name, true)?;
-    let Some(mut cfg) = cfg else {
-        bail!("Machine '{}' doesn't exist.", machine_name)
-    };
+pub fn add(machine_name: &str, url: GitUrl, opts: &ModuleOptions) -> Result<Machine> {
+    let (lock, mut cfg) = MachineConfig::open_existing(machine_name, true)?;
 
-    let module_name = resolve_module_name(opts, url);
+    let module_name = resolve_module_name(opts, &url);
     if cfg.modules.contains_key(&module_name) {
         let details = if opts.name.is_none() {
             "The name was guessed based on the URL you provided. You can provide an explicit name with `--name`."
@@ -107,7 +103,7 @@ pub fn add(machine_name: &str, url: &GitUrl, opts: &ModuleOptions) -> Result<Mac
         );
     }
 
-    let (module, use_nixpkgs) = fetch_module(&cfg, &module_name, opts, url, true)?;
+    let (module, use_nixpkgs) = fetch_module(&cfg, &module_name, opts, &url, true)?;
 
     cfg.modules.insert(module_name.clone(), module);
     match use_nixpkgs {
@@ -129,13 +125,10 @@ pub fn add(machine_name: &str, url: &GitUrl, opts: &ModuleOptions) -> Result<Mac
 pub fn set(
     machine_name: &str,
     module_name: &ModuleName,
-    url: &Option<GitUrl>,
+    url: Option<GitUrl>,
     opts: &ModuleOptions,
 ) -> Result<Machine> {
-    let (lock, cfg) = MachineConfig::open(machine_name, true)?;
-    let Some(mut cfg) = cfg else {
-        bail!("Machine '{}' doesn't exist.", machine_name)
-    };
+    let (lock, mut cfg) = MachineConfig::open_existing(machine_name, true)?;
     // remove the old module
     let Some(old) = cfg.modules.remove(module_name) else {
         bail!("Machine '{machine_name}' doesn't have the module '{module_name}'.");
@@ -256,10 +249,7 @@ pub fn set(
 }
 
 pub fn delete(machine_name: &str, module_name: ModuleName) -> Result<Machine> {
-    let (lock, cfg) = MachineConfig::open(machine_name, true)?;
-    let Some(mut cfg) = cfg else {
-        bail!("Machine '{machine_name}' doesn't exist.")
-    };
+    let (lock, mut cfg) = MachineConfig::open_existing(machine_name, true)?;
     if !cfg.modules.contains_key(&module_name) {
         bail!("Machine '{machine_name}' doesn't have the module '{module_name}'.");
     }
@@ -310,9 +300,9 @@ pub fn fetch_module(
     if opts.dont_prompt && opts.module_path.is_none() {
         bail!("Please provide MODULE_PATH in non interactive mode.");
     }
-    if opts.dont_prompt && opts.use_nixpkgs.is_none() {
-        bail!("Please provide `--use-nixpkgs` in non interactive mode.");
-    }
+    // if opts.dont_prompt && opts.use_nixpkgs.is_none() {
+    //     bail!("Please provide `--use-nixpkgs` in non interactive mode.");
+    // }
 
     let flake_url = inquire_module_url(opts, url, allow_local)?;
     let nix_url = flake_url.to_nix_url(&machine.name);
@@ -340,10 +330,16 @@ pub fn fetch_module(
             module
         }
         None => {
-            // non interactive mode is checked above
-            inquire::Select::new("Module:", available_modules)
-                .with_help_message("Which module would you like to use?")
-                .prompt()?
+            if available_modules.len() == 1 {
+                let module = available_modules.first().unwrap();
+                log::info!("Using module '{module}'");
+                module.clone()
+            } else {
+                // non interactive mode is checked above
+                inquire::Select::new("Module:", available_modules)
+                    .with_help_message("Which module would you like to use?")
+                    .prompt()?
+            }
         }
     };
     let flake_url = flake_url.set_attr(flake_module);
@@ -367,19 +363,26 @@ pub fn fetch_module(
             {
                 None // do nothing, machine already follows other module
             } else if Driver::store().cmd().has_nixpkgs_input(&nix_url)? {
-                Some(
-                    inquire::Confirm::new(&format!(
-                        "Use nixpkgs from '{}'",
-                        flake_url.pretty_print()
-                    ))
-                    .with_help_message(indoc! {"
-                    This module has a nixpkgs input. Do you want to use it for the code machine? \
-                    Otherwise the shared nixpkgs of codchi is used, which might decrease \
-                    reproducibility but is faster. \
-                    See <https://codchi.dev/docs/start/usage.html#which-nixpkgs-should-i-use> \
-                    for more information."})
-                    .prompt()?,
-                )
+                // Some(
+                //     inquire::Confirm::new(&format!(
+                //         "Use nixpkgs from '{}'",
+                //         flake_url.pretty_print()
+                //     ))
+                //     .with_help_message(indoc! {"
+                //     This module has a nixpkgs input. Do you want to use it for the code machine? \
+                //     Otherwise the shared nixpkgs of codchi is used, which might decrease \
+                //     reproducibility but is faster. \
+                //     See <https://codchi.dev/docs/start/usage.html#which-nixpkgs-should-i-use> \
+                //     for more information."})
+                //     .prompt()?,
+                // )
+                log::warn!(
+                    "Using nixpkgs from '{}'! You may override this with '--use-nixpkgs'. See \
+                    <https://codchi.dev/docs/start/usage.html#which-nixpkgs-should-i-use> for \
+                    more information.",
+                    flake_url.pretty_print()
+                );
+                Some(true)
             } else {
                 log::warn!(
                     "No nixpkgs inputs found in flake.nix from '{}'. Using codchi's nixpkgs!",
@@ -486,11 +489,7 @@ fn inquire_module_url(
                 }
             };
 
-            let repo = if url.git_suffix {
-                format!("{}.git", url.path.trim_matches('/'))
-            } else {
-                url.path.trim_matches('/').to_string()
-            };
+            let repo = url.path.trim_matches('/').to_string();
 
             Ok(FlakeUrl {
                 location: FlakeLocation::Remote {

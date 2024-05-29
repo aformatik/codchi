@@ -1,7 +1,7 @@
 mod host;
 mod status;
-mod wsl;
 mod util;
+mod wsl;
 
 pub use host::*;
 
@@ -12,11 +12,12 @@ use super::{
 };
 use crate::{
     cli::DEBUG,
+    config::CodchiConfig,
     consts::{
         self,
         files::{self},
         machine::{self, machine_name},
-        ToPath,
+        PathExt, ToPath,
     },
     platform::CommandExt,
 };
@@ -42,7 +43,10 @@ impl Store for StoreImpl {
             PlatformStatus::NotInstalled => wsl::import(
                 files::STORE_ROOTFS_NAME,
                 consts::CONTAINER_STORE_NAME,
-                consts::host::DIR_DATA.join_store(),
+                consts::host::DIR_DATA
+                    .join_store()
+                    .get_or_create()?
+                    .to_path_buf(),
                 || {
                     wsl::set_sparse(consts::CONTAINER_STORE_NAME)?;
                     Self::start_or_init_container(Private)
@@ -89,7 +93,7 @@ impl Store for StoreImpl {
                 store
                     .cmd()
                     .run("/sbin/init", &[])
-                    .output_ok_streaming(|out| log::info!("{out}\r"))?;
+                    .output_ok_streaming(|out| log::debug!("{out}\r"))?;
 
                 Ok(store)
             }
@@ -102,7 +106,11 @@ impl Store for StoreImpl {
         }
     }
 
-    fn _store_path_to_host(&self, path: &LinuxPath, _: Private) -> anyhow::Result<std::path::PathBuf> {
+    fn _store_path_to_host(
+        &self,
+        path: &LinuxPath,
+        _: Private,
+    ) -> anyhow::Result<std::path::PathBuf> {
         self.cmd()
             .run("/bin/wslpath", &["-w", &path.0])
             .output_utf8_ok()
@@ -126,7 +134,10 @@ impl MachineDriver for Machine {
         wsl::import(
             files::MACHINE_ROOTFS_NAME,
             &machine::machine_name(&self.config.name),
-            consts::host::DIR_DATA.join_machine(&self.config.name),
+            consts::host::DIR_DATA
+                .join_machine(&self.config.name)
+                .get_or_create()?
+                .to_path_buf(),
             || self.start(Private),
         )
     }
@@ -151,7 +162,7 @@ EOF
                 debug = *DEBUG,
                 name = self.config.name,
             ))
-            .output_ok_streaming(|out| log::info!("{out}\r"))?;
+            .output_ok_streaming(|out| log::debug!("{out}\r"))?;
 
         let log_file = machine::init_log(&self.config.name);
         // let machine_log_prefix = machine_name(&self.name);
@@ -165,7 +176,7 @@ touch "{log_file}"
 awk '/^{INIT_EXIT_ERR}$/{{ exit 1}};/^{INIT_EXIT_SUCCESS}$/{{exit 0}};1' < <(tail -f "{log_file}")
 "#
                 ))
-                .output_ok_streaming(|out| log::info!("{out}\r"))
+                .output_ok_streaming(|out| log::debug!("{out}\r"))
                 .unwrap();
         });
         // .join();
@@ -211,12 +222,17 @@ impl LinuxCommandTarget for LinuxCommandDriver {
         );
         cmd.env("WSL_CODCHI_DIR_DATA", consts::host::DIR_DATA.as_os_str());
         let mut wslenv = env::var_os("WSLENV").unwrap_or("".into());
+        // log::trace!("WSLENV: {wslenv:?}");
         if !wslenv.is_empty() {
             wslenv.push(":");
         }
         wslenv.push(
             "CODCHI_DEBUG:CODCHI_MACHINE_NAME:CODCHI_IS_STORE:WSL_CODCHI_DIR_CONFIG/up:WSL_CODCHI_DIR_DATA/up",
         );
+        if CodchiConfig::get().vcxsrv.enable {
+            cmd.env("CODCHI_WSL_USE_VCXSRV", "1");
+            wslenv.push(":CODCHI_WSL_USE_VCXSRV");
+        }
         cmd.env("WSLENV", wslenv);
 
         match &user {

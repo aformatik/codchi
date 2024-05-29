@@ -49,7 +49,7 @@
             machine-wsl-tarball = self.machine-wsl.config.build.tarball;
 
 
-            nixvim = { inherit (inputs.nixvim.legacyPackages.${system}) makeNixvim; };
+            # nixvim = { inherit (inputs.nixvim.legacyPackages.${system}) makeNixvim; };
           })
           #(inputs.nixvim.overlays.default)
         ];
@@ -72,10 +72,10 @@
           nixosModules.codchi = { pkgs, ... }: {
             nixpkgs.config.allowUnfree = true;
             environment.systemPackages = [ pkgs.vscodium ];
-            programs.neovim = {
-              enable = true;
-              package = pkgs.nixvim.makeNixvim (import ./editor.nix);
-            };
+            # programs.neovim = {
+            #   enable = true;
+              # package = pkgs.nixvim.makeNixvim (import ./editor.nix);
+            # };
             programs.direnv = {
               enable = true;
               nix-direnv.enable = true;
@@ -86,7 +86,7 @@
             inherit (pkgs) store-lxd store-wsl machine-lxd machine-wsl;
             default = pkgs.codchi;
             windows = pkgs.codchi-windows;
-            editor = pkgs.nixvim.makeNixvim (import ./editor.nix);
+            # editor = pkgs.nixvim.makeNixvim (import ./editor.nix);
           };
 
           devShells.${system} = {

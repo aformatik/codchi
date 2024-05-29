@@ -1,7 +1,9 @@
-name: nix
+name: nix-cache
 
 on:
-  push: {}
+  push: 
+    tags:
+      - "v*.*.*"
 
 permissions:
   contents: read

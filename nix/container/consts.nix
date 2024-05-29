@@ -9,6 +9,10 @@
 
       DIR_DATA = "/data";
       DIR_DATA_MACHINE = "${consts.store.DIR_DATA}/machine/$CODCHI_MACHINE_NAME";
+
+      # WSL tricks
+      DIR_MACHINE_DATA = "/machine-data";
+      DIR_MACHINE_DATA_MACHINE = "${consts.store.DIR_MACHINE_DATA}/machine/$CODCHI_MACHINE_NAME";
     };
     machine = {
       USER = "codchi";

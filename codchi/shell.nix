@@ -17,6 +17,7 @@
 , cargo-deps
   # , cargo-udeps
 , cargo-bloat
+, cargo-flamegraph
 , graphviz
 
 , ...
@@ -64,6 +65,7 @@ mkShell (lib.recursiveUpdate
     cargo-bloat
     cargo-deps
     cargo-watch
+    cargo-flamegraph
     graphviz
     # cargo-udeps
 
@@ -83,5 +85,7 @@ mkShell (lib.recursiveUpdate
   '' + (native.shellHook or "");
 
   inherit (codchi) CARGO_BUILD_TARGET;
+
+  CARGO_PROFILE_RELEASE_DEBUG = "true";
 
 })

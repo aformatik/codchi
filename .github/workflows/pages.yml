@@ -16,9 +16,7 @@ jobs:
         working-directory: docs
     steps:
     - uses: actions/checkout@v3
-    - uses: cachix/install-nix-action@v22
-      with:
-        github_access_token: ${{ secrets.GITHUB_TOKEN }}
+    - uses: DeterminateSystems/nix-installer-action@main
     - uses: DeterminateSystems/magic-nix-cache-action@main
     - uses: cachix/cachix-action@v12
       with:
