@@ -21,9 +21,8 @@ let inherit (lib) mkEnableOption mkIf pipe concatLines;
     concatLines
   ];
 
-  INIT_ENV = "${mnt}/.machine-init-env";
-  INIT_ENV_LOCAL = "/.machine-init-env";
-  INIT_LOG = "${mnt}/.machine-init-log-$CODCHI_MACHINE_NAME";
+  INIT_LOG = "${mnt}${consts.store.MACHINE_LOG}";
+  INIT_ENV_TMP = "/tmp/codchi-env";
 
 in
 {
@@ -59,18 +58,16 @@ in
     '';
 
     machine.init.hostSetup = /* bash */ ''
-      if [ ! -f "${INIT_ENV}" ]; then
+      if [ ! -f "${INIT_ENV_TMP}" ]; then
         echo "This distribution is only meant to be started by codchi.exe!" >&2
+        /mnt/c/WINDOWS/system32/msg.exe '*' "This distribution is only meant to be started by codchi.exe!" >&2
         exit 1
       fi
-      # [ -f "${INIT_ENV}" ] && mv "${INIT_ENV}" "${INIT_ENV_LOCAL}"
-      # if [ ! -f "${INIT_ENV_LOCAL}" ]; then
-      #   echo "This distribution is only meant to be started by codchi.exe!"
-      #   exit 1
-      # fi
+
+      [ -d /etc ] || mkdir /etc
+      mv "${INIT_ENV_TMP}" "${consts.machine.INIT_ENV}"
       
-      source "${INIT_ENV}"
-      rm "${INIT_ENV}"
+      source "${consts.machine.INIT_ENV}"
 
       if [ -z "''${CODCHI_MACHINE_NAME:-}" ]; then
         echo "CODCHI_MACHINE_NAME not set!" >&2
@@ -81,11 +78,7 @@ in
         set -x
       fi
 
-      set -E # make trap ERR work with set -e
-      trap 'echo ${consts.INIT_EXIT_ERR} >&2; echo' ERR
-
-      # prefix stdout / stderr
-      exec 2> >(trap "echo" INT TERM; tee "${INIT_LOG}" >&2) 1>&2
+      exec 1> >(tee -i "${INIT_LOG}" >&2) 2>&1
 
       mkMnt() {
         src="$1"
@@ -97,7 +90,9 @@ in
       }
 
       ${storeMnts}
-      ln -fs "${mnt}/config" "/nix/var/nix/profiles/global"
+      if [ ! -L "/nix/var/nix/profiles/global" ]; then
+        ln -fs "${mnt}/config" "/nix/var/nix/profiles/global"
+      fi
 
       target="${mnt + consts.store.DIR_MACHINE_DATA_MACHINE}"
       while mount | grep -wq "$target"; do
@@ -105,7 +100,9 @@ in
       done
       mkMnt "/home/${consts.machine.USER}" "$target"
       mkdir -p "${mnt + consts.store.DIR_DATA}/machine"
-      ln -fs "$target" "${mnt + consts.store.DIR_DATA_MACHINE}"
+      if [ ! -L "${mnt + consts.store.DIR_DATA_MACHINE}" ]; then
+        ln -fs "$target" "${mnt + consts.store.DIR_DATA_MACHINE}"
+      fi
     '';
   };
 }

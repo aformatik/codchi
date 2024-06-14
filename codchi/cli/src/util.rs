@@ -1,14 +1,14 @@
-use indicatif::ProgressBar;
+use crate::consts::PathExt;
+use anyhow::bail;
 use std::{
-    borrow::Cow,
+    env,
+    fmt::Display,
     fs, io,
     marker::PhantomData,
-    path::Path,
+    path::{Path, PathBuf},
     thread,
     time::{Duration, Instant},
 };
-
-use crate::ROOT_PROGRESS_BAR;
 
 pub trait UtilExt {
     fn finally<F>(self, f: F) -> Self
@@ -18,6 +18,8 @@ pub trait UtilExt {
     fn peek<F>(self, f: F) -> Self
     where
         F: FnOnce(&Self);
+
+    fn ignore(self);
 }
 
 impl<A> UtilExt for A {
@@ -37,6 +39,8 @@ impl<A> UtilExt for A {
         f(&self);
         self
     }
+
+    fn ignore(self) {}
 }
 
 pub fn try_n_times<E, F>(interval: Duration, n: usize, f: F) -> Result<bool, E>
@@ -50,25 +54,6 @@ where
         thread::sleep(interval);
     }
     Ok(false)
-}
-
-pub fn with_spinner<A, E, T, F>(msg: T, f: F) -> Result<A, E>
-where
-    T: Into<Cow<'static, str>>,
-    F: Fn(&mut ProgressBar) -> Result<A, E>,
-{
-    let root = ROOT_PROGRESS_BAR
-        .get()
-        .expect("Root progressbar for logger not initialized.");
-    let mut spinner = root.add(ProgressBar::new_spinner());
-
-    spinner.enable_steady_tick(Duration::from_millis(100));
-    spinner.set_message(msg);
-
-    f(&mut spinner).finally(|| {
-        spinner.finish_and_clear();
-        root.remove(&spinner);
-    })
 }
 
 pub fn make_writeable_if_exists<P: AsRef<Path>>(path: P) -> io::Result<()> {
@@ -121,7 +106,7 @@ impl Hkd for Required {
     type Hk<A: Eq + Clone> = A;
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Empty;
 impl Hkd for Empty {
     type Hk<A: Eq + Clone> = PhantomData<A>;
@@ -153,9 +138,11 @@ pub trait ResultExt<E> {
     fn recover_err<F>(self, f: F) -> Self
     where
         F: FnOnce(E) -> Self;
+
+    fn trace_err(self, msg: &str) -> Self;
 }
 
-impl<T, E> ResultExt<E> for Result<T, E> {
+impl<T, E: Display> ResultExt<E> for Result<T, E> {
     fn recover_err<F>(self, f: F) -> Self
     where
         F: FnOnce(E) -> Self,
@@ -164,6 +151,13 @@ impl<T, E> ResultExt<E> for Result<T, E> {
             Ok(x) => Ok(x),
             Err(err) => f(err),
         }
+    }
+
+    fn trace_err(self, msg: &str) -> Self {
+        self.map_err(|err| {
+            log::debug!("{msg}: {err}");
+            err
+        })
     }
 }
 
@@ -178,4 +172,29 @@ where
     log::debug!("Time elapsed in {title}: {duration:?}");
 
     result
+}
+
+pub fn with_tmp_file<F, T>(name: &str, f: F) -> anyhow::Result<T>
+where
+    F: Fn(&PathBuf) -> anyhow::Result<T>,
+{
+    let path = env::temp_dir().get_or_create()?.join(name);
+    if path.try_exists().is_ok_and(|exists| exists) {
+        bail!("Tmpfile {} already exists!", path.display());
+    }
+
+    f(&path).finally(|| {
+        let _ = fs::remove_file(&path)
+            .map_err(|err| log::warn!("Failed deleting tmpfile {}: {err}", path.display()));
+    })
+}
+
+pub fn store_path_base(path: &str) -> String {
+    path.split('/')
+        .last()
+        .unwrap_or("")
+        .split_once('-')
+        .map_or("", |x| x.1)
+        .trim_end_matches(".drv")
+        .to_string()
 }

@@ -1,4 +1,5 @@
-use self::platform::LinuxCommandDriver;
+use std::time::Duration;
+
 use super::*;
 use crate::cli::ModuleAttrPath;
 use serde_json::Value;
@@ -77,20 +78,20 @@ pub trait NixDriver: LinuxCommandTarget {
                 Err(err) => Err(err),
             }
         };
-        let modules = list_attr_names("codchiModules")?
-            .iter()
-            .map(|module| ModuleAttrPath {
-                base: "codchiModules".to_string(),
-                module: module.to_string(),
-            })
-            .chain(
+        let modules = // list_attr_names("codchiModules")?
+        //     .iter()
+        //     .map(|module| ModuleAttrPath {
+        //         base: "codchiModules".to_string(),
+        //         module: module.to_string(),
+        //     })
+        //     .chain(
                 list_attr_names("nixosModules")?
                     .iter()
                     .map(|module| ModuleAttrPath {
                         base: "nixosModules".to_string(),
                         module: module.to_string(),
-                    }),
-            )
+                    })
+            // )
             .collect();
         Ok(modules)
     }
@@ -119,11 +120,27 @@ pub trait NixDriver: LinuxCommandTarget {
         Ok(self
             .run(
                 "nix",
-                &["eval", &self.quote_shell_arg(&format!(".#{path}")), "--json"],
+                &[
+                    "eval",
+                    &self.quote_shell_arg(&format!(".#{path}")),
+                    "--json",
+                ],
             )
             .with_cwd(flake)
             .output_json::<T>()?)
     }
+
+    fn ping_store(&self) -> bool {
+        self.run("nix", &["store", "ping", "--store", "daemon"])
+            .wait_ok()
+            .is_ok()
+    }
+    fn wait_pinging_store(&self) -> Result<()> {
+        while !self.ping_store() {
+            thread::sleep(Duration::from_millis(250));
+        }
+        Ok(())
+    }
 }
 
-impl NixDriver for LinuxCommandDriver {}
+impl<T: LinuxCommandTarget> NixDriver for T {}

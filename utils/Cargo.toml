@@ -1,0 +1,18 @@
+[package]
+name = "codchi-utils"
+version = "0.2.1"
+edition = "2021"
+
+[profile.release]
+lto = true
+strip = true
+
+[dependencies]
+# env_logger = "0.11.3"
+# log = "0.4.22"
+nix = "0.29.0"
+sysinfo = "0.30.13"
+
+[[bin]]
+name = "ndd"
+path = "src/ndd.rs"

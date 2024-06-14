@@ -103,8 +103,7 @@ pub mod host {
             .map(PathBuf::from)
             .unwrap_or(BASE_DIR.data_local_dir().join(APP_NAME))
     });
-    pub static DIR_NIX: Lazy<PathBuf> =
-        Lazy::new(|| BASE_DIR.cache_dir().join(APP_NAME).join("nix"));
+    pub static DIR_NIX: Lazy<PathBuf> = Lazy::new(|| DIR_DATA.join("nix"));
     pub static DIR_RUNTIME: Lazy<PathBuf> = Lazy::new(|| {
         BASE_DIR
             .runtime_dir()
@@ -112,6 +111,10 @@ pub mod host {
             .unwrap_or_else(env::temp_dir)
             .join(APP_NAME)
     });
+    pub static LOGFILE_STORE: Lazy<PathBuf> = Lazy::new(|| DIR_DATA.join("log/store.log"));
+    pub fn machine_log(name: &str) -> PathBuf {
+        DIR_DATA.join(format!("log/machine-{name}.log"))
+    }
 }
 
 pub mod store {
@@ -121,8 +124,11 @@ pub mod store {
     pub static DIR_DATA: Lazy<LinuxPath> = Lazy::new(|| LinuxPath("/data".to_string()));
     pub static DIR_NIX: Lazy<LinuxPath> = Lazy::new(|| LinuxPath("/nix".to_string()));
 
-    pub const INIT_ENV: &str = "/.store-init-env";
-    pub const INIT_LOG: &str = "/.store-init-log";
+    pub static LOGFILE_STORE: Lazy<LinuxPath> = Lazy::new(|| DIR_DATA.join_str("log/store.log"));
+
+    pub fn machine_log(name: &str) -> LinuxPath {
+        DIR_DATA.join_str(&format!("log/machine-{name}.log"))
+    }
 
     impl ToPath for LinuxPath {
         fn join_str(&self, name: &str) -> Self {
@@ -132,13 +138,13 @@ pub mod store {
 }
 
 pub mod machine {
+    use super::*;
     pub fn machine_name(name: &str) -> String {
         format!("codchi-{name}")
     }
-    pub const INIT_ENV: &str = "/mnt/wsl/codchi/.machine-init-env";
-    pub fn init_log(name: &str) -> String {
-        format!("/mnt/wsl/codchi/.machine-init-log-{name}")
-    }
+    pub static CODCHI_ENV: Lazy<LinuxPath> = Lazy::new(|| LinuxPath("/etc/codchi-env".to_string()));
+    pub static CODCHI_ENV_TMP: Lazy<LinuxPath> =
+        Lazy::new(|| LinuxPath("/tmp/codchi-env".to_string()));
 }
 
 pub mod user {

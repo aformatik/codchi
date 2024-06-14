@@ -1,15 +1,21 @@
 use crate::{
     consts::{self, host, PathExt},
-    platform::{CommandExt, PlatformStatus},
+    logging::with_suspended_progress,
+    platform::{CommandExt, LinuxPath, PlatformStatus},
     util::{make_writeable_if_exists, ResultExt},
-    ROOT_PROGRESS_BAR,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use inquire::InquireError;
 use itertools::Itertools;
 use known_folders::{get_known_folder_path, KnownFolder};
 use log::warn;
-use std::{fs, io, path::PathBuf, process::Command, sync::OnceLock};
+use std::{
+    fs,
+    io::{self, IsTerminal},
+    path::{Path, PathBuf},
+    process::Command,
+    sync::OnceLock,
+};
 use sysinfo::System;
 use version_compare::Version;
 use wslapi::Library;
@@ -109,11 +115,11 @@ pub fn get_platform_status(container_name: &str) -> Result<PlatformStatus> {
     }
 }
 
-pub fn import<T, F: Fn() -> Result<T>>(
+pub fn import<T, F: FnMut() -> Result<T>>(
     rootfs_name: &str,
     name: &str,
     installation_path: PathBuf,
-    additional_setup: F,
+    mut additional_setup: F,
 ) -> Result<T> {
     (|| {
         let msix_path = get_known_folder_path(KnownFolder::ProgramData)
@@ -141,11 +147,10 @@ pub fn import<T, F: Fn() -> Result<T>>(
         fs::remove_file(&tmp_path)?;
         additional_setup()
     })()
-    .map_err(|err| {
+    .inspect_err(|_| {
         log::error!("Removing leftovers of WSL container {name}...");
         let _ = wsl_command().arg("--terminate").arg(name).wait_ok();
         let _ = wsl_command().arg("--unregister").arg(name).wait_ok();
-        err
     })
 }
 
@@ -155,10 +160,8 @@ pub fn set_sparse(name: &str) -> Result<()> {
         .iter()
         .any(|(_, proc)| proc.name().contains("vmmem") || proc.name().contains("vmmemWSL"))
     {
-        if ROOT_PROGRESS_BAR
-            .get()
-            .unwrap()
-            .suspend(|| {
+        if io::stdin().is_terminal()
+            && with_suspended_progress(|| {
                 inquire::Confirm::new(&format!(
                     "Codchi needs to stop WSL in order to set \
 WSL distribution '{name}' to sparse mode. WARNING: This will stop all WSL distributions \
@@ -187,4 +190,16 @@ See <https://codchi.dev/docs/start/usage.html#large-wsl-distributions> for more 
         .wait_ok()?;
 
     Ok(())
+}
+
+// pub trait LinuxPathExt {
+// fn to_host_path(self, instance_name: &str) -> PathBuf;
+// }
+
+impl LinuxPath {
+    pub fn to_host_path(&self, instance_name: &str) -> PathBuf {
+        Path::new(r"\\wsl$")
+            .join(instance_name)
+            .join(self.0.clone())
+    }
 }

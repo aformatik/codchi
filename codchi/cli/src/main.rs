@@ -7,33 +7,31 @@ use crate::{
     cli::{Cli, Cmd, CLI_ARGS},
     platform::{ConfigStatus, Driver, Machine, PlatformStatus, Store},
 };
-use anyhow::Context;
 use base64::{prelude::BASE64_STANDARD, Engine};
 use clap::*;
 use colored as _;
 use config::CodchiConfig;
 use git_url_parse::GitUrl;
-use indicatif::MultiProgress;
-use indicatif_log_bridge::LogWrapper;
-use log::*;
-use std::{env, sync::OnceLock};
+use std::env;
 
 pub mod cli;
 pub mod config;
 pub mod consts;
+pub mod logging;
 pub mod module;
 pub mod platform;
 pub mod util;
-
-pub static ROOT_PROGRESS_BAR: OnceLock<MultiProgress> = OnceLock::new();
 
 fn main() -> anyhow::Result<()> {
     not_so_human_panic::setup_panic!();
 
     let cli = Cli::parse();
 
+    logging::init(cli.verbose.log_level_filter())?;
+
     #[cfg(target_os = "windows")]
     {
+        // https://github.com/rust-lang/cargo/issues/1721
         use crate::util::dbg_duration;
         use windows::Win32::{
             System::Console::GetConsoleWindow,
@@ -54,16 +52,7 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    let logger = env_logger::Builder::new()
-        .filter_level(cli.verbose.log_level_filter())
-        .parse_env("CODCHI_LOG")
-        .build();
-    let root_pb = ROOT_PROGRESS_BAR.get_or_init(MultiProgress::new);
-    LogWrapper::new(root_pb.clone(), logger)
-        .try_init()
-        .context("Failed initializing logger")?;
-
-    trace!("Started codchi with args: {:?}", cli);
+    log::trace!("Started codchi with args: {:?}", cli);
     // preload config
     CodchiConfig::get();
 
@@ -78,12 +67,22 @@ fn main() -> anyhow::Result<()> {
         Cmd::Init {
             machine_name,
             url,
-            options,
-        } => alert_dirty(module::init(
-            machine_name,
-            url.as_ref().map(GitUrl::from),
-            options,
-        )?),
+            input_options: options,
+            module_paths,
+        } => {
+            let machine = module::init(
+                machine_name,
+                url.as_ref().map(GitUrl::from),
+                options,
+                module_paths,
+            )?;
+            if !options.no_build {
+                machine.build(true)?;
+                log::info!("Machine '{machine_name}' is ready! Use `codchi exec {machine_name}` to start it.")
+            } else {
+                alert_dirty(machine);
+            }
+        }
         Cmd::Rebuild { no_update, name } => Machine::by_name(name)?.build(*no_update)?,
         Cmd::Update { name } => alert_dirty(Machine::by_name(name)?.update()?),
         Cmd::Exec { name, cmd } => Machine::by_name(name)?.exec(cmd)?,
@@ -95,22 +94,41 @@ fn main() -> anyhow::Result<()> {
             cli::ModuleCmd::List { name } => module::list(name)?,
             cli::ModuleCmd::Add {
                 machine_name,
-                options,
                 url,
-            } => alert_dirty(module::add(machine_name, GitUrl::from(url), options)?),
+                options,
+                module_paths,
+            } => {
+                let machine = module::add(machine_name, GitUrl::from(url), options, module_paths)?;
+                if !options.no_build {
+                    machine.build(true)?;
+                } else {
+                    alert_dirty(machine);
+                }
+            }
             cli::ModuleCmd::Set {
                 machine_name,
-                module_name,
                 url,
                 options,
-            } => alert_dirty(module::set(
-                machine_name,
-                module_name,
-                url.as_ref().map(GitUrl::from),
-                options,
-            )?),
+                name,
+                new_name,
+                module_path,
+            } => {
+                let machine = module::set(
+                    machine_name,
+                    name,
+                    options,
+                    new_name,
+                    module_path,
+                    url.as_ref().map(GitUrl::from),
+                )?;
+                if !options.no_build {
+                    machine.build(false)?;
+                } else {
+                    alert_dirty(machine);
+                }
+            }
             cli::ModuleCmd::Delete { name, module_name } => {
-                alert_dirty(module::delete(name, module_name.clone())?)
+                alert_dirty(module::delete(name, module_name)?)
             }
         },
         Cmd::GC {

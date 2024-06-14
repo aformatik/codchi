@@ -26,8 +26,6 @@ To prevent prompts or to specify a branch or commit, use the following options:
   <user>:<password>                         # General syntax
   ```
 
-After successfull creation, [apply your changes](#applying-changes)!
-
 ### Which nixpkgs should I use?
 
 Since every code machine is a NixOS system, it needs a version of nixpkgs (the collection containing all Nix programs). There are two options:

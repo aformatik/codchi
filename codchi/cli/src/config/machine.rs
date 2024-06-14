@@ -17,8 +17,12 @@ pub struct MachineConfig {
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub nixpkgs_from: Option<ModuleName>,
 
+    #[serde(default)]
     #[serde_as(as = "HashMap<DisplayFromStr, DisplayFromStr>")]
     pub modules: HashMap<ModuleName, CodchiModule>,
+
+    #[serde(default)]
+    pub secrets: HashMap<String, String>,
 }
 
 pub enum ConfigResult {
@@ -31,6 +35,15 @@ pub enum ConfigResult {
 }
 
 impl MachineConfig {
+    pub fn new(name: &str) -> Self {
+        MachineConfig {
+            name: name.to_string(),
+            nixpkgs_from: Default::default(),
+            modules: Default::default(),
+            secrets: Default::default(),
+        }
+    }
+
     pub fn find(name: &str) -> Result<ConfigResult> {
         let path = host::DIR_CONFIG.join_machine(name).join("config.json");
         if fs::metadata(&path).is_err() {
@@ -83,14 +96,7 @@ impl MachineConfig {
             _ => anyhow::bail!("Machine '{name}' doesn't exist."),
         }
         let (lock, cfg) = Self::open(name, write_mode)?;
-        Ok((
-            lock,
-            cfg.unwrap_or(MachineConfig {
-                name: name.to_string(),
-                nixpkgs_from: Default::default(),
-                modules: Default::default(),
-            }),
-        ))
+        Ok((lock, cfg.unwrap_or(Self::new(name))))
     }
 
     pub fn write(&self, lock: LockedConfig) -> Result<()> {
@@ -117,6 +123,11 @@ impl MachineConfig {
 
 pub type CodchiModule = FlakeUrl<Required>;
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct EnvSecret {
+    pub name: String,
+    pub description: String,
+}
 // fn get_machines(&mut self) -> &mut toml_edit::Table {
 //     if !self.doc.contains_table("machines") {
 //         self.doc["machines"] = table();
