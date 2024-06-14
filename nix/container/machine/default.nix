@@ -1,4 +1,4 @@
-{ pkgs, lib, config, consts, ... }:
+{ pkgs, lib, config, ... }:
 let
   inherit (lib) mkOption mkEnableOption types mkIf;
   cfg = config.machine;
@@ -53,7 +53,6 @@ in
 
         # Use config.system.binPackages and PATH from host
         export LANG="C.UTF-8" HOME=/root PATH="/bin:$PATH"
-
         ${cfg.init.hostSetup}
 
         if [ -n "''${CODCHI_DEBUG:-}" ]; then
@@ -79,11 +78,9 @@ in
         # the mtime if the file already exists.
         : >> /etc/machine-id
 
-        # Reset the logging file descriptors.
+        # TODO ?? Reset the logging file descriptors.
 
         echo "starting systemd..."
-        echo ${consts.INIT_EXIT_SUCCESS}
-        echo
         exec /run/current-system/systemd/lib/systemd/systemd "$@"
       '';
   };

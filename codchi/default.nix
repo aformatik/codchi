@@ -174,7 +174,7 @@ let
       '';
 
       CODCHI_WSL_VERSION_MIN = "2.0.14";
-      CODCHI_WSL_VERSION_MAX = "2.1.5";
+      CODCHI_WSL_VERSION_MAX = "2.2.4";
 
     };
     linux = rec {

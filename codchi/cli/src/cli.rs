@@ -52,7 +52,7 @@ pub struct Cli {
 }
 
 #[derive(Debug, Subcommand, Clone)]
-#[allow(clippy::large_enum_variant)] // can't use Box with flattened Option
+// #[allow(clippy::large_enum_variant)] // can't use Box with flattened Option
 pub enum Cmd {
     // #[command(subcommand)]
     // #[clap(aliases = &["ctrl"])]
@@ -71,8 +71,13 @@ pub enum Cmd {
         url: Option<CodchiUrl>,
 
         #[command(flatten)]
-        // #[group(requires = "url")]
-        options: Box<ModuleOptions>,
+        input_options: Box<InputOptions>,
+
+        /// A list of flake paths to the NixOS modules you whish to add. Leave empty to create a
+        /// basic machine.
+        /// Currently supported: 'codchiModules.<module>' or 'nixosModules.<module>'
+        #[arg(requires = "url")]
+        module_paths: Vec<ModuleAttrPath>,
     },
 
     /// Execute (interactive) command inside a machine.
@@ -141,61 +146,6 @@ pub enum Cmd {
     },
 }
 
-// mod ctrl {
-//     use super::*;
-
-//     #[derive(Debug, Subcommand, Clone)]
-//     pub enum ControllerCmd {
-//         /// Start the codchi controller
-//         Start {
-//             /// Run in foreground, dont daemonize
-//             #[arg(long = "foreground", short = 'f')]
-//             run_in_foreground: bool,
-//         },
-
-//         /// Stop the codchi controller
-//         Stop {},
-//     }
-
-//     impl ControllerCmd {
-//         #[allow(dead_code)]
-//         pub fn to_args(&self) -> Vec<&'static str> {
-//             let global_args = CLI_ARGS.get().expect("Global CLI_ARGS not set.");
-//             let mut args = Vec::new();
-
-//             let default_lvl = <DefaultLogLevel as LogLevel>::default().unwrap() as i8;
-//             let log_level = global_args
-//                 .verbose
-//                 .log_level()
-//                 .map(|it| it as i8)
-//                 .unwrap_or(0);
-
-//             let rel_level = log_level - default_lvl;
-//             // println!("{default_lvl} {log_level} {rel_level} {:?}", self.verbose);
-
-//             #[allow(clippy::comparison_chain)]
-//             if rel_level > 0 {
-//                 args.resize((args.len() as i8 + rel_level) as usize, "--verbose");
-//             } else if rel_level < 0 {
-//                 args.resize((args.len() as i8 - rel_level) as usize, "--quiet");
-//             }
-
-//             args.push("controller");
-//             match self {
-//                 ControllerCmd::Stop {} => args.push("stop"),
-//                 ControllerCmd::Start { run_in_foreground } => {
-//                     args.push("start");
-//                     if *run_in_foreground {
-//                         args.push("--foreground");
-//                     }
-//                 }
-//             }
-
-//             args
-//         }
-//     }
-// }
-
 mod module {
     use self::name::ModuleName;
 
@@ -219,22 +169,37 @@ mod module {
             url: CodchiUrl,
 
             #[command(flatten)]
-            options: Box<ModuleOptions>,
+            options: Box<InputOptions>,
+
+            /// A list of flake paths to the NixOS modules you whish to add.
+            /// Currently supported: 'codchiModules.<module>' or 'nixosModules.<module>'
+            module_paths: Vec<ModuleAttrPath>,
         },
 
         /// Modifies a module of a machine <https://codchi.dev/docs/start/usage.html#modifying-a-module>
         Set {
             /// Name of the code machine
             machine_name: String,
+            
+            /// The name of the module to modify
+            name: ModuleName,
 
-            /// Name of the module to modify
-            module_name: ModuleName,
-
-            /// HTTP(S) URL or file path to the codchi module
+            /// HTTP(S) URL or file path to the repository of the module
+            #[arg(long, short = 'u')]
             url: Option<CodchiUrl>,
 
             #[command(flatten)]
-            options: Box<ModuleOptions>,
+            options: Box<InputOptions>,
+
+            /// The new name of the module => TODO mod rename command
+            #[arg(long, short = 'n')]
+            new_name: Option<ModuleName>,
+            
+            /// The flake path to the NixOS module you whish to use.
+            /// Currently supported: 'codchiModules.<module>' or 'nixosModules.<module>'
+            #[arg(long, short = 'm')]
+            module_path: Option<ModuleAttrPath>,
+
         },
 
         /// Deletes a module of a machine <https://codchi.dev/docs/start/usage.html#delete-a-module>
@@ -247,6 +212,7 @@ mod module {
             /// Name of the module (You can list them with `codchi module ls NAME`)
             module_name: ModuleName,
         },
+
         // /// Fetch module updates
         // Update {
         // /// Name of the code machine
@@ -259,10 +225,14 @@ mod module {
     #[clap(
         group(ArgGroup::new("exclusive").args(&["branch", "tag"])),
     )]
-    pub struct ModuleOptions {
+    pub struct InputOptions {
         /// Don't prompt for confirmation and accept all of codchi's defaults
         #[arg(long, short = 'y')]
         pub dont_prompt: bool,
+
+        /// Don't automatically build machine after command
+        #[arg(long, short = 'N')]
+        pub no_build: bool,
 
         #[arg(long, short = 'p')]
         pub use_nixpkgs: Option<NixpkgsLocation>,
@@ -282,14 +252,6 @@ mod module {
         /// Git commit
         #[arg(long, short)]
         pub commit: Option<String>,
-
-        /// Name of the module
-        #[arg(long, short = 'n')]
-        pub name: Option<ModuleName>,
-
-        /// Path of the NixOS module you whish to add.
-        /// Currently supported: 'codchiModules.<module>' or 'nixosModules.<module>'
-        pub module_path: Option<ModuleAttrPath>,
     }
 
     #[derive(Clone, Debug, PartialEq, Eq)]
@@ -397,7 +359,7 @@ impl From<&CodchiUrl> for GitUrl {
                 let mut url = val.git_url.clone();
                 url.path = val.original.clone();
                 url
-            },
+            }
             _ => val.git_url.clone(),
         }
     }

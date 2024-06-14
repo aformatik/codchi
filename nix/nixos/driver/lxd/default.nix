@@ -50,6 +50,19 @@ in
         # ReadWritePaths=
       })
     ];
+
+    environment.extraInit = /* bash */ ''
+      if [ -n "''${XAUTHORITY:-}" ]; then
+        DISPLAY="''${DISPLAY:-0}"
+        COOKIE="$(${lib.getExe pkgs.xorg.xauth} list | tr -s ' ' |  cut -f 3 -d ' ' | head -n 1)"
+        if [ -z "$COOKIE" ]; then
+          echo "[codchi] Failed to setup xauth (no cookie found). You might not be able to run GUI apps." >&2
+        else
+          # echo "[codchi] Adding cookie to xauth: $COOKIE" >&2
+          ${lib.getExe pkgs.xorg.xauth} add "$DISPLAY" . "$COOKIE"
+        fi
+      fi
+    '';
   };
 }
 

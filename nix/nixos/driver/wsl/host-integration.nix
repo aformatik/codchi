@@ -60,8 +60,7 @@ in
           };
 
           wslExplorer = pkgs.writeShellScriptBin "wsl-explorer" ''
-            set -euo pipefail
-            exec explorer.exe "$(wslpath -w "$1")"
+            exec explorer.exe "$@"
           '';
         };
 
@@ -105,33 +104,15 @@ in
               exit 1
             fi
 
-            WIN_BROWSER="$(reg.exe QUERY 'HKEY_CLASSES_ROOT\htmlfile\shell\open\command' /ve |
-              grep Default |
-              tr -s ' ' |
-              sed 's/^.*"\(.*\)".*$/\1/' |
-              xargs -I@ wslpath "@")"
-
             log() {
               echo "$@" >&2 
             }
 
-            errexit() {
-              log "Error: $@"
-              msg.exe '*' "$@"
-              exit 1
-            }
+            # opens in default browser
+            WIN_BROWSER="explorer.exe"
 
-            if [ -z "$(type -P "$WIN_BROWSER" || true)" ]; then
-              errexit "Could not find default Windows Browser."
-            else
-              log "Found Windows Browser: $WIN_BROWSER"
-            fi
-
-            if [ -e "$1" ] && [[ $1 == /* ]]; then
-              WIN_FILE="$(wslpath -w "$1")"
-              log "Rewriting linux path to windows path:"
-              log "\"$1\" -> \"$WIN_FILE\""
-              exec "$WIN_BROWSER" "$WIN_FILE"
+            if [ -f "$1" ]; then
+              exec "$WIN_BROWSER" "$1"
             else
               LOCAL_IP="$(ifconfig |
                 grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' |

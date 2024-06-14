@@ -31,6 +31,7 @@ impl LockedConfig {
                 .read(true)
                 .write(true)
                 .create(true)
+                .truncate(false)
                 .open(&path)?;
         }
         let file = fs::OpenOptions::new()

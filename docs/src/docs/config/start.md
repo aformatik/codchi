@@ -4,6 +4,7 @@ Configuring a code machine means configuring a NixOS module. Don't worry, if you
 ```nix
 { pkgs, ... }: { 
     environment.systemPackages = [ pkgs.neofetch ];
+    time.timeZone = "Europe/Berlin"; # Time is UTC by default
 }
 ```
 For Codchi to be able to pick it up, you also need to create a `flake.nix` in the root directory of your repository:

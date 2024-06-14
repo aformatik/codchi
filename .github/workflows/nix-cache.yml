@@ -4,6 +4,8 @@ on:
   push: 
     tags:
       - "v*.*.*"
+    branches:
+      - "master"
 
 permissions:
   contents: read
@@ -17,6 +19,6 @@ jobs:
     - uses: DeterminateSystems/magic-nix-cache-action@main
     - uses: cachix/cachix-action@v14
       with:
-        name: nixos-devenv
+        name: codchi
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
     - run: nix build .#checks.x86_64-linux.populate-cache -L
