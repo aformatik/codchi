@@ -27,7 +27,7 @@ impl Driver {
         static DRIVER: OnceLock<Driver> = OnceLock::new();
         let result: Result<&'static Driver> = DRIVER.get_or_try_init(|| {
             Ok(Self {
-                store: Store::init(private::Private)?,
+                store: Store::init()?,
             })
         });
         result.expect("Failed initializing Driver.")
@@ -36,8 +36,4 @@ impl Driver {
     pub fn store() -> &'static impl Store {
         &Self::get().store
     }
-}
-
-mod private {
-    pub struct Private;
 }

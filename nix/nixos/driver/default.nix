@@ -6,6 +6,7 @@ in
   imports = [
     ./lxd
     ./wsl
+    ./secrets.nix
   ];
 
   options.codchi.driver = {
@@ -88,8 +89,8 @@ in
         nixPath = [ "nixpkgs=/etc/channels/nixpkgs" ];
 
         settings = {
-          extra-substituters = [ "https://nixos-devenv.cachix.org" ];
-          trusted-public-keys = [ "nixos-devenv.cachix.org-1:TfcIbSCGLCufAt9UCxzBTi3ekrzgI3HAHX73VWpByoE=" ];
+          extra-substituters = [ "https://codchi.cachix.org" ];
+          trusted-public-keys = [ "codchi.cachix.org-1:dVwdzogJgZO2x8kPKW02HNt2dpd/P/z46pY465MkokY=" ];
         };
       };
       environment.etc."channels/nixpkgs".source = inputs.nixpkgs;
@@ -99,6 +100,11 @@ in
     # general codchi machine management
     {
       boot.isContainer = true;
+
+      # source codchi secrets
+      environment.extraInit = /* bash */ ''
+        source /etc/codchi-env
+      '';
 
       # useful for usbip but adds a dependency on various firmwares which are combined over 300 MB big
       services.udev.enable = mkDefault false;

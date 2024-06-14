@@ -16,7 +16,7 @@ jobs:
     - uses: DeterminateSystems/magic-nix-cache-action@main
     - uses: cachix/cachix-action@v14
       with:
-        name: nixos-devenv
+        name: codchi
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
     - run: |
         nix build .#windows -L

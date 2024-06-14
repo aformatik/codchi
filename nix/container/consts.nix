@@ -10,16 +10,18 @@
       DIR_DATA = "/data";
       DIR_DATA_MACHINE = "${consts.store.DIR_DATA}/machine/$CODCHI_MACHINE_NAME";
 
+      DIR_LOG = "${consts.store.DIR_DATA}/log";
+      LOGFILE = "${consts.store.DIR_LOG}/store.log";
+      MACHINE_LOG = "${consts.store.DIR_LOG}/machine-$CODCHI_MACHINE_NAME.log";
+
       # WSL tricks
       DIR_MACHINE_DATA = "/machine-data";
       DIR_MACHINE_DATA_MACHINE = "${consts.store.DIR_MACHINE_DATA}/machine/$CODCHI_MACHINE_NAME";
     };
     machine = {
       USER = "codchi";
+      INIT_ENV = "/etc/codchi-env";
     };
-
-    INIT_EXIT_ERR = "INIT_ERR";
-    INIT_EXIT_SUCCESS = "INIT_SUCCESS";
   };
 
 

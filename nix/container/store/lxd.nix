@@ -1,4 +1,4 @@
-{ lib, config, pkgs, ... }:
+{ lib, config, pkgs, consts, ... }:
 let inherit (lib) mkEnableOption mkIf;
 
   udhcpcScript =
@@ -23,9 +23,12 @@ in
 
   config = mkIf config.store.driver.lxd.enable {
     files."/usr/share/udhcpc/default.script" = udhcpcScript;
-    # these should automatically fork to bg
+
     store.init.filesystem = lib.mkAfter /* bash */ ''
-      syslogd
+      mkdir -p ${consts.store.DIR_LOG} || true
+      touch "${consts.store.LOGFILE}"
+      syslogd -O "${consts.store.LOGFILE}"
+      exec 1> >(tee -i "${consts.store.LOGFILE}") 2>&1
       udhcpc -S -s /usr/share/udhcpc/default.script
     '';
 

@@ -5,7 +5,7 @@ let
 in
 {
 
-  imports = [ ./default-tools.nix ];
+  imports = [ ./host-integration.nix ];
 
   options.codchi.driver.wsl.enable = mkEnableOption "WSL driver"
     // { internal = true; readonly = true; };
@@ -53,9 +53,7 @@ in
       # but helps if /tmp is a tmpfs or mounted from some other location.
       "10-wslg-x11" = {
         "/tmp/.X11-unix" = {
-          L = {
-            argument = "/mnt/wslg/.X11-unix";
-          };
+          L.argument = "/mnt/wslg/.X11-unix";
         };
       };
       # "11-wslpath" = {

@@ -1,5 +1,6 @@
 Describe "codchi.msix" {
    It "installs codchistore correctly" {
-       codchi.exe status -vvv | Should -Not -Throw 
+       wsl.exe --shutdown
+       codchi.exe status -vv | Should -Not -Throw 
    }
 }

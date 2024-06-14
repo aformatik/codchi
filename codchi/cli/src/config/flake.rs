@@ -8,7 +8,7 @@ use crate::{
 };
 use git_url_parse::{GitUrl, Scheme};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FlakeUrl<W: Hkd> {
     pub location: FlakeLocation,
 
@@ -18,7 +18,7 @@ pub struct FlakeUrl<W: Hkd> {
     pub flake_attr: W::Hk<ModuleAttrPath>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum FlakeLocation {
     Remote {
         scheme: FlakeScheme,
@@ -137,7 +137,7 @@ impl<W: Hkd> FlakeUrl<W> {
         }
     }
 
-    pub fn set_attr<X: Hkd>(&self, flake_attr: X::Hk<ModuleAttrPath>) -> FlakeUrl<X> {
+    pub fn with_attr<X: Hkd>(&self, flake_attr: X::Hk<ModuleAttrPath>) -> FlakeUrl<X> {
         FlakeUrl {
             location: self.location.clone(),
             commit: self.commit.clone(),
@@ -270,7 +270,7 @@ impl FromStr for FlakeUrl<Required> {
         let url = FlakeUrl::<Optional>::from_str(s)?;
 
         match url.flake_attr.clone().to_option() {
-            Some(attr) => Ok(url.set_attr(attr)),
+            Some(attr) => Ok(url.with_attr(attr)),
             None => Err(format!("Missing module path in {url}")),
         }
     }
@@ -285,11 +285,11 @@ impl FromStr for FlakeUrl<Empty> {
         if let Some(attr) = &url.flake_attr {
             log::warn!("Ignoring flake attr {attr} in {url}.");
         }
-        Ok(url.set_attr(PhantomData))
+        Ok(url.with_attr(PhantomData))
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, strum::Display, EnumString)]
+#[derive(Debug, Clone, PartialEq, Eq, strum::Display, EnumString, Hash)]
 #[strum(serialize_all = "snake_case")]
 pub enum FlakeScheme {
     Github,

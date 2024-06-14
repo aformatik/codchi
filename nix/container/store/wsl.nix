@@ -42,12 +42,17 @@ in
     # rm "${consts.store.INIT_ENV}"
 
     store.init.filesystem = lib.mkAfter /* bash */ ''
+      # init is started manually in WSL, so we dont need to manually write to a logfile
+      
       if [ -z "''${CODCHI_IS_STORE:-}" ]; then
+        /mnt/c/WINDOWS/system32/msg.exe '*' "This distribution is only meant to be started by codchi.exe!" >&2
         logE "This distribution is only meant to be started by codchi.exe!"
         exit 1
       fi
 
       if [ -z "''${WSL_CODCHI_DIR_CONFIG:-}" ] || [ ! -d "''${WSL_CODCHI_DIR_CONFIG:-}" ]; then
+        /mnt/c/WINDOWS/system32/msg.exe '*' \
+          "Environment variable \$WSL_CODCHI_DIR_CONFIG not set or host directory doesn't exist." >&2
         logE "Environment variable \$WSL_CODCHI_DIR_CONFIG not set or host directory doesn't exist."
         exit 1
       fi

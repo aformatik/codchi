@@ -4,8 +4,9 @@ use anyhow::anyhow;
 use serde::Deserialize;
 use std::io::{BufRead, BufReader, Read};
 use std::process::{Child, Stdio};
-use std::sync::mpsc::{channel, Sender};
-use std::thread;
+use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
 use std::{
     fmt::Debug,
     io,
@@ -38,6 +39,12 @@ pub enum Error {
     },
 }
 type Result<T> = std::result::Result<T, Error>;
+type IsStderr = bool;
+pub struct StreamingChild {
+    pub rx: Receiver<(IsStderr, String)>,
+    pub threads: Vec<JoinHandle<()>>,
+    pub child: Child,
+}
 
 pub trait CommandExt: Debug {
     fn spawn(&mut self, out_ty: OutputType) -> Result<Child>;
@@ -93,19 +100,25 @@ Stderr:
         Ok(())
     }
 
-    /// Wait for child to finish while streaming AND collecting both stderr and stdout.
-    fn output_ok_streaming(&mut self, streamer: fn(String)) -> Result<String> {
+    fn retry_until_ok(&mut self) {
+        while self.wait_ok().is_err() {
+            thread::sleep(Duration::from_millis(500));
+        }
+    }
+
+    /// Spawn child while streaming AND collecting both stderr and stdout.
+    fn spawn_streaming(&mut self) -> Result<StreamingChild> {
         log::trace!("Running command: {self:?}");
         let mut child = self.spawn(OutputType::Collect)?;
         fn stream(
             stream: impl Read,
-            chan: Sender<(String, bool)>,
+            chan: Sender<(IsStderr, String)>,
             is_err: bool,
         ) -> anyhow::Result<()> {
             let reader = BufReader::new(stream);
             let mut iter = reader.lines();
             while let Some(Ok(line)) = iter.next() {
-                chan.send((line, is_err))?;
+                chan.send((is_err, line))?;
             }
             Ok(())
         }
@@ -123,33 +136,69 @@ Stderr:
             stream(child_err, tx2, true).expect("error streaming child stderr")
         });
 
+        Ok(StreamingChild {
+            rx,
+            threads: vec![t1, t2],
+            child,
+        })
+    }
+
+    // /// Spawn child while streaming and return immediatly
+    // fn spawn_streaming_cancellable(
+    //     &mut self,
+    //     cancel: AtomicBool,
+    //     streamer: fn(String),
+    // ) -> Result<()> {
+    //     let mut stream = self.spawn_streaming()?;
+    //     thread::spawn(|| output_ok_stream(self, stream, streamer));
+    //     Ok(())
+    // }
+
+    /// Wait for child to finish while streaming stderr and stdout.
+    fn output_ok_streaming(
+        &mut self,
+        cancel: Receiver<()>,
+        streamer: fn(String),
+    ) -> Result<String> {
+        let stream = self.spawn_streaming()?;
+        let mut stream = stream;
         let (mut stdout, mut stderr) = (String::new(), String::new());
-        while let Ok((line, is_err)) = rx.recv() {
-            if is_err {
-                stderr.push_str(&line);
-                stderr.push('\n');
-            } else {
-                stdout.push_str(&line);
-                stdout.push('\n');
+
+        let mut was_canceled = false;
+        // stream output until canceled
+        'l: loop {
+            match stream.rx.recv_timeout(Duration::from_millis(100)) {
+                Ok((is_err, line)) => {
+                    // remove @nix log lines
+                    if !line.starts_with("@nix") {
+                        let out = if is_err { &mut stderr } else { &mut stdout };
+                        out.push_str(&line);
+                        out.push('\n');
+                    }
+                    streamer(line);
+                }
+                Err(RecvTimeoutError::Timeout) => {
+                    if cancel.try_recv().is_ok() {
+                        was_canceled = true;
+                        stream.child.kill()?;
+                    }
+                }
+                _else => break 'l,
             }
-            streamer(line);
         }
 
-        t1.join().map_err(|err| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                anyhow::anyhow!("Failed streaming child stdout: {err:?}"),
-            )
-        })?;
-        t2.join().map_err(|err| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                anyhow::anyhow!("Failed streaming child stderr: {err:?}"),
-            )
-        })?;
+        for t in stream.threads {
+            t.join().map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    anyhow::anyhow!("Failed streaming child stdout: {err:?}"),
+                )
+            })?;
+        }
 
-        let status = child.wait()?;
-        if status.success() {
+        let status = stream.child.wait()?;
+        // dont fail if cancelled
+        if was_canceled || status.success() {
             Ok(stdout)
         } else {
             log::trace!("Got error when running {self:?}:\n{stderr}");
