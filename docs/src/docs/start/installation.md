@@ -59,8 +59,16 @@ curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix 
 # without SystemD:
 curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install --init none
 ```
+You might want to add codchi's binary cache to speed things up (this step is optional):
+```bash
+nix-env -iA cachix -f https://cachix.org/api/v1/install
+cachix use codchi
+```
+
 Now install codchi:
 ```bash
+nix-env -iA cachix -f https://cachix.org/api/v1/install
+cachix use codchi # 
 nix profile install github:aformatik/codchi
 ```
 
@@ -70,20 +78,26 @@ nix profile install github:aformatik/codchi
 
 Flakes need to be activated.
 
-Install LXD:
+Install LXD and add codchi's binary cache (optional but faster):
 ```nix
 virtualisation.lxd.enable = true;
 virtualisation.lxc.lxcfs.enable = true;
 virtualisation.lxd.recommendedSysctlSettings = true;
 
+# Allow your user to use LXD
+users.users.<your user>.extraGroups = [ "lxd" ];
+
+# optional but recommended:
+nix.settings = {
+  extra-substituters = [ "https://codchi.cachix.org" ];
+  trusted-public-keys = [ "codchi.cachix.org-1:dVwdzogJgZO2x8kPKW02HNt2dpd/P/z46pY465MkokY=" ];
+};
+
 # If you use a local DNS server. See https://github.com/NixOS/nixpkgs/issues/263359
 firewall.interfaces.lxdbr0.allowedTCPPorts = [ 53 ];
 firewall.interfaces.lxdbr0.allowedUDPPorts = [ 53 67 ];
-
-# Allow your user to use LXD
-users.users.<your user>.extraGroups = [ "lxd" ];
 ```
-You might also need to run `lxd init` manually.
+Now, `nixos-rebuild`. Then run `lxd init` manually.
 
 ### Install Codchi
 

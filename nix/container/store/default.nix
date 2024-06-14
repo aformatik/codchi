@@ -51,7 +51,7 @@ in
         export NIX_VERBOSITY=
         if [ -n "''${CODCHI_DEBUG:-}" ]; then
           set -x
-          export NIX_VERBOSITY="-v"
+          export NIX_VERBOSITY="-v --print-build-logs"
         fi
 
         # Use config.system.binPackages and PATH from parent
@@ -62,6 +62,9 @@ in
 
         # Make nixs' https work
         export NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+
+        # prevent build locks
+        export NIX_REMOTE="daemon"
       '';
 
 
@@ -147,6 +150,12 @@ in
     {
 
       store.init.runtime = /* bash */ ''
+        # use nix daemon to prevent locks
+        unset NIX_REMOTE
+        # nix daemon &
+        # NIX_DAEMON_PID=$!
+        # export NIX_REMOTE="daemon"
+
         if [ ! -f "${consts.store.DIR_CONFIG_STORE}/flake.nix" ]; then
           logE "Stores' flake.nix missing!"
           exit 1
@@ -172,6 +181,12 @@ in
             git add flake.*
           )
         fi
+
+        # dont build, because this might deadlock
+        if [ "''${1:-}" = "--until-build" ]; then
+          exit 0
+        fi
+
         if [ -n "$_GIT_IMPURE" ]; then
           logE "Installing store..."
           mkdir -p "${consts.store.DIR_CONFIG_STORE}"
@@ -185,6 +200,9 @@ in
           nix flake update $NIX_VERBOSITY "${consts.store.DIR_CONFIG_STORE}"
           nix $NIX_VERBOSITY profile upgrade --profile "${consts.store.PROFILE_STORE}" '.*'
         fi
+
+        # kill $NIX_DAEMON_PID
+        # unset NIX_REMOTE
       '';
     }
 

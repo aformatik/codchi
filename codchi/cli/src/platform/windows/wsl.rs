@@ -9,7 +9,13 @@ use inquire::InquireError;
 use itertools::Itertools;
 use known_folders::{get_known_folder_path, KnownFolder};
 use log::warn;
-use std::{fs, io, path::PathBuf, process::Command, sync::OnceLock};
+use std::{
+    fs,
+    io::{self, IsTerminal},
+    path::PathBuf,
+    process::Command,
+    sync::OnceLock,
+};
 use sysinfo::System;
 use version_compare::Version;
 use wslapi::Library;
@@ -109,11 +115,11 @@ pub fn get_platform_status(container_name: &str) -> Result<PlatformStatus> {
     }
 }
 
-pub fn import<T, F: Fn() -> Result<T>>(
+pub fn import<T, F: FnMut() -> Result<T>>(
     rootfs_name: &str,
     name: &str,
     installation_path: PathBuf,
-    additional_setup: F,
+    mut additional_setup: F,
 ) -> Result<T> {
     (|| {
         let msix_path = get_known_folder_path(KnownFolder::ProgramData)
@@ -155,22 +161,23 @@ pub fn set_sparse(name: &str) -> Result<()> {
         .iter()
         .any(|(_, proc)| proc.name().contains("vmmem") || proc.name().contains("vmmemWSL"))
     {
-        if ROOT_PROGRESS_BAR
-            .get()
-            .unwrap()
-            .suspend(|| {
-                inquire::Confirm::new(&format!(
-                    "Codchi needs to stop WSL in order to set \
+        if io::stdin().is_terminal()
+            && ROOT_PROGRESS_BAR
+                .get()
+                .unwrap()
+                .suspend(|| {
+                    inquire::Confirm::new(&format!(
+                        "Codchi needs to stop WSL in order to set \
 WSL distribution '{name}' to sparse mode. WARNING: This will stop all WSL distributions \
 including all running programs. Is this OK?",
-                ))
-                .with_help_message("You can also do this manually at a later time.")
-                .prompt()
-            })
-            .recover_err(|err| match err {
-                InquireError::NotTTY => Ok(false),
-                err => Err(err),
-            })?
+                    ))
+                    .with_help_message("You can also do this manually at a later time.")
+                    .prompt()
+                })
+                .recover_err(|err| match err {
+                    InquireError::NotTTY => Ok(false),
+                    err => Err(err),
+                })?
         {
             wsl_command().arg("--shutdown").wait_ok()?;
         } else {

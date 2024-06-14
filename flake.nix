@@ -2,15 +2,15 @@
   description = "CODe maCHInes - Declarative and Reprodicible Development Environements as Code";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       flake = false; # prevent fetching transitive inputs TODO
     };
-    nixvim = {
-      url = "github:nix-community/nixvim";
+    # nixvim = {
+    #   url = "github:nix-community/nixvim";
       # inputs.nixpkgs.follows = "nixpkgs";
-    };
+    # };
 
   };
 

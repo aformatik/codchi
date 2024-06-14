@@ -14,7 +14,7 @@
   # , jetbrains
 
 , cargo-watch
-, cargo-deps
+# , cargo-deps
   # , cargo-udeps
 , cargo-bloat
 , cargo-flamegraph
@@ -63,7 +63,7 @@ mkShell (lib.recursiveUpdate
     # }))
 
     cargo-bloat
-    cargo-deps
+    # cargo-deps
     cargo-watch
     cargo-flamegraph
     graphviz

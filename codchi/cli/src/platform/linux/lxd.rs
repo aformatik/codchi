@@ -74,7 +74,10 @@ pub mod image {
 
 pub mod container {
     use super::*;
-    use crate::{consts::{user, PathExt}, platform::PlatformStatus};
+    use crate::{
+        consts::{user, PathExt},
+        platform::{LinuxPath, LinuxUser, PlatformStatus},
+    };
     use anyhow::{anyhow, Context};
     use itertools::Itertools;
     use nix::unistd::{getgid, getuid, Group};
@@ -83,6 +86,7 @@ pub mod container {
     #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
     /// LXD container information
     pub struct Info {
+        pub name: String,
         pub status: String,
     }
 
@@ -98,24 +102,18 @@ pub mod container {
         }
     }
 
-    pub fn list(filter: &str) -> io::Result<Vec<Info>> {
-        let json = lxc_output_ok(&["list", filter, "--format", "json"])?;
-        serde_json::from_slice::<Vec<Info>>(&json).map_err(|err| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("LXD info: failed to parse json: {}", err),
-            )
-        })
-    }
-
     pub fn get_info(name: &str) -> io::Result<Option<Info>> {
-        list(name).map(|mut list| {
-            if list.len() == 1 {
-                Some(list.remove(0))
-            } else {
-                None
-            }
-        })
+        let json = lxc_output_ok(&["list", "--format", "json"])?;
+        Ok(serde_json::from_slice::<Vec<Info>>(&json)
+            .map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("LXD info: failed to parse json: {}", err),
+                )
+            })?
+            .iter()
+            .find(|info| info.name == name)
+            .cloned())
     }
 
     pub fn get_platform_status(name: &str) -> io::Result<PlatformStatus> {
@@ -283,6 +281,43 @@ to '{connect}' in container {container_name}.",
             let _ = image::delete(name);
             let _ = container::delete(name, true);
             err
+        })
+    }
+
+    /// Pushes file for default user
+    pub fn file_push<P: AsRef<Path>>(
+        name: &str,
+        path: P,
+        target: LinuxPath,
+        user: Option<LinuxUser>,
+    ) -> anyhow::Result<()> {
+        let src = path.as_ref().to_string_lossy();
+        let target_arg = format!("{name}/{}", target);
+        let mut args = vec!["file", "push", &src, &target_arg];
+        match user {
+            Some(LinuxUser::Default) => {
+                args.extend(["--uid", user::DEFAULT_UID, "--gid", user::DEFAULT_GID]);
+            }
+            Some(LinuxUser::Root) => {
+                args.extend(["--uid", user::ROOT_UID, "--gid", user::ROOT_GID]);
+            }
+            None => {}
+        }
+        lxc(&args).with_context(|| {
+            format!(
+                "Failed to copy file '{}' from host into LXD container {name} to {}",
+                path.as_ref().display(),
+                target.0
+            )
+        })
+    }
+    pub fn file_delete(name: &str, target: LinuxPath) -> anyhow::Result<()> {
+        let target_arg = format!("{name}/{}", target);
+        lxc(&["file", "delete", &target_arg]).with_context(|| {
+            format!(
+                "Failed to delete file '{}' in LXD container {name}",
+                target.0
+            )
         })
     }
 }

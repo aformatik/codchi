@@ -103,8 +103,7 @@ pub mod host {
             .map(PathBuf::from)
             .unwrap_or(BASE_DIR.data_local_dir().join(APP_NAME))
     });
-    pub static DIR_NIX: Lazy<PathBuf> =
-        Lazy::new(|| BASE_DIR.cache_dir().join(APP_NAME).join("nix"));
+    pub static DIR_NIX: Lazy<PathBuf> = Lazy::new(|| DIR_DATA.join("nix"));
     pub static DIR_RUNTIME: Lazy<PathBuf> = Lazy::new(|| {
         BASE_DIR
             .runtime_dir()

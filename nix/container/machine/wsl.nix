@@ -70,7 +70,8 @@ in
       # fi
       
       source "${INIT_ENV}"
-      rm "${INIT_ENV}"
+      mkdir /etc || true
+      mv "${INIT_ENV}" /etc/codchi-env
 
       if [ -z "''${CODCHI_MACHINE_NAME:-}" ]; then
         echo "CODCHI_MACHINE_NAME not set!" >&2
@@ -105,7 +106,9 @@ in
       done
       mkMnt "/home/${consts.machine.USER}" "$target"
       mkdir -p "${mnt + consts.store.DIR_DATA}/machine"
-      ln -fs "$target" "${mnt + consts.store.DIR_DATA_MACHINE}"
+      if [ ! -L "${mnt + consts.store.DIR_DATA_MACHINE}" ]; then
+        ln -fs "$target" "${mnt + consts.store.DIR_DATA_MACHINE}"
+      fi
     '';
   };
 }

@@ -1,7 +1,7 @@
-use super::{platform::HostImpl, private::Private, Host, LinuxCommandTarget, LinuxUser};
+use super::{platform::HostImpl, private::Private, Host, LinuxCommandTarget, LinuxUser, NixDriver};
 use crate::{
     cli::name,
-    config::MachineConfig,
+    config::{EnvSecret, MachineConfig},
     consts::{self, host, store, user, PathExt, ToPath},
     platform::{self, CommandExt, Driver, Store},
     util::with_spinner,
@@ -9,6 +9,7 @@ use crate::{
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use std::{
+    collections::HashMap,
     fs,
     thread::{self},
     time::Duration,
@@ -200,12 +201,22 @@ fi
                 matches!(flake.location, crate::config::FlakeLocation::Local { .. })
             });
             let awaker = if has_local {
-                spinner.set_message(format!("Starting {}...", self.config.name));
-                self.start(Private)?;
-                self.wait_online()?;
+                match Self::read_platform_status(&self.config.name, Private)? {
+                    PlatformStatus::Stopped => {
+                        spinner.set_message(format!("Starting {}...", self.config.name));
+                        self.start(Private)?;
+                        self.wait_online()?;
+                    }
+                    PlatformStatus::Running => {}
+                    PlatformStatus::NotInstalled => bail!(
+                        "Can't build machine {} as it uses local modules but wasn't installed yet!",
+                        self.config.name
+                    ),
+                }
+
                 let mut cmd = self.cmd().run("sleep", &["infinity"]);
                 Some(thread::spawn(move || {
-                    log::trace!("Keeping machine awake: {:?}", cmd.wait_ok().unwrap());
+                    log::trace!("Keeping machine awake: {:?}", cmd.wait_ok());
                 }))
             } else {
                 None
@@ -241,9 +252,44 @@ git add flake.*
                     self.cmd().run("pkill", &["sleep"]).wait_ok()
                 );
             }
+            anyhow::Ok(())
+        })?;
 
-            spinner.set_message(format!("Building {}...", self.config.name));
+        {
+            let secrets: HashMap<String, EnvSecret> = Driver::store().cmd().eval(
+                store::DIR_CONFIG.join_machine(&self.config.name),
+                "nixosConfigurations.default.config.codchi.secrets.env",
+            )?;
 
+            let (lock, mut cfg) = MachineConfig::open_existing(&self.config.name, true)?;
+
+            let old_secrets = &cfg.secrets;
+            let mut all_secrets = HashMap::new();
+            for secret in secrets.values() {
+                match old_secrets.get(&secret.name) {
+                    Some(existing) => {
+                        log::debug!("Keeping existing secret {}.", secret.name);
+                        all_secrets.insert(secret.name.clone(), existing.clone());
+                    }
+                    None => {
+                        let value = inquire::Password::new(&format!(
+                            "Please enter secret '{}' (Toggle input mask with <Ctrl+R>):",
+                            secret.name
+                        ))
+                        .without_confirmation()
+                        .with_display_mode(inquire::PasswordDisplayMode::Masked)
+                        .with_help_message(secret.description.trim())
+                        .with_display_toggle_enabled()
+                        .prompt()?;
+                        all_secrets.insert(secret.name.clone(), value);
+                    }
+                }
+            }
+            cfg.secrets = all_secrets;
+            cfg.write(lock)?;
+        }
+
+        with_spinner(format!("Building {}...", self.config.name), |spinner| {
             let status = Self::read_platform_status(&self.config.name, Private)?;
             if status == PlatformStatus::NotInstalled {
                 spinner.set_message(format!("Installing {}...", self.config.name));
@@ -395,12 +441,19 @@ git add flake.*
         let cmd = match cmd.split_first() {
             Some((cmd, args)) => self
                 .cmd()
-                .run(cmd, &args.iter().map(|str| str.as_str()).collect_vec())
-                .with_user(LinuxUser::Default),
+                .run(cmd, &args.iter().map(|str| str.as_str()).collect_vec()),
             None => self.cmd().run("bash", &["-l"]),
         };
 
         cmd.with_cwd(user::DEFAULT_HOME.clone())
+            // .with_env(
+            //     self.config
+            //         .secrets
+            //         .clone()
+            //         .into_iter()
+            //         .map(|(name, val)| (format!("CODCHI_{name}"), val))
+            //         .collect(),
+            // )
             .with_user(LinuxUser::Default)
             .exec()?;
         Ok(())

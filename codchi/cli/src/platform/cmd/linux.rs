@@ -1,11 +1,17 @@
 use self::platform::LinuxCommandDriver;
 use super::*;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::Write;
 use std::process::{Child, Stdio};
 
 pub trait LinuxCommandTarget {
-    fn build(&self, uid: &Option<LinuxUser>, cwd: &Option<LinuxPath>) -> std::process::Command;
+    fn build(
+        &self,
+        uid: &Option<LinuxUser>,
+        cwd: &Option<LinuxPath>,
+        env: &HashMap<String, String>,
+    ) -> std::process::Command;
 
     fn get_driver(&self) -> LinuxCommandDriver;
 
@@ -20,7 +26,7 @@ pub trait LinuxCommandTarget {
             },
             user: None,
             cwd: None,
-            // output: Output::Collect,
+            env: HashMap::new(), // output: Output::Collect,
         }
     }
 
@@ -30,7 +36,7 @@ pub trait LinuxCommandTarget {
             program: Program::Script(script),
             user: None,
             cwd: None,
-            // output: Output::Collect,
+            env: HashMap::new(), // output: Output::Collect,
         }
     }
 
@@ -52,7 +58,7 @@ pub struct LinuxCommandBuilder {
     program: Program,
     user: Option<LinuxUser>,
     cwd: Option<LinuxPath>,
-    // output: Output,
+    env: HashMap<String, String>, // output: Output,
 }
 
 #[derive(Debug, Clone)]
@@ -86,11 +92,16 @@ impl LinuxCommandBuilder {
         self.cwd = Some(cwd);
         self
     }
+
+    pub fn with_env(mut self, env: HashMap<String, String>) -> Self {
+        self.env = env;
+        self
+    }
 }
 
 impl From<LinuxCommandBuilder> for Command {
     fn from(val: LinuxCommandBuilder) -> Self {
-        let mut cmd = val.driver.build(&val.user, &val.cwd);
+        let mut cmd = val.driver.build(&val.user, &val.cwd, &val.env);
 
         match &val.program {
             Program::Run { program, args } => {

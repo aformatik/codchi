@@ -2,16 +2,24 @@ mod host;
 mod lxd;
 
 pub use host::*;
+use indicatif::ProgressBar;
 
 use super::{private::Private, LinuxCommandTarget, LinuxPath, LinuxUser, NixDriver, Store};
 use crate::{
     cli::DEBUG,
-    consts::{self, machine::machine_name, PathExt, ToPath},
+    consts::{self, machine::machine_name, user, PathExt, ToPath},
     platform::{platform::lxd::container::LxdDevice, Machine, MachineDriver, PlatformStatus},
+    util::{with_tmp_file, ResultExt},
 };
 use anyhow::{Context, Result};
 use log::*;
-use std::{env, fs, path::PathBuf};
+use std::{
+    collections::HashMap,
+    env,
+    fs::{self, File},
+    io::Write,
+    path::PathBuf,
+};
 
 pub const NIX_STORE_PACKAGE: &str = "store-lxd";
 pub const NIXOS_DRIVER_NAME: &str = "lxd";
@@ -19,7 +27,7 @@ pub const NIXOS_DRIVER_NAME: &str = "lxd";
 pub struct StoreImpl {}
 
 impl Store for StoreImpl {
-    fn start_or_init_container(_: Private) -> Result<Self> {
+    fn start_or_init_container(spinner: &mut ProgressBar, _: Private) -> Result<Self> {
         let status = lxd::container::get_platform_status(consts::CONTAINER_STORE_NAME).context(
             "Failed to run LXD. It seems like LXD is not installed or set up correctly! \
 Please see <https://codchi.dev/docs/start/installation.html#linux> for setup instructions!",
@@ -28,6 +36,9 @@ Please see <https://codchi.dev/docs/start/installation.html#linux> for setup ins
 
         match status {
             PlatformStatus::NotInstalled => {
+                spinner.set_message(
+                    "Initializing store container. This can take a while the first time...",
+                );
                 let rootfs = env::var("CODCHI_LXD_CONTAINER_STORE")
                         .map(PathBuf::from)
                         .context("Failed reading $CODCHI_LXD_CONTAINER_STORE from environment. This indicates a broken build.")?;
@@ -97,7 +108,7 @@ impl MachineDriver for Machine {
         let rootfs = env::var("CODCHI_LXD_CONTAINER_MACHINE")
                 .map(PathBuf::from)
                 .context("Failed reading $CODCHI_LXD_CONTAINER_MACHINE from environment. This indicates a broken build.")?;
-        let mut mounts = vec![
+        let mounts = vec![
             LxdDevice::Disk {
                 source: consts::host::DIR_NIX.join("store"),
                 path: "/nix/store".to_owned(),
@@ -129,23 +140,49 @@ impl MachineDriver for Machine {
             },
             LxdDevice::Gpu,
         ];
-        if let Ok(xauth) = env::var("XAUTHORITY") {
-            // log::info!("Xauthority detected. Whitelisting LXD container {lxd_name} via xhost...");
-            // if let Err(err) = Command::new("xhost").arg("+local:").wait_ok() {
-            //     log::error!("Failed to run `xhost +local:`. X11 programs inside LXD might not work. Reason:\n{err}");
-            // }
-            mounts.push(LxdDevice::Disk {
-                source: xauth.into(),
-                path: format!("{}/.Xauthority", consts::user::DEFAULT_HOME.0),
-            });
-        }
         lxd::container::install(&lxd_name, rootfs, mounts.iter())?;
 
         Ok(())
     }
 
     fn start(&self, _: Private) -> Result<()> {
-        Ok(lxd::container::start(&machine_name(&self.config.name))?)
+        lxd::container::start(&machine_name(&self.config.name))?;
+        let src = env::var("XAUTHORITY").map(PathBuf::from).ok().unwrap_or(
+            PathBuf::from(env::var("HOME").context("Missing $HOME.")?).join(".Xauthority"),
+        );
+        if src.assert_exists().is_ok() {
+            log::debug!("Adding local .Xauthority to {}", self.config.name);
+            let _ = lxd::container::file_delete(
+                &machine_name(&self.config.name),
+                user::DEFAULT_HOME.join_str(".Xauthority"),
+            )
+            .trace_err("Failed to delete old .Xauthority in LXD container.");
+            lxd::container::file_push(
+                &machine_name(&self.config.name),
+                &src,
+                user::DEFAULT_HOME.join_str(".Xauthority"),
+                Some(LinuxUser::Default),
+            )?;
+        }
+        with_tmp_file(&format!("codchi-{}-env", self.config.name), |path| {
+            let mut file = File::options()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(path)?;
+            for (key, value) in self.config.secrets.iter() {
+                writeln!(file, r#"export CODCHI_{key}="{value}""#)?;
+            }
+            file.sync_all()?;
+            lxd::container::file_push(
+                &machine_name(&self.config.name),
+                path,
+                LinuxPath("/etc/codchi-env".to_string()),
+                Some(LinuxUser::Root),
+            )?;
+            Ok(())
+        })?;
+        Ok(())
     }
 
     fn force_stop(&self, _: Private) -> Result<()> {
@@ -169,7 +206,12 @@ pub struct LinuxCommandDriver {
 }
 
 impl LinuxCommandTarget for LinuxCommandDriver {
-    fn build(&self, user: &Option<LinuxUser>, cwd: &Option<LinuxPath>) -> std::process::Command {
+    fn build(
+        &self,
+        user: &Option<LinuxUser>,
+        cwd: &Option<LinuxPath>,
+        env: &HashMap<String, String>,
+    ) -> std::process::Command {
         let mut cmd = std::process::Command::new("lxc");
         cmd.arg("-q");
         cmd.args(["exec", &self.container_name]);
@@ -209,6 +251,10 @@ impl LinuxCommandTarget for LinuxCommandDriver {
                 "--env",
                 &format!("XAUTHORITY={}/.Xauthority", consts::user::DEFAULT_HOME.0),
             ]);
+        }
+        for (name, val) in env {
+            // should be already escaped / no escaping needed on linux
+            cmd.args(["--env", &format!("{name}={val}")]);
         }
         cmd.arg("--");
         cmd

@@ -10,7 +10,7 @@ use git_url_parse::{GitUrl, Scheme};
 use itertools::Itertools;
 use lazy_regex::regex_is_match;
 use petname::petname;
-use std::{collections::HashMap, fmt::Display, marker::PhantomData, str::FromStr};
+use std::{fmt::Display, marker::PhantomData, str::FromStr};
 
 pub fn init(machine_name: &str, url: Option<GitUrl>, opts: &ModuleOptions) -> Result<Machine> {
     match MachineConfig::find(machine_name)? {
@@ -25,11 +25,7 @@ pub fn init(machine_name: &str, url: Option<GitUrl>, opts: &ModuleOptions) -> Re
         bail!("<URL> is missing.");
     }
 
-    let empty = MachineConfig {
-        name: machine_name.to_owned(),
-        nixpkgs_from: None,
-        modules: HashMap::new(),
-    };
+    let empty = MachineConfig::new(machine_name);
     let cfg = match url {
         None => empty,
         Some(url) => {
@@ -44,6 +40,7 @@ pub fn init(machine_name: &str, url: Option<GitUrl>, opts: &ModuleOptions) -> Re
                     None
                 },
                 modules: [(module_name, module)].into(),
+                secrets: Default::default()
             }
         }
     };

@@ -5,6 +5,7 @@ use super::{
 };
 use crate::{config::MachineConfig, consts::*, util::with_spinner};
 use anyhow::{bail, Context, Result};
+use indicatif::ProgressBar;
 use std::{collections::HashMap, fs, path::PathBuf, thread, time::Duration};
 
 /// Internal name of driver module in codchi's NixOS modules
@@ -18,7 +19,7 @@ pub type HasStarted = bool;
 /// The interface to a platform specific store driver (LXD / WSL) which provides access to nix.
 pub trait Store: Sized {
     /// Import (if not existant) and start the store container (if not running)
-    fn start_or_init_container(_: private::Private) -> Result<Self>;
+    fn start_or_init_container(spinner: &mut ProgressBar, _: private::Private) -> Result<Self>;
 
     fn init(_: private::Private) -> Result<Self> {
         let flake_path = host::DIR_CONFIG
@@ -35,22 +36,19 @@ pub trait Store: Sized {
         );
         fs::write(flake_path, flake_content)?;
 
-        with_spinner(
-            "Starting store container. This may take a while the first time...",
-            |_| {
-                let store = Self::start_or_init_container(private::Private)?;
+        with_spinner("Starting store container...", |spinner| {
+            let store = Self::start_or_init_container(spinner, private::Private)?;
 
-                while store
-                    .cmd()
-                    .run("nix", &["store", "ping", "--store", "daemon"])
-                    .wait_ok()
-                    .is_err()
-                {
-                    thread::sleep(Duration::from_millis(250));
-                }
-                Ok(store)
-            },
-        )
+            while store
+                .cmd()
+                .run("nix", &["store", "ping", "--store", "daemon"])
+                .wait_ok()
+                .is_err()
+            {
+                thread::sleep(Duration::from_millis(250));
+            }
+            Ok(store)
+        })
     }
 
     /// Get driver for running commands inside store
@@ -116,54 +114,4 @@ pub trait Store: Sized {
 
         Ok(host_path)
     }
-
-    // Collect substituters from all machines and add to stores' nix.conf
-    // fn write_nix_conf(&self) -> Result<()> {
-    //     let mut all = NixSettings {
-    //         substituters: vec![
-    //             "https://cache.nixos.org/".to_owned(),
-    //             "https://nixos-devenv.cachix.org".to_owned(),
-    //         ]
-    //         .into_iter()
-    //         .collect(),
-
-    //         trusted_public_keys: vec![
-    //             "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=".to_owned(),
-    //             "nixos-devenv.cachix.org-1:TfcIbSCGLCufAt9UCxzBTi3ekrzgI3HAHX73VWpByoE=".to_owned(),
-    //         ]
-    //         .into_iter()
-    //         .collect(),
-    //     };
-    //     for machine in MachineConfig::list()? {
-    //         let settings: NixSettings = self.cmd().eval(
-    //             store::DIR_CONFIG.join_machine(&machine.name),
-    //             "nixosConfigurations.default.config.nix.settings",
-    //         )?;
-
-    //         all.substituters.extend(settings.substituters);
-    //         all.trusted_public_keys.extend(settings.trusted_public_keys);
-    //     }
-
-    //     log::trace!("All substituters: {all:?}");
-
-    //     self.cmd()
-    //         .script(format!(
-    //             r#"
-
-    // "#
-    //         ))
-    //         .with_cwd("/etc/nix")
-    //         .wait_ok()?;
-
-    //     Ok(())
-    // }
 }
-
-// #[derive(Deserialize, Debug, Clone, Default)]
-// #[serde(rename_all = "kebab-case")]
-// struct NixSettings {
-//     #[serde(default)]
-//     substituters: HashSet<String>,
-//     #[serde(default)]
-//     trusted_public_keys: HashSet<String>,
-// }

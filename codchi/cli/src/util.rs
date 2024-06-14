@@ -1,14 +1,10 @@
+use anyhow::bail;
 use indicatif::ProgressBar;
 use std::{
-    borrow::Cow,
-    fs, io,
-    marker::PhantomData,
-    path::Path,
-    thread,
-    time::{Duration, Instant},
+    borrow::Cow, env, fmt::Display, fs, io, marker::PhantomData, path::{Path, PathBuf}, thread, time::{Duration, Instant}
 };
 
-use crate::ROOT_PROGRESS_BAR;
+use crate::{consts::PathExt, ROOT_PROGRESS_BAR};
 
 pub trait UtilExt {
     fn finally<F>(self, f: F) -> Self
@@ -153,9 +149,11 @@ pub trait ResultExt<E> {
     fn recover_err<F>(self, f: F) -> Self
     where
         F: FnOnce(E) -> Self;
+
+    fn trace_err(self, msg: &str) -> Self;
 }
 
-impl<T, E> ResultExt<E> for Result<T, E> {
+impl<T, E: Display> ResultExt<E> for Result<T, E> {
     fn recover_err<F>(self, f: F) -> Self
     where
         F: FnOnce(E) -> Self,
@@ -164,6 +162,13 @@ impl<T, E> ResultExt<E> for Result<T, E> {
             Ok(x) => Ok(x),
             Err(err) => f(err),
         }
+    }
+
+    fn trace_err(self, msg: &str) -> Self {
+        self.map_err(|err| {
+            log::trace!("{msg}: {err}");
+            err
+        })
     }
 }
 
@@ -178,4 +183,19 @@ where
     log::debug!("Time elapsed in {title}: {duration:?}");
 
     result
+}
+
+pub fn with_tmp_file<F, T>(name: &str, f: F) -> anyhow::Result<T>
+where
+    F: Fn(&PathBuf) -> anyhow::Result<T>,
+{
+    let path = env::temp_dir().get_or_create()?.join(name);
+    if path.try_exists().is_ok_and(|exists| exists) {
+        bail!("Tmpfile {} already exists!", path.display());
+    }
+
+    f(&path).finally(|| {
+        let _ = fs::remove_file(&path)
+            .map_err(|err| log::warn!("Failed deleting tmpfile {}: {err}", path.display()));
+    })
 }
