@@ -1,124 +1,80 @@
+use crate::platform::CommandExt;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use std::process::Output;
-use std::{io, process::Command};
+use std::process::Command;
 
-pub fn lxc(args: &[&str]) -> io::Result<()> {
+pub fn lxc_command(args: &[&str]) -> Command {
     let mut cmd = Command::new("lxc");
     cmd.arg("-q");
-    for arg in args.iter() {
-        cmd.arg(arg);
-    }
-
-    log::trace!("Running LXC command: {:?}", &cmd);
-
-    let status = cmd.spawn()?.wait()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("LXD {:?} failed with {}", args, status),
-        ))
-    }
-}
-
-pub fn lxc_output(args: &[&str]) -> io::Result<Output> {
-    let mut cmd = Command::new("lxc");
-    cmd.arg("-q");
-    // see https://github.com/rust-lang/rust/issues/30098#issuecomment-160346319
-    // cmd.stdin(Stdio::inherit());
-    // cmd.stdout(Stdio::inherit());
-    // cmd.stderr(Stdio::inherit());
-    for arg in args.iter() {
-        cmd.arg(arg);
-    }
-
-    log::trace!("Running LXC command: {:?}", &cmd);
-
-    cmd.output()
-}
-pub fn lxc_output_ok(args: &[&str]) -> io::Result<Vec<u8>> {
-    let output = lxc_output(args)?;
-    if output.status.success() {
-        Ok(output.stdout)
-    } else {
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("LXD {:?} failed with {}", args, output.status),
-        ))
-    }
+    cmd.args(args);
+    cmd
 }
 
 pub mod image {
     use super::*;
 
-    pub fn import<P: AsRef<Path>>(path: P, alias: &str) -> io::Result<()> {
-        lxc(&[
+    pub fn import<P: AsRef<Path>>(path: P, alias: &str) -> Result<()> {
+        Ok(lxc_command(&[
             "image",
             "import",
             &format!("{}", path.as_ref().display()),
             "--alias",
             alias,
         ])
+        .wait_ok()?)
     }
 
-    pub fn delete(name: &str) -> io::Result<()> {
-        lxc(&["image", "delete", name])
+    pub fn delete(name: &str) -> Result<()> {
+        Ok(lxc_command(&["image", "delete", name]).wait_ok()?)
     }
 
-    pub fn init(image_name: &str, container_name: &str) -> io::Result<()> {
-        lxc(&["init", image_name, container_name])
+    pub fn init(image_name: &str, container_name: &str) -> Result<()> {
+        Ok(lxc_command(&["init", image_name, container_name]).wait_ok()?)
     }
 }
 
 pub mod container {
     use super::*;
-    use crate::{consts::{user, PathExt}, platform::PlatformStatus};
+    use crate::{
+        consts::{user, PathExt},
+        platform::{LinuxPath, LinuxUser, PlatformStatus},
+    };
     use anyhow::{anyhow, Context};
-    use itertools::Itertools;
     use nix::unistd::{getgid, getuid, Group};
     use std::path::PathBuf;
 
     #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
     /// LXD container information
     pub struct Info {
+        pub name: String,
         pub status: String,
     }
 
-    pub fn start(name: &str) -> io::Result<()> {
-        lxc(&["start", name])
+    pub fn start(name: &str) -> Result<()> {
+        lxc_command(&["start", name]).wait_ok()?;
+        Ok(())
     }
 
-    pub fn stop(name: &str, force: bool) -> io::Result<()> {
+    pub fn stop(name: &str, force: bool) -> Result<()> {
+        let mut cmd = lxc_command(&["stop", name]);
         if force {
-            lxc(&["stop", "--force", name])
-        } else {
-            lxc(&["stop", name])
+            cmd.arg("--force");
         }
+        cmd.wait_ok()?;
+        Ok(())
     }
 
-    pub fn list(filter: &str) -> io::Result<Vec<Info>> {
-        let json = lxc_output_ok(&["list", filter, "--format", "json"])?;
-        serde_json::from_slice::<Vec<Info>>(&json).map_err(|err| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("LXD info: failed to parse json: {}", err),
-            )
-        })
+    pub fn get_info(name: &str) -> Result<Option<Info>> {
+        let info = lxc_command(&["list", "--format", "json"])
+            .output_json::<Vec<Info>>()?
+            .iter()
+            .find(|info| info.name == name)
+            .cloned();
+        Ok(info)
     }
 
-    pub fn get_info(name: &str) -> io::Result<Option<Info>> {
-        list(name).map(|mut list| {
-            if list.len() == 1 {
-                Some(list.remove(0))
-            } else {
-                None
-            }
-        })
-    }
-
-    pub fn get_platform_status(name: &str) -> io::Result<PlatformStatus> {
+    pub fn get_platform_status(name: &str) -> Result<PlatformStatus> {
         Ok(match container::get_info(name)? {
             None => PlatformStatus::NotInstalled,
             Some(container) => {
@@ -131,15 +87,18 @@ pub mod container {
         })
     }
 
-    pub fn delete(name: &str, force: bool) -> io::Result<()> {
+    pub fn delete(name: &str, force: bool) -> Result<()> {
+        let mut cmd = lxc_command(&["delete", name]);
         if force {
-            lxc(&["delete", name, "--force"])
-        } else {
-            lxc(&["delete", name])
+            cmd.arg("--force");
         }
+        cmd.wait_ok()?;
+        Ok(())
     }
-    pub fn config_set(name: &str, cfg: &str) -> io::Result<()> {
-        lxc(&["config", "set", name, cfg])
+
+    pub fn config_set(name: &str, cfg: &str) -> Result<()> {
+        lxc_command(&["config", "set", name, cfg]).wait_ok()?;
+        Ok(())
     }
 
     #[derive(Debug, Clone)]
@@ -158,11 +117,11 @@ pub mod container {
         Gpu,
     }
 
-    pub fn config_mount(container_name: &str, device: &LxdDevice) -> anyhow::Result<()> {
+    pub fn config_mount(container_name: &str, device: &LxdDevice) -> Result<()> {
         match device {
             LxdDevice::Disk { source, path } => {
                 let source = source.get_or_create()?.display();
-                lxc(&[
+                lxc_command(&[
                     "config",
                     "device",
                     "add",
@@ -172,6 +131,7 @@ pub mod container {
                     &format!("source={}", source),
                     &format!("path={}", path),
                 ])
+                .wait_ok()
                 .with_context(|| {
                     format!(
                         "Failed to mount LXD device '{source}' at path '{path}' \
@@ -183,7 +143,7 @@ to container {container_name}.",
                 name,
                 listen,
                 connect,
-            } => lxc(&[
+            } => lxc_command(&[
                 "config",
                 "device",
                 "add",
@@ -196,6 +156,7 @@ to container {container_name}.",
                 &format!("security.uid={}", getuid()),
                 &format!("security.gid={}", getgid()),
             ])
+            .wait_ok()
             .with_context(|| {
                 format!(
                     "Failed to create LXD proxy '{name}' from '{listen}' \
@@ -206,7 +167,7 @@ to '{connect}' in container {container_name}.",
                 let video: Group = Group::from_name("video")?.ok_or(anyhow!(
                     "Group 'video' (which is needed for GPU access) not found."
                 ))?;
-                lxc(&[
+                lxc_command(&[
                     "config",
                     "device",
                     "add",
@@ -215,6 +176,7 @@ to '{connect}' in container {container_name}.",
                     "gpu",
                     &format!("gid={}", video.gid),
                 ])
+                .wait_ok()
                 .with_context(|| {
                     format!("Failed to create LXD GPU device in container {container_name}.",)
                 })
@@ -222,13 +184,13 @@ to '{connect}' in container {container_name}.",
         }
     }
 
-    #[allow(dead_code)]
-    pub fn get_logs(name: &str) -> io::Result<String> {
-        let out = lxc_output_ok(&["console", name, "--show-log"])?;
-        Ok(String::from_utf8_lossy(&out).lines().dropping(2).join("\n"))
-    }
+    // pub fn get_logs(name: &str) -> String {
+    //     lxc_command(&["console", name, "--show-log"])
+    //         .output_utf8_ok()
+    //         .unwrap_or_default()
+    // }
 
-    pub fn install<'a, P, I>(name: &str, rootfs: P, mounts: I) -> anyhow::Result<()>
+    pub fn install<'a, P, I>(name: &str, rootfs: P, mounts: I) -> Result<()>
     where
         P: AsRef<Path>,
         I: Iterator<Item = &'a LxdDevice>,
@@ -269,20 +231,58 @@ to '{connect}' in container {container_name}.",
                 container::config_mount(name, mount)?;
             }
 
-            container::start(name).with_context(|| {
-                format!(
-                    "Failed to start LXD container {name} from {}.",
-                    rootfs.as_ref().to_string_lossy()
-                )
-            })?;
+            // container::start(name).with_context(|| {
+            //     format!(
+            //         "Failed to start LXD container {name} from {}.",
+            //         rootfs.as_ref().to_string_lossy()
+            //     )
+            // })?;
 
             Ok(())
         })()
-        .map_err(|err| {
+        .inspect_err(|_err| {
             log::error!("Removing leftovers of LXD container {name}...");
             let _ = image::delete(name);
             let _ = container::delete(name, true);
-            err
         })
+    }
+
+    /// Pushes file for default user
+    pub fn file_push<P: AsRef<Path>>(
+        name: &str,
+        path: P,
+        target: LinuxPath,
+        user: Option<LinuxUser>,
+    ) -> Result<()> {
+        let src = path.as_ref().to_string_lossy();
+        let target_arg = format!("{name}/{}", target);
+        let mut args = vec!["file", "push", &src, &target_arg];
+        match user {
+            Some(LinuxUser::Default) => {
+                args.extend(["--uid", user::DEFAULT_UID, "--gid", user::DEFAULT_GID]);
+            }
+            Some(LinuxUser::Root) => {
+                args.extend(["--uid", user::ROOT_UID, "--gid", user::ROOT_GID]);
+            }
+            None => {}
+        }
+        lxc_command(&args).wait_ok().with_context(|| {
+            format!(
+                "Failed to copy file '{}' from host into LXD container {name} to {}",
+                path.as_ref().display(),
+                target.0
+            )
+        })
+    }
+    pub fn file_delete(name: &str, target: LinuxPath) -> Result<()> {
+        let target_arg = format!("{name}/{}", target);
+        lxc_command(&["file", "delete", &target_arg])
+            .wait_ok()
+            .with_context(|| {
+                format!(
+                    "Failed to delete file '{}' in LXD container {name}",
+                    target.0
+                )
+            })
     }
 }

@@ -1,0 +1,80 @@
+# Secrets
+
+Sometimes there is the need for user-specific variables and / or secrets, which should not be included inside the `.nix` files inside a git repository, but they're still needed for the development environment. An example is a GitHub / GitLab token which is used to automatically setup mail and username for Git's config.
+
+With Codchi these secrets can be *described* via NixOS options. Lateron, when a user installs a machine with this config, Codchi will prompt him to enter the specific secret value. The value is then made available via environment variables inside the machine.
+
+::: warning
+
+Codchi stores secret values in plain text on the host. Also they are available via plain environment variables inside a code machine. Therefore they should not be used for super sensitive secrets.
+
+:::
+
+Here's an example:
+
+```nix
+# configuration.nix
+{
+  codchi.secrets.env.TEST = {
+      description = ''
+        This is an example secret. Please enter a random value!
+      '';
+  };
+}
+```
+We define the secret `TEST` and provide a description. When we build this code machine, we'll be prompted for a value for `TEST`:
+```bash
+> codchi rebuild foo
+...
+? Please enter secret 'TEST' (Toggle input mask with <Ctrl+R>): My Secret Value
+[This is an example secret. Please enter a random value!]
+...
+
+> codchi exec foo
+[codchi@nixos:~]$ env | grep CODCHI
+CODCHI_TEST=My Secret Value
+...
+```
+
+We can also use this secret inside systemd services (which run automatically on machine startup). For this we have to source `/etc/codchi-env` on service startup:
+```nix
+# configuration.nix
+{ 
+  systemd.services.my-secret-service = {
+    description = "My Service which reads Codchi's secrets";
+    wantedBy = [ "multi-user.target" ];
+
+    script = ''
+      source /etc/codchi-env
+      echo "Got secret CODCHI_TEST=$CODCHI_TEST from codchi"
+    '';
+  };
+}
+```
+
+We can view the latest log lines of the service:
+```bash
+[codchi@nixos:~]$ sudo systemctl status my-secret-service.service
+○ my-secret-service.service - My Service which reads codchi's secrets
+     Loaded: loaded (/etc/systemd/system/my-secret-service.service; enabled; preset: enabled)
+    Drop-In: /nix/store/rrvw6pahhcvvhgp7vqb6v3pps1c7dl6v-system-units/service.d
+             └─zzz-lxc-service.conf
+     Active: inactive (dead) since Tue 2024-07-09 09:38:52 UTC; 3min 13s ago
+   Duration: 3ms
+    Process: 173 ExecStart=/nix/store/hv0hsyi0vb8va1jfnc03py7nylh2528c-unit-script-my-secret-service-start/bin/my-secret-service-start (code=exited, status=0/SUCCESS)
+   Main PID: 173 (code=exited, status=0/SUCCESS)
+        CPU: 3ms
+
+Jul 09 09:38:52 nixos systemd[1]: Started My Service which reads codchi's secrets.
+Jul 09 09:38:52 nixos my-secret-service-start[173]: Got secret CODCHI_TEST=My Secret Value from codchi <------------------------------------------
+Jul 09 09:38:52 nixos systemd[1]: my-secret-service.service: Deactivated successfully.
+```
+
+Refer to the [NixOS Options Reference](/docs/options.html#codchisecretsenv) for more details.
+
+## Modifying secrets
+
+For now there is no interface for modifying secrets after they've been set. But this can be done manually by editing the config file for the machine `<MACHINE_NAME>`:
+
+- **Windows:** `%APPDATA%\codchi\machine\<MACHINE_NAME>\config.json` (`%APPDATA%` is most likely `C:\Users\NAME\AppData\Roaming`)
+- **Linux:** `$XDG_CONFIG_HOME/codchi/machine/<MACHINE_NAME>/config.json` (`$XDG_CONFIG_HOME` is most likely `~/.config`)

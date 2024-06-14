@@ -1,103 +1,116 @@
 mod host;
-mod status;
-mod util;
 mod wsl;
 
 pub use host::*;
+use itertools::Itertools;
+use log::Level;
 
 use self::wsl::wsl_command;
 use super::{
-    private::Private, Driver, LinuxCommandTarget, LinuxPath, LinuxUser, Machine, MachineDriver,
-    NixDriver, PlatformStatus, Store,
+    Driver, LinuxCommandTarget, LinuxPath, LinuxUser, Machine, MachineDriver, NixDriver,
+    PlatformStatus, Store,
 };
 use crate::{
     cli::DEBUG,
     config::CodchiConfig,
     consts::{
-        self,
-        files::{self},
-        machine::{self, machine_name},
-        PathExt, ToPath,
+        self, files,
+        machine::{self, machine_name, CODCHI_ENV, CODCHI_ENV_TMP},
+        store, PathExt, ToPath,
     },
+    logging::{log_progress, set_progress_status},
     platform::CommandExt,
+    util::{ResultExt, UtilExt},
 };
 use anyhow::{Context, Result};
-use std::{env, fs, path::PathBuf, thread};
+use std::{
+    collections::HashMap,
+    env,
+    fs::{self, OpenOptions},
+    io::Write,
+    path::PathBuf,
+    sync::mpsc::channel,
+    thread,
+    time::Duration,
+};
 
 pub const NIX_STORE_PACKAGE: &str = "store-wsl";
 pub const NIXOS_DRIVER_NAME: &str = "wsl";
 
 pub struct StoreImpl {}
 
-// https://github.com/rust-lang/cargo/issues/1721
-
 impl Store for StoreImpl {
-    fn start_or_init_container(_: Private) -> Result<Self> {
+    fn start_or_init_container() -> Result<Self> {
         wsl::check_wsl()?;
 
-        let status = wsl::get_platform_status(consts::CONTAINER_STORE_NAME)?;
-        log::trace!("WSL store container status: {status:#?}");
+        fn start_or_init(after_install: bool) -> Result<StoreImpl> {
+            let status = wsl::get_platform_status(consts::CONTAINER_STORE_NAME)?;
+            log::trace!("WSL store container status: {status:#?}");
 
-        let store = StoreImpl {};
-        match status {
-            PlatformStatus::NotInstalled => wsl::import(
-                files::STORE_ROOTFS_NAME,
-                consts::CONTAINER_STORE_NAME,
-                consts::host::DIR_DATA
-                    .join_store()
-                    .get_or_create()?
-                    .to_path_buf(),
-                || {
-                    wsl::set_sparse(consts::CONTAINER_STORE_NAME)?;
-                    Self::start_or_init_container(Private)
-                },
-            )
-            .map_err(|err| {
-                log::error!("Removing leftovers of store files...");
-                let _ = fs::remove_dir_all(consts::host::DIR_CONFIG.join_store());
-                let _ = fs::remove_dir_all(consts::host::DIR_DATA.join_store());
-                err
-            }),
-            PlatformStatus::Running
-                if store
-                    .cmd()
-                    .run("nix", &["store", "ping", "--store", "daemon"])
-                    .wait_ok()
-                    .is_ok() =>
-            {
-                Ok(store)
-            }
-            _ => {
-                // Start init in background. this will keep the WSL distro running
-                //                 use consts::store::INIT_ENV;
-                //                 use consts::store::INIT_LOG;
-                //                 use consts::INIT_EXIT_ERR;
-                //                 use consts::INIT_EXIT_SUCCESS;
+            let store = StoreImpl {};
+            match status {
+                PlatformStatus::NotInstalled => wsl::import(
+                    files::STORE_ROOTFS_NAME,
+                    consts::CONTAINER_STORE_NAME,
+                    consts::host::DIR_DATA
+                        .join_store()
+                        .get_or_create()?
+                        .to_path_buf(),
+                    || {
+                        wsl::set_sparse(consts::CONTAINER_STORE_NAME)?;
+                        start_or_init(true)
+                    },
+                )
+                .inspect_err(|_| {
+                    log::error!("Removing leftovers of store files...");
+                    let _ = fs::remove_dir_all(consts::host::DIR_CONFIG.join_store());
+                    let _ = fs::remove_dir_all(consts::host::DIR_DATA.join_store());
+                }),
+                PlatformStatus::Running => {
+                    while store
+                        .cmd()
+                        .run("ps", &[])
+                        .output_utf8_ok()?
+                        .contains("/sbin/init")
+                    {
+                        set_progress_status(
+                            "The store is currently initializing. Please wait a moment...",
+                        );
+                        thread::sleep(Duration::from_millis(500));
+                    }
+                    if store.cmd().ping_store() {
+                        Ok(store)
+                    } else {
+                        let _ = wsl::wsl_command()
+                            .arg("--terminate")
+                            .arg(consts::CONTAINER_STORE_NAME)
+                            .wait_ok()
+                            .trace_err("Failed stopping incorrectly started store container");
+                        anyhow::bail!(
+                            "The store container was started incorrectly. Please try again!"
+                        );
+                    }
+                }
+                PlatformStatus::Stopped => {
+                    if after_install {
+                        set_progress_status(
+                            "Initializing store container. This takes a while the first time...",
+                        );
+                    }
 
-                //                 store
-                //                     .cmd()
-                //                     .script(format!(
-                //                         r#"
-                // cat <<EOF > "{INIT_ENV}"
-                // CODCHI_DEBUG="$CODCHI_DEBUG"
-                // CODCHI_IS_STORE="$CODCHI_IS_STORE"
-                // WSL_CODCHI_DIR_CONFIG="$WSL_CODCHI_DIR_CONFIG"
-                // WSL_CODCHI_DIR_DATA="$WSL_CODCHI_DIR_DATA"
-                // EOF
+                    store
+                        .cmd()
+                        .run("/sbin/init", &[])
+                        .output_ok_streaming(channel().1, |line| {
+                            log_progress("store_init", Level::Debug, &line)
+                        })?;
 
-                // touch "{INIT_LOG}"
-                // awk '/^{INIT_EXIT_ERR}$/{{ exit 1}};/^{INIT_EXIT_SUCCESS}$/{{exit 0}};1' < <(tail -f "{INIT_LOG}")
-                // "#,
-                //                     ))
-                //                     .output_ok_streaming(|out| log::info!("{out}\r"))?;
-                store
-                    .cmd()
-                    .run("/sbin/init", &[])
-                    .output_ok_streaming(|out| log::debug!("{out}\r"))?;
-
-                Ok(store)
+                    Ok(store)
+                }
             }
         }
+
+        start_or_init(false)
     }
 
     fn cmd(&self) -> impl NixDriver {
@@ -106,11 +119,7 @@ impl Store for StoreImpl {
         }
     }
 
-    fn _store_path_to_host(
-        &self,
-        path: &LinuxPath,
-        _: Private,
-    ) -> anyhow::Result<std::path::PathBuf> {
+    fn _store_path_to_host(&self, path: &LinuxPath) -> anyhow::Result<std::path::PathBuf> {
         self.cmd()
             .run("/bin/wslpath", &["-w", &path.0])
             .output_utf8_ok()
@@ -126,11 +135,11 @@ impl MachineDriver for Machine {
         }
     }
 
-    fn read_platform_status(name: &str, _: Private) -> Result<PlatformStatus> {
+    fn read_platform_status(name: &str) -> Result<PlatformStatus> {
         wsl::get_platform_status(&machine::machine_name(name))
     }
 
-    fn install(&self, _: Private) -> Result<()> {
+    fn install(&self) -> Result<()> {
         wsl::import(
             files::MACHINE_ROOTFS_NAME,
             &machine::machine_name(&self.config.name),
@@ -138,33 +147,64 @@ impl MachineDriver for Machine {
                 .join_machine(&self.config.name)
                 .get_or_create()?
                 .to_path_buf(),
-            || self.start(Private),
+            || self.start(),
         )
     }
 
-    fn start(&self, _: Private) -> Result<()> {
-        use consts::machine::INIT_ENV;
-        use consts::INIT_EXIT_ERR;
-        use consts::INIT_EXIT_SUCCESS;
-        Driver::store()
-            .cmd()
-            .script(format!(
-                r#"
-while [ -f "{INIT_ENV}" ]; do
-    echo -e '\e[1A\e[KWaiting for machine init env...'
+    fn start(&self) -> Result<()> {
+        {
+            let mut env = self.config.secrets.clone();
+
+            env.insert(
+                "DEBUG".to_string(),
+                if *DEBUG { "1" } else { "" }.to_string(),
+            );
+            env.insert("MACHINE_NAME".to_string(), self.config.name.clone());
+
+            let mut env_file = OpenOptions::new()
+                .truncate(true)
+                .write(true)
+                .create(true)
+                .open(machine::CODCHI_ENV_TMP.to_host_path(&machine_name(&self.config.name)))?;
+
+            for (key, value) in &env {
+                writeln!(env_file, r#"export CODCHI_{key}="{value}""#)?;
+            }
+            env_file.sync_all()?;
+
+            if self.platform_status == PlatformStatus::Running {
+                self.cmd()
+                    .script(format!(
+                        r#"
+while [ ! -f {} ]; do
     sleep .25
 done
-cat <<EOF > "{INIT_ENV}"
-CODCHI_DEBUG="{debug}"
-CODCHI_MACHINE_NAME="{name}"
+mv -f {} {}
+"#,
+                        CODCHI_ENV_TMP.0, CODCHI_ENV_TMP.0, CODCHI_ENV.0
+                    ))
+                    .with_user(LinuxUser::Root)
+                    .wait_ok()?;
+            }
+
+            Driver::store()
+                .cmd()
+                .script(format!(
+                    r#"
+cat << EOF > /mnt/wsl/codchi/.machine-init-env
+{}
 EOF
 "#,
-                debug = *DEBUG,
-                name = self.config.name,
-            ))
-            .output_ok_streaming(|out| log::debug!("{out}\r"))?;
+                    env.iter()
+                        .map(|(key, value)| format!(r#"export CODCHI_{key}="{value}""#))
+                        .join("\n")
+                ))
+                .wait_ok()?;
+        }
 
-        let log_file = machine::init_log(&self.config.name);
+        let log_file = LinuxPath("/mnt/wsl/codchi".to_string())
+            .join_str(&store::machine_log(&self.config.name).0);
+        let (cancel_tx, cancel_rx) = channel();
         // let machine_log_prefix = machine_name(&self.name);
         thread::spawn(move || {
             // Tail the init log of the machine until the keyword MACHINE_HAS_STARTED
@@ -172,19 +212,31 @@ EOF
                 .cmd()
                 .script(format!(
                     r#"
+mkdir -p "$(dirname {log_file})" || true
 touch "{log_file}"
-awk '/^{INIT_EXIT_ERR}$/{{ exit 1}};/^{INIT_EXIT_SUCCESS}$/{{exit 0}};1' < <(tail -f "{log_file}")
+tail -f "{log_file}"
 "#
                 ))
-                .output_ok_streaming(|out| log::debug!("{out}\r"))
+                .output_ok_streaming(cancel_rx, |line| {
+                    log_progress("machine_init", Level::Debug, &line)
+                })
                 .unwrap();
         });
-        // .join();
+
+        // Machine is started by issuing a command
+        self.cmd()
+            .script(r#"systemctl is-system-running | grep -E "running|degraded""#.to_string())
+            .retry_until_ok();
+
+        cancel_tx
+            .send(())
+            .trace_err("Failed cancelling output stream thread.")
+            .ignore();
 
         Ok(())
     }
 
-    fn force_stop(&self, _: Private) -> Result<()> {
+    fn force_stop(&self) -> Result<()> {
         wsl::wsl_command()
             .arg("--terminate")
             .arg(machine_name(&self.config.name))
@@ -192,7 +244,7 @@ awk '/^{INIT_EXIT_ERR}$/{{ exit 1}};/^{INIT_EXIT_SUCCESS}$/{{exit 0}};1' < <(tai
         Ok(())
     }
 
-    fn delete_container(&self, _: Private) -> Result<()> {
+    fn delete_container(&self) -> Result<()> {
         wsl_command()
             .arg("--unregister")
             .arg(machine_name(&self.config.name))
@@ -207,7 +259,12 @@ pub struct LinuxCommandDriver {
 }
 
 impl LinuxCommandTarget for LinuxCommandDriver {
-    fn build(&self, user: &Option<LinuxUser>, cwd: &Option<LinuxPath>) -> std::process::Command {
+    fn build(
+        &self,
+        user: &Option<LinuxUser>,
+        cwd: &Option<LinuxPath>,
+        _env: &HashMap<String, String>,
+    ) -> std::process::Command {
         let mut cmd = wsl_command();
         cmd.args(["-d", &self.instance_name]);
         cmd.args(["--cd", &cwd.clone().map(|p| p.0).unwrap_or("/".to_string())]);

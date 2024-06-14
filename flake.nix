@@ -2,15 +2,15 @@
   description = "CODe maCHInes - Declarative and Reprodicible Development Environements as Code";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       flake = false; # prevent fetching transitive inputs TODO
     };
-    nixvim = {
-      url = "github:nix-community/nixvim";
+    # nixvim = {
+    #   url = "github:nix-community/nixvim";
       # inputs.nixpkgs.follows = "nixpkgs";
-    };
+    # };
 
   };
 
@@ -24,6 +24,7 @@
           (self: _: {
             codchi = self.callPackage ./codchi { inherit (inputs) self; platform = "linux"; };
             codchi-windows = self.callPackage ./codchi { inherit (inputs) self; platform = "win"; };
+            codchi-utils = self.callPackage ./utils {};
 
             mkContainer = type: driver: (import ./nix/container
               {
@@ -83,7 +84,7 @@
           };
 
           packages.${system} = {
-            inherit (pkgs) store-lxd store-wsl machine-lxd machine-wsl;
+            inherit (pkgs) store-lxd store-wsl machine-lxd machine-wsl codchi-utils;
             default = pkgs.codchi;
             windows = pkgs.codchi-windows;
             # editor = pkgs.nixvim.makeNixvim (import ./editor.nix);

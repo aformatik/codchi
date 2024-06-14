@@ -63,7 +63,13 @@ pub trait Host: Sized {
                 ))
             };
             let name = get_entry("Name")?;
-            let exec = get_entry("Exec").or(get_entry("TryExec"))?.to_string();
+            let exec = get_entry("Exec")
+                .or(get_entry("TryExec"))?
+                .to_string()
+                .split_whitespace()
+                // remove XDG field codes
+                .filter(|arg| !(arg.len() == 2 && arg.starts_with('%')))
+                .join(" ");
             let is_terminal = get_entry("Terminal").is_ok_and(|term| term == "true");
 
             let app_name = file

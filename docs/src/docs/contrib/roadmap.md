@@ -5,41 +5,43 @@
     - [x] Option Reference
     - Examples (Top 10 Languages?, Starter Templates?)
     - Demo Video
-    - [ ] Configuring Codchi
+    - [X] Configuring Codchi
         - ~~[x] Config / State dirs~~
-    - [ ] NixOS options
-        - timezone
-        - hosts / resolv.conf
+    - NixOS options
+        - [x] timezone
+        - [ ] hosts / resolv.conf
 
     
 
 - MVP Features
-    - [/] Shortcuts => Windows test
+    - [X] Shortcuts => Windows test
     - [x] Local NixOS Config
-    - [ ] Secrets (File / Env?)
+    - [X] Secrets (File / Env?)
     - LXD:
-        - [/] 
+        - [X] 
             - [X] X11, 
             - Pulse, Wayland
         - [/] Switch to native nix
         - [x] Nix package
-    - [ ] Graphical Launcher
+    - WSL
+       - [X] Host integration via `explorer.exe 'FILE'` 
+    - [X] Graphical Launcher
         - codchiw.exe?
-        - Logging / Error message via popup?
+        - [ ] Logging / Error message via popup?
     - gc
         - [X] WSL: sparse vhdx => Docs
-        - [ ] keep user-roots by direnv / nix build
+        - [/] keep user-roots by direnv / nix build
     - [/] simple tray icon
-    - [/] WSL
+    - [X] WSL
         - [x] switch vcxsrv / wslg
-        - vcxsrv tray icon switch
+        - [X] vcxsrv tray icon switch
 
 - Release v0.2.0
     - Packages
         - [X] MSIX: 🔒 Azure Code Signing Release
-        - [/] Linux: Nix
-        - [/] NixOS
-    - Internal Testing & Release
+        - [X] Linux: Nix
+        - [X] NixOS
+    - [/] Internal Testing & Release
 
 - Stability
     - WSL
@@ -54,7 +56,7 @@
     - Announcement Post (Discourse, HN?, Product Hunt?)
     - [/] GPU
     - Better Logging
-        - nix log integration (=> Progress Bar)
+        - [X] nix log integration (=> Progress Bar)
     - WSL:
         Terminal integration (#14)
     - Devenv / nix develop / home-manager machines?

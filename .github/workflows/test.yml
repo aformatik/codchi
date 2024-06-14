@@ -6,7 +6,7 @@ on:
   # pull_request:
   #   branches:
   #   - 'rust'
-  # workflow_dispatch: {}
+  workflow_dispatch: {}
       
 #     paths:
 #       - 'cli/**'
@@ -31,7 +31,7 @@ jobs:
         echo "latest_version=$(git describe --tags --match "v*.*.*" $(git rev-list --tags --max-count=1))" >> $GITHUB_OUTPUT
   windows:
     needs: setup
-    if: ${{ github.event.workflow_run.name == 'build-windows' || github.event_name == 'push' }}
+    if: ${{ github.event.workflow_run.name == 'build-windows' || github.event_name == 'workflow_dispatch' }}
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
