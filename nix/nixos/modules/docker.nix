@@ -9,9 +9,7 @@ in
     type = types.bool;
     default = false;
     description = lib.mdDoc ''
-      Whether to enable the docker daemon.
-      This also adds the default user to the docker group and installs
-      docker-compose.
+      Whether to enable the docker daemon. This also adds the codchi user to the docker group and installs docker-compose.
     '';
   };
 

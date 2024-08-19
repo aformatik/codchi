@@ -1,6 +1,9 @@
 { mkShell
 , writeShellScriptBin
 , lib
+, buildFHSUserEnv
+, system
+, fetchFromGitHub
 
 , codchi
 
@@ -14,7 +17,7 @@
   # , jetbrains
 
 , cargo-watch
-# , cargo-deps
+  # , cargo-deps
   # , cargo-udeps
 , cargo-bloat
 , cargo-flamegraph
@@ -74,6 +77,22 @@ mkShell (lib.recursiveUpdate
       ${codchi.passthru.xwin}/bin/xwin --accept-license --cache-dir "$CACHE" download
       cat "$CACHE"/dl/manifest*.json
     '')
+
+    (buildFHSUserEnv {
+      name = "zed";
+      targetPkgs = _: [
+        # import directly to prevent polluting flake inputs
+        (import
+          (fetchFromGitHub {
+            owner = "nixos";
+            repo = "nixpkgs";
+            rev = "nixos-unstable";
+            sha256 = "sha256-Z/ELQhrSd7bMzTO8r7NZgi9g5emh+aRKoCdaAv5fiO0=";
+          })
+          { inherit system; }).zed-editor
+      ];
+      runScript = "zed";
+    })
 
   ] ++ (codchi.nativeBuildInputs or [ ]);
 

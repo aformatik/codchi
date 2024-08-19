@@ -47,6 +47,7 @@ jobs:
         Add-AppxPackage codchi.msix -AllowUnsigned 2>&1
         wsl --update --web-download 2>&1
         wsl --set-default-version 2 2>&1
+    - run: |
         Invoke-Pester ./tests/windows.ps1 2>&1
     # - if: ${{ failure() }}
     #   uses: mxschmitt/action-tmate@v3
@@ -67,7 +68,7 @@ jobs:
     - name: tests
       run: |
         cd codchi
-        nix develop . -c cargo run -- -vvv
+        nix develop . -c cargo run -- -vv
     # - if: ${{ failure() }}
     #   uses: mxschmitt/action-tmate@v3
     #   timeout-minutes: 15

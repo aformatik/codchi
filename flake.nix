@@ -9,7 +9,7 @@
     };
     # nixvim = {
     #   url = "github:nix-community/nixvim";
-      # inputs.nixpkgs.follows = "nixpkgs";
+    # inputs.nixpkgs.follows = "nixpkgs";
     # };
 
   };
@@ -24,7 +24,7 @@
           (self: _: {
             codchi = self.callPackage ./codchi { inherit (inputs) self; platform = "linux"; };
             codchi-windows = self.callPackage ./codchi { inherit (inputs) self; platform = "win"; };
-            codchi-utils = self.callPackage ./utils {};
+            codchi-utils = self.callPackage ./utils { };
 
             mkContainer = type: driver: (import ./nix/container
               {
@@ -70,12 +70,12 @@
           inherit lib;
 
           nixosModules.default = import ./nix/nixos;
-          nixosModules.codchi = { pkgs, ... }: {
+          nixosModules.codchi = {
             nixpkgs.config.allowUnfree = true;
-            environment.systemPackages = [ pkgs.vscodium ];
+            environment.systemPackages = self.devShells.${system}.default.nativeBuildInputs;
             # programs.neovim = {
             #   enable = true;
-              # package = pkgs.nixvim.makeNixvim (import ./editor.nix);
+            # package = pkgs.nixvim.makeNixvim (import ./editor.nix);
             # };
             programs.direnv = {
               enable = true;
