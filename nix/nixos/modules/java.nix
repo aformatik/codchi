@@ -20,14 +20,21 @@ in
 
   config = mkIf cfg.enable {
     systemd.tmpfiles.settings."codchi-jdks" =
-      lib.pipe cfg.packages [
-        (lib.mapAttrs' (name: path:
+      {
+        "${config.users.users.codchi.home}/.jdks".D = {
+          group = "users";
+          mode = "0555"; # ro for everyone
+          user = "codchi";
+        };
+      }
+      //
+      lib.mapAttrs'
+        (name: path:
           lib.nameValuePair
             "${config.users.users.codchi.home}/.jdks/${name}"
             { L.argument = "${path}/lib/openjdk"; }
-        ))
-        lib.zipAttrs
-      ];
+        )
+        cfg.packages;
 
   };
 

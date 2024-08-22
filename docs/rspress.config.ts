@@ -17,7 +17,7 @@ export default defineConfig({
     plugins: [
         global(),
         pluginShiki({
-            langs: [ "nix" ]
+            langs: ["nix"]
         })
     ],
 
@@ -32,6 +32,54 @@ export default defineConfig({
         socialLinks: [
             { icon: 'github', mode: 'link', content: 'https://github.com/aformatik/codchi' },
         ],
+        nav: [
+            {
+                text: 'Download',
+                items: [
+                    {
+                        text: 'Windows (msix)',
+                        link: 'https://github.com/aformatik/codchi/releases/latest/download/codchi.msix',
+                    },
+                ],
+                position: 'right',
+            },
+        ],
+        sidebar: {
+            "/docs/": [
+                {
+                    text: "Getting Started",
+                    items: [
+                        "/docs/start/intro",
+                        "/docs/start/installation",
+                        "/docs/start/first-machine",
+                        "/docs/start/usage",
+                        "/docs/start/config",
+                        "/docs/start/troubleshooting"
+                    ]
+                },
+                // {
+                //     text: "Module Configuration",
+                //     items: ["architecture"]
+                // },
+                {
+                    text: "Module Configuration",
+                    items: [
+                        "/docs/config/overview",
+                        "/docs/config/start",
+                        "/docs/config/secrets"
+                    ],
+                },
+                {
+                    link: "/docs/options",
+                    text: "NixOS Options Reference"
+                }
+            ]
+        },
+        footer: {
+            // copyright: "Contributors",
+            message:
+                '&copy; Codchi contributors <br> <a href="https://aformatik.de/rechtliches/">Impressum</a>',
+        },
     },
 
 });

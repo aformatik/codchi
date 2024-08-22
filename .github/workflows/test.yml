@@ -49,9 +49,9 @@ jobs:
         wsl --set-default-version 2 2>&1
     - run: |
         Invoke-Pester ./tests/windows.ps1 2>&1
-    # - if: ${{ failure() }}
-    #   uses: mxschmitt/action-tmate@v3
-    #   timeout-minutes: 10
+    - if: ${{ failure() }}
+      uses: mxschmitt/action-tmate@v3
+      timeout-minutes: 10
   linux:
     needs: setup
     if: ${{ github.event.workflow_run.name == 'build-linux' || github.event_name == 'push' }}
