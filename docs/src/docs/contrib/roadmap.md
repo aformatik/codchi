@@ -17,23 +17,11 @@
             - [X] X11, 
             - [ ] Pulse, Wayland
         - [x] Nix package
-    - WSL
-       - [X] Host integration via `explorer.exe 'FILE'` 
-    - [X] Graphical Launcher
-        - codchiw.exe?
-        - [x] Logging / Error message via popup?
     - gc
         - [/] keep user-roots by direnv / nix build
-    - [/] simple tray icon
-        - Per machine status
-        - doctor status
-        - config.toml
     - [ ] Codchi doctor (periodical check)
 
 - Release v0.2.0
-    - Packages
-        - [X] Linux: Nix
-        - [X] NixOS
     - [/] Internal Testing & Release
 
 - Stability
@@ -56,3 +44,8 @@
     - Docs
         - [/] Internal Docs / Contrib
         - Uninstalling Codchi, Migrating away
+
+- Bugs
+    - update required with local repos
+    - testing: dont prompt
+    - LXD: error on first start

@@ -15,7 +15,7 @@ in
 
   config = mkIf cfg.enable {
     virtualisation.docker.enable = true;
-    users.users.${config.codchi.defaultUser}.extraGroups = [ "docker" ];
+    users.users.codchi.extraGroups = [ "docker" ];
     environment.systemPackages = [ pkgs.docker-compose ];
   };
 

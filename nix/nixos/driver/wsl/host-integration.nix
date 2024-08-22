@@ -1,9 +1,13 @@
 { config, pkgs, lib, ... }:
 let
-  inherit (lib) mkIf;
+  inherit (lib) mkIf mkEnableOption;
   cfg = config.codchi.driver.wsl;
 in
 {
+  options = {
+    codchi.driver.wsl.useWindowsGPU = mkEnableOption "OpenGL / GPU driver from the Windows host"
+      // { default = true; };
+  };
   config = mkIf cfg.enable {
     nixpkgs.overlays = [
       (_: _: {
@@ -141,6 +145,36 @@ in
       "inode/directory" = "wsl-explorer.desktop";
       "x-scheme-handler/http" = "wsl-browser.desktop";
       "x-scheme-handler/https" = "wsl-browser.desktop";
+    };
+
+    # src: https://github.com/nix-community/NixOS-WSL/blob/34b95b3962f5b3436d4bae5091d1b2ff7c1eb180/modules/wsl-distro.nix#L77
+    hardware.opengl = mkIf cfg.useWindowsGPU {
+      enable = true; # Enable GPU acceleration
+
+      extraPackages = [
+        (pkgs.runCommand "wsl-lib" { } ''
+          mkdir -p "$out/lib"
+          # # we cannot just symlink the lib directory because it breaks merging with other drivers that provide the same directory
+          ln -s /usr/lib/wsl/lib/libcudadebugger.so.1 "$out/lib"
+          ln -s /usr/lib/wsl/lib/libcuda.so "$out/lib"
+          ln -s /usr/lib/wsl/lib/libcuda.so.1 "$out/lib"
+          ln -s /usr/lib/wsl/lib/libcuda.so.1.1 "$out/lib"
+          ln -s /usr/lib/wsl/lib/libd3d12core.so "$out/lib"
+          ln -s /usr/lib/wsl/lib/libd3d12.so "$out/lib"
+          ln -s /usr/lib/wsl/lib/libdxcore.so "$out/lib"
+          ln -s /usr/lib/wsl/lib/libnvcuvid.so "$out/lib"
+          ln -s /usr/lib/wsl/lib/libnvcuvid.so.1 "$out/lib"
+          ln -s /usr/lib/wsl/lib/libnvdxdlkernels.so "$out/lib"
+          ln -s /usr/lib/wsl/lib/libnvidia-encode.so "$out/lib"
+          ln -s /usr/lib/wsl/lib/libnvidia-encode.so.1 "$out/lib"
+          ln -s /usr/lib/wsl/lib/libnvidia-ml.so.1 "$out/lib"
+          ln -s /usr/lib/wsl/lib/libnvidia-opticalflow.so "$out/lib"
+          ln -s /usr/lib/wsl/lib/libnvidia-opticalflow.so.1 "$out/lib"
+          ln -s /usr/lib/wsl/lib/libnvoptix.so.1 "$out/lib"
+          ln -s /usr/lib/wsl/lib/libnvwgf2umx.so "$out/lib"
+          ln -s /usr/lib/wsl/lib/nvidia-smi "$out/lib"
+        '')
+      ];
     };
   };
 

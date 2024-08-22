@@ -231,18 +231,20 @@ in
 native.passthru.rustPlatform.buildRustPackage (lib.recursiveUpdate
 {
   pname = "codchi";
-  inherit (Cargo.workspace.package) version;
+  inherit (Cargo.package) version;
 
   # src = lib.cleanSource ./.;
   src = lib.sourceByRegex ./. [
-    "^cli.*$"
-    "^ui.*$"
+    "^src.*$"
+    "^assets.*$"
+    "^build.rs$"
     "^Cargo\..*"
     "^\.msvc_manifest.json$"
   ];
   cargoLock.lockFile = ./Cargo.lock;
   cargoLock.outputHashes = {
     # "tarpc-0.34.0" = "";
+     "tray-icon-0.16.0" = "sha256-1l2paLXRlFe/WGWvjz+Y42NHzSUiam3SMOSK5EPnII8=";
   };
 
   passthru = { inherit nix-git; };

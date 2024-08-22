@@ -7,14 +7,14 @@
     package = pkgs.jdk17;
 
     # JDKs which are linked to ~/.jdks where IntelliJ can find them.
-    # packages = {
-    #   jdk17 = pkgs.jdk17;
+    packages = {
+      openjdk17 = pkgs.jdk17;
     #   jdk19 = pkgs.jdk19;
-    # };
+    };
   };
 
   environment.systemPackages = [
     pkgs.maven
-    pkgs.jetbrains.idea-community
+    # pkgs.jetbrains.idea-community
   ];
 }

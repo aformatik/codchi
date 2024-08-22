@@ -58,7 +58,7 @@
           pname = "codchi-docs";
           version = "0.0.0";
           src = ./.;
-          npmDepsHash = "sha256-NhDHJg2bmfutoD4iLUfyhsC9Mbhmoxv/iKl2AW49Hd0=";
+          npmDepsHash = "sha256-fj1CeWOap8bKt+S5YrNbi8c04Pa14LUAtvRtn6RZjUg=";
           preBuild = ''
             cp -f ${optionsDoc.optionsCommonMark} ./src/docs/options.md
           '';
