@@ -117,6 +117,11 @@ impl MachineConfig {
         machines.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(machines)
     }
+
+    pub fn delete(name: &str) {
+        let path = host::DIR_CONFIG.join_machine(name).join("config.json");
+        path.remove()
+    }
 }
 
 pub type CodchiModule = FlakeUrl<Required>;

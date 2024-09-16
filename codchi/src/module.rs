@@ -1,11 +1,11 @@
 use crate::cli::{InputOptions, ModuleAttrPath, ModuleName, NixpkgsLocation};
 use crate::config::git_url::{GitUrl, Scheme};
+use crate::config::*;
+use crate::consts;
 use crate::logging::set_progress_status;
 use crate::platform::{nix::NixDriver, *};
 use crate::progress_scope;
 use crate::util::{Empty, Required, StringExt};
-use crate::consts;
-use crate::config::*;
 use anyhow::{anyhow, bail, Context, Result};
 use inquire::{list_option::ListOption, validator::Validation};
 use lazy_regex::regex_is_match;
@@ -29,31 +29,36 @@ pub fn init(
         }
         ConfigResult::None => {}
     }
-    let (lock, _) = MachineConfig::open(machine_name, true)?;
-    if *opts != InputOptions::default() && url.is_none() {
-        bail!("<URL> is missing.");
-    }
-
-    let empty = MachineConfig::new(machine_name);
-    let cfg = match url {
-        None => empty,
-        Some(url) => {
-            let (modules, use_nixpkgs) =
-                fetch_modules(&empty, &url, opts, module_paths, true, false)?;
-
-            MachineConfig {
-                name: machine_name.to_owned(),
-                nixpkgs_from: match use_nixpkgs {
-                    UseNixpkgs::Remote(module) => Some(module),
-                    _else => None,
-                },
-                modules,
-                secrets: Default::default(),
-            }
+    let cfg = (|| {
+        let (lock, _) = MachineConfig::open(machine_name, true)?;
+        if *opts != InputOptions::default() && url.is_none() {
+            bail!("<URL> is missing.");
         }
-    };
 
-    cfg.write(lock)?;
+        let empty = MachineConfig::new(machine_name);
+        let cfg = match url {
+            None => empty,
+            Some(url) => {
+                let (modules, use_nixpkgs) =
+                    fetch_modules(&empty, &url, opts, module_paths, true, false)?;
+
+                MachineConfig {
+                    name: machine_name.to_owned(),
+                    nixpkgs_from: match use_nixpkgs {
+                        UseNixpkgs::Remote(module) => Some(module),
+                        _else => None,
+                    },
+                    modules,
+                    secrets: Default::default(),
+                }
+            }
+        };
+        cfg.write(lock)?;
+        Ok(cfg)
+    })()
+    .inspect_err(|_| {
+        MachineConfig::delete(machine_name);
+    })?;
 
     let machine = Machine {
         config: cfg,
