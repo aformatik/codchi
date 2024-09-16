@@ -72,7 +72,7 @@ impl CodchiConfig {
             log::trace!("Read codchi config: {cfg:?}");
             Ok(cfg)
         });
-        result.expect("Failed initializing Driver.")
+        result.expect("Failed initializing Driver")
     }
 }
 

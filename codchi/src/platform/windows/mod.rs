@@ -147,7 +147,11 @@ impl MachineDriver for Machine {
                 .join_machine(&self.config.name)
                 .get_or_create()?
                 .to_path_buf(),
-            || self.start(),
+            || {
+                // give windows time to setup WSL filesystem as a network drive
+                thread::sleep(Duration::from_millis(200));
+                self.start()
+            },
         )
     }
 
@@ -161,11 +165,30 @@ impl MachineDriver for Machine {
             );
             env.insert("MACHINE_NAME".to_string(), self.config.name.clone());
 
+            // machine must run to write env file into it...
+            let env_path = machine::CODCHI_ENV_TMP.to_host_path(&machine_name(&self.config.name));
+            for _try in 0..5 {
+                if env_path
+                    .parent()
+                    .ok_or(anyhow::anyhow!("Missing parent"))
+                    .and_then(|par| {
+                        par.get_or_create()?;
+                        Ok(())
+                    })
+                    .trace_err("Failed accessing WSL file system via network")
+                    .is_ok()
+                {
+                    break;
+                }
+                log::warn!("Failed to access WSL file system via network path '{env_path:?}'");
+                thread::sleep(Duration::from_millis(200));
+            }
+
             let mut env_file = OpenOptions::new()
                 .truncate(true)
                 .write(true)
                 .create(true)
-                .open(machine::CODCHI_ENV_TMP.to_host_path(&machine_name(&self.config.name)))?;
+                .open(env_path)?;
 
             for (key, value) in &env {
                 writeln!(env_file, r#"export CODCHI_{key}="{value}""#)?;

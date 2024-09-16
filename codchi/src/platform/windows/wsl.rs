@@ -126,14 +126,33 @@ pub fn import<T, F: FnMut() -> Result<T>>(
             .ok_or(anyhow!("FOLDERID_ProgramData missing"))?
             .join(consts::APP_NAME)
             .join(rootfs_name);
-        assert!(
-            fs::metadata(&msix_path).is_ok(),
-            "WSL rootfs for {name} missing in MSIX. Search path was: {msix_path:?}"
-        );
+        if fs::metadata(&msix_path).is_err() {
+            bail!(
+                "WSL rootfs for {name} missing in MSIX. \
+                  Search path was: {msix_path:?}. \
+                  Directory contents: {:?}",
+                msix_path
+                    .parent()
+                    .ok_or(anyhow!("Missing parent"))
+                    .and_then(|p| p.list_dir())
+            );
+        }
 
         let tmp_path = host::DIR_RUNTIME.get_or_create()?.join(rootfs_name);
         make_writeable_if_exists(&tmp_path)?;
         fs::copy(&msix_path, &tmp_path)?;
+
+        if fs::metadata(&tmp_path).is_err() {
+            bail!(
+                "WSL rootfs for {name} missing in tmp path. \
+                  Search path was: {tmp_path:?}. \
+                  Directory contents: {:?}",
+                tmp_path
+                    .parent()
+                    .ok_or(anyhow!("Missing parent"))
+                    .and_then(|p| p.list_dir())
+            );
+        }
 
         wsl_command()
             .arg("--import")
