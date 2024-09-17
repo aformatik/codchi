@@ -34,6 +34,11 @@ export default defineConfig({
         ],
         nav: [
             {
+                text: 'Docs',
+                link: '/docs/start/intro',
+                position: 'right',
+            },
+            {
                 text: 'Download',
                 items: [
                     {

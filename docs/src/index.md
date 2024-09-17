@@ -4,7 +4,8 @@ pageType: home
 hero:
   name: Codchi
   # text: Code Machines
-  tagline: Reproducible and Easy-to-Use Development Environment Manager
+  tagline: |
+    <span class="hero-tagline" style="line-height: 1.5">Codchi is a tool that manages your project's development environment in a reproducible and easy-to-use way. Setting up a development environment should be as easy as a `git clone`!</span>
   actions:
     - theme: brand
       text: How it Works
