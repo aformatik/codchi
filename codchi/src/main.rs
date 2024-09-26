@@ -43,7 +43,7 @@ fn main() -> anyhow::Result<()> {
         if cli.terminal == Some(false) {
             dbg_duration("hide console", || {
                 let window = unsafe { GetConsoleWindow() };
-                if window.0.is_null() {
+                if !window.0.is_null() {
                     if let Err(err) =
                         unsafe { ShowWindow(window, WindowsAndMessaging::SW_HIDE).ok() }
                     {

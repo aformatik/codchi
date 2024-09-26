@@ -81,7 +81,7 @@ in
         # TODO ?? Reset the logging file descriptors.
 
         echo "starting systemd..."
-        exec /run/current-system/systemd/lib/systemd/systemd "$@"
+        exec /run/current-system/systemd/lib/systemd/systemd "--log-target=kmsg" "$@"
       '';
   };
 

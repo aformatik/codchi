@@ -261,6 +261,7 @@ tail -f "{log_file}"
         // Machine is started by issuing a command
         self.cmd()
             .script(r#"systemctl is-system-running | grep -E "running|degraded""#.to_string())
+            .with_user(LinuxUser::Default)
             .retry_until_ok();
 
         cancel_tx

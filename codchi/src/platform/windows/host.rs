@@ -154,7 +154,7 @@ impl Host for HostImpl {
         if let Some((cmd, args)) = cmd.split_first() {
             Command::new(cmd)
                 .args(args)
-                .creation_flags(CREATE_NEW_PROCESS_GROUP.0 | CREATE_NEW_CONSOLE.0)
+                .creation_flags(CREATE_NEW_CONSOLE.0)
                 .spawn()?;
         } else {
             anyhow::bail!("Failed to open terminal with an empty command");
