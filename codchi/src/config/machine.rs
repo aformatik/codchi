@@ -44,26 +44,30 @@ impl MachineConfig {
 
     pub fn find(name: &str) -> Result<ConfigResult> {
         let path = host::DIR_CONFIG.join_machine(name).join("config.json");
-        if fs::metadata(&path).is_err() {
-            Ok(ConfigResult::None)
-        } else if path
-            .canonicalize()?
-            .display()
-            .to_string()
-            .ends_with(&format!("{name}{}config.json", path::MAIN_SEPARATOR))
-        {
-            Ok(ConfigResult::Exists)
-        } else {
-            Ok(ConfigResult::SimilarExists(
-                path.iter()
-                    .nth_back(1)
-                    .ok_or(anyhow!(
-                        "Failed to extract machine name from path '{}'",
-                        path.display()
-                    ))?
-                    .to_string_lossy()
-                    .to_string(),
-            ))
+        match fs::metadata(&path) {
+            Err(_) => Ok(ConfigResult::None),
+            Ok(meta) if meta.len() == 0 => Ok(ConfigResult::None),
+            Ok(_) => {
+                if path
+                    .canonicalize()?
+                    .display()
+                    .to_string()
+                    .ends_with(&format!("{name}{}config.json", path::MAIN_SEPARATOR))
+                {
+                    Ok(ConfigResult::Exists)
+                } else {
+                    Ok(ConfigResult::SimilarExists(
+                        path.iter()
+                            .nth_back(1)
+                            .ok_or(anyhow!(
+                                "Failed to extract machine name from path '{}'",
+                                path.display()
+                            ))?
+                            .to_string_lossy()
+                            .to_string(),
+                    ))
+                }
+            }
         }
     }
 

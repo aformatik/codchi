@@ -2,7 +2,7 @@
   inputs.super.url = "path:..";
   inputs.nixpkgs.follows = "super/nixpkgs";
 
-  outputs = { nixpkgs, ... }:
+  outputs = { nixpkgs, super, ... }:
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
@@ -61,6 +61,10 @@
           npmDepsHash = "sha256-fj1CeWOap8bKt+S5YrNbi8c04Pa14LUAtvRtn6RZjUg=";
           preBuild = ''
             cp -f ${optionsDoc.optionsCommonMark} ./src/docs/options.md
+
+            # remove symlink (used during development)
+            rm  ./src/docs/usage
+            cp -r ${super.packages.${system}.default.docs}/usage/codchi ./src/docs/usage
           '';
           installPhase = ''
             mv doc_build $out

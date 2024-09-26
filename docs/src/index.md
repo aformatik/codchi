@@ -11,7 +11,7 @@ hero:
       text: How it Works
       link: /docs/start/intro.html
     - theme: alt
-      text: Get Started
+      text: Quickstart
       link: /docs/start/installation.html
 #    - theme: alt
 #      text: Github

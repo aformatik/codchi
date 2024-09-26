@@ -1,0 +1,44 @@
+# `flake.nix`, devenv.sh, flox
+
+## `flake.nix`
+
+Because a code machine is just a NixOS machine with flakes enabled, even a empty code machine supports flakes per default (try `codchi init <NAME>` without args!). But you can use the configuration to provide tools which the flake doesn't provide:
+
+```nix
+{ pkgs, ... }: {
+
+  # Direnv support
+  direnv = {
+    enable = true;
+    enableBashIntegration = true;
+    # use_nix and use_flake support
+    nix-direnv.enable = true;
+  };
+
+  # See <https://codchi.dev/docs/config/editor.html> on how to add an editor
+}
+```
+
+## devenv.sh, flox
+
+As described in [the intro](../start/intro.md#when-should-i-not-use-codchi), Codchi doesn't try to do the job of tools like [devenv.sh](https://devenv.sh/) or [flox](https://flox.dev/). Instead, both can be used together, each for their respective purpose: Codchi provides a consistent environment across Windows and Linux and devenv.sh or flox provide the development environment itself.
+
+```nix
+{ pkgs, ... }: {
+
+  # For direnv support
+  # direnv = {
+  #   enable = true;
+  #   enableBashIntegration = true;
+  #   # use_nix and use_flake support
+  #   nix-direnv.enable = true;
+  # };
+
+  environment.systemPackages = [
+    pkgs.devenv
+    # Or see <https://flox.dev/docs/install-flox/#install-flox-from-scratch> on how to install flox
+  ];
+
+  # See <https://codchi.dev/docs/config/examples/editor.html> on how to add an editor
+}
+```

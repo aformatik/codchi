@@ -264,6 +264,11 @@ tail -f "{log_file}"
             .with_user(LinuxUser::Default)
             .retry_until_ok();
 
+        // self.cmd()
+        //     .run("ls", &[])
+        //     .with_user(LinuxUser::Default)
+        //     .retry_until_ok();
+
         cancel_tx
             .send(())
             .trace_err("Failed cancelling output stream thread.")

@@ -155,7 +155,11 @@ impl Host for HostImpl {
 
         for (term, args) in terms {
             if let Ok(path) = which::which(term) {
-                dbg!(Command::new(path).args(args).arg("-e").args(cmd)).wait_ok()?;
+                Command::new(path)
+                    .args(args)
+                    .arg("-e")
+                    .args(cmd)
+                    .wait_ok()?;
                 return Ok(());
             }
         }

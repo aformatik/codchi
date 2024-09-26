@@ -1,19 +1,16 @@
 #![feature(let_chains)]
 #![feature(once_cell_try)]
 #![deny(unused_crate_dependencies)]
-// #![windows_subsystem = "windows"]
 
 use crate::{
     cli::{Cli, Cmd, CLI_ARGS},
     platform::{Driver, Machine, Store},
 };
-use base64::{prelude::BASE64_STANDARD, Engine};
-use clap::Parser;
-use colored as _;
+use clap::{CommandFactory, Parser};
 use config::{git_url::GitUrl, CodchiConfig, MachineConfig};
 use logging::CodchiOutput;
 use platform::{ConfigStatus, Host};
-use std::env;
+use std::{env, process::exit};
 use util::{ResultExt, UtilExt};
 
 pub mod cli;
@@ -29,6 +26,11 @@ fn main() -> anyhow::Result<()> {
     not_so_human_panic::setup_panic!();
 
     let cli = Cli::parse();
+
+    if let Some(Cmd::Completion { shell }) = &cli.command {
+        shell.generate(&mut Cli::command(), &mut std::io::stdout());
+        exit(0);
+    }
 
     logging::init(cli.verbose.log_level_filter())?;
 
@@ -93,6 +95,32 @@ fn main() -> anyhow::Result<()> {
                 alert_dirty(machine);
             }
         }
+        Cmd::Clone {
+            machine_name,
+            dir,
+            url,
+            input_options,
+            module_paths,
+            depth,
+            single_branch,
+            recurse_submodules,
+            shallow_submodules,
+        } => {
+            module::clone(
+                machine_name,
+                GitUrl::from(url),
+                input_options,
+                module_paths,
+                dir,
+                depth,
+                single_branch,
+                recurse_submodules,
+                shallow_submodules,
+            )?;
+            log::info!(
+                "Machine '{machine_name}' is ready! Use `codchi exec {machine_name}` to start it."
+            );
+        }
         Cmd::Rebuild { no_update, name } => Machine::by_name(name)?.build(*no_update)?,
         Cmd::Exec { name, cmd } => Machine::by_name(name)?.exec(cmd)?,
         Cmd::Delete {
@@ -145,11 +173,12 @@ fn main() -> anyhow::Result<()> {
             }
         },
         Cmd::GC {
-            older_than,
+            delete_old,
             all,
             machines,
-        } => Driver::store().gc(older_than.map(|x| x.unwrap_or_default()), *all, machines)?,
+        } => Driver::store().gc(delete_old.map(|x| x.unwrap_or_default()), *all, machines)?,
         Cmd::Tray {} => tray::run()?,
+        Cmd::Completion { .. } => unreachable!(),
     }
     if CodchiConfig::get().tray.autostart {
         Driver::host()
@@ -186,18 +215,4 @@ fn alert_dirty(machine: Machine) {
             println!("Everything up to date!");
         }
     }
-}
-
-#[allow(unused)]
-pub fn echo_ca_certs() -> anyhow::Result<()> {
-    let crts = rustls_native_certs::load_native_certs()?;
-    for crt in crts {
-        println!("-----BEGIN CERTIFICATE-----");
-        for line in BASE64_STANDARD.encode(crt.as_ref()).as_bytes().chunks(64) {
-            println!("{}", std::str::from_utf8(line).unwrap());
-        }
-        println!("-----END CERTIFICATE-----");
-        // break;
-    }
-    Ok(())
 }

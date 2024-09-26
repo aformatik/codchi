@@ -1,6 +1,6 @@
 # Installation
 
-## Windows 10 and Windows 11
+## Windows 10 & 11
 
 ### Prerequisites
 
@@ -35,10 +35,21 @@ Now recheck `wsl.exe --version`.
 ### Install Codchi
 
 Download, open and install the latest
-[codchi.msix](https://github.com/aformatik/codchi/releases/latest). `MSIX` or
+[codchi.msix](https://github.com/aformatik/codchi/releases/latest/download/codchi.msix). `MSIX` or
 `AppX` is the packaging format for Windows Apps and should work out of the box.
 Windows even handles subsequent updates of Codchi automatically, but you can
 download and install a newer codchi.msix at any time.
+
+### Shell Completions
+
+On some Windows Systems running PowerShell scripts is considered a security vulnerability and often completely disabled. Therefore Codchi doesn't try to automatically run PowerShell Scripts and you have to manually add the completions:
+
+```ps1
+# In PowerShell:
+mkdir $env:USERPROFILE\Documents\WindowsPowerShell
+echo 'codchi completion powershell | invoke-expression' >> $PROFILE
+```
+
 
 ## Linux
 
@@ -67,9 +78,21 @@ cachix use codchi
 
 Now install codchi:
 ```bash
-nix-env -iA cachix -f https://cachix.org/api/v1/install
-cachix use codchi # 
 nix profile install github:aformatik/codchi
+```
+
+### Shell Completions
+
+When installed via Nix, shell completions should automatically work inside bash, zsh and fish. There are also [completions](../usage/completion.md) available for the following shells which must be installed manually by the user:
+
+- carapace
+- elvish
+- fig
+- nushell
+
+For example for elvish:
+```bash
+eval (codchi completion elvish | slurp)
 ```
 
 ## NixOS
@@ -98,6 +121,34 @@ firewall.interfaces.lxdbr0.allowedTCPPorts = [ 53 ];
 firewall.interfaces.lxdbr0.allowedUDPPorts = [ 53 67 ];
 ```
 Now, `nixos-rebuild`. Then run `lxd init` manually.
+
+### Shell Completions
+
+Shell completions should automatically work inside bash, zsh and fish, provided that shell completion is enabled:
+```nix
+{
+    programs.bash.enableBashCompletion = true;
+    programs.zsh.enableBashCompletion = true;
+    programs.fish.vendor.completions.enable = true;
+}
+```
+There are also [completions](../usage/completion.md) available for the following shells which must be installed manually by the user:
+
+- carapace
+- elvish
+- fig
+- nushell
+
+For example for nushell (via home-manager):
+```nix
+{ pkgs, inputs, ... }: {
+    programs.nushell.extraConfig = ''
+        source ${pkgs.runCommand "codchi-nushell-complete" {} ''
+          ${inputs.codchi.packages.${pkgs.system}.default}/bin/codchi complete nushell > $out
+        ''}
+    '';
+}
+```
 
 ### Install Codchi
 

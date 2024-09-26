@@ -18,20 +18,14 @@
 , makeWrapper
 , pkg-config
 , gtk3
-  # , xdotool
-  # , libappindicator-gtk3
 , libayatana-appindicator
-  # , libxkbcommon
-  # , xorg
-  # , vulkan-loader
-  # , libGL
-  # , webkitgtk_4_1
-  # , libsoup
-  # , libdbusmenu
 
 , llvmPackages
 , cargo-xwin
 , wine64
+
+, installShellFiles
+, pandoc
 , ...
 }:
 let
@@ -164,6 +158,7 @@ let
         llvmPackages.lld
         cargo-xwin
         nix-git
+        pandoc
       ];
 
       preConfigure = passthru.setupXWin "$(mktemp -d)";
@@ -178,7 +173,6 @@ let
 
     };
     linux = rec {
-      # targetCargo = "X86_64-UNKNOWN-LINUX-GNU";
       CARGO_BUILD_TARGET = "x86_64-unknown-linux-gnu";
 
       CODCHI_LXD_CONTAINER_STORE = store-lxd-tarball;
@@ -191,37 +185,35 @@ let
       };
       nativeBuildInputs = [
         pkg-config
-        # llvmPackages.llvm
-        # llvmPackages.bintools
-        # llvmPackages.clang
-        # llvmPackages.lld
-        # webkitgtk_4_1
-        # libsoup
-        # gtk3
-        # gtk3.debug
         nix-git
         makeWrapper
+        pandoc
+        installShellFiles
       ];
       buildInputs = [
         gtk3
-        # gtk3.debug
-        # libappindicator-gtk3
         libayatana-appindicator.out
-        # libxkbcommon
-        # xorg.libX11
-        # vulkan-loader
-        # libGL
-        # libdbusmenu
-        # llvmPackages.clang
-        # libsoup
-        # webkitgtk_4_1
       ];
+
+      outputs = [ "out" "docs" ];
+
+      postInstall = ''
+        installManPage ./target/codchi/man/*
+        installShellCompletion --cmd codchi \
+          --bash ./target/codchi/completions/codchi.bash \
+          --fish ./target/codchi/completions/codchi.fish \
+          --zsh  ./target/codchi/completions/_codchi
+
+        mkdir -p $docs
+        cp -r ./target/codchi/md $docs/usage
+      '';
 
       postFixup = ''
         patchelf "$out/bin/codchi" \
           --add-rpath ${lib.makeLibraryPath buildInputs}
         wrapProgram "$out/bin/codchi" \
-          --set CODCHI_LXD_CTRL_ROOTFS $CODCHI_LXD_CTRL_ROOTFS
+          --set CODCHI_LXD_CONTAINER_STORE $CODCHI_LXD_CONTAINER_STORE \
+          --set CODCHI_LXD_CONTAINER_MACHINE $CODCHI_LXD_CONTAINER_MACHINE
       '';
     };
   }.${platform};
@@ -233,18 +225,17 @@ native.passthru.rustPlatform.buildRustPackage (lib.recursiveUpdate
   pname = "codchi";
   inherit (Cargo.package) version;
 
-  # src = lib.cleanSource ./.;
   src = lib.sourceByRegex ./. [
     "^src.*$"
     "^assets.*$"
-    "^build.rs$"
     "^Cargo\..*"
     "^\.msvc_manifest.json$"
+    "^build.*$"
   ];
   cargoLock.lockFile = ./Cargo.lock;
   cargoLock.outputHashes = {
-    # "tarpc-0.34.0" = "";
-     "tray-icon-0.16.0" = "sha256-1l2paLXRlFe/WGWvjz+Y42NHzSUiam3SMOSK5EPnII8=";
+    # "tray-icon-0.16.0" = "sha256-LxkEP31myIiWh6FDOzr9rZ8KAWISbja0jmEx0E2lM44=";
+    # "clap-4.5.19" = "sha256-YRuZlp7jk05QLI551shgcVftcqKytTkxHlKbVejT1eE=";
   };
 
   passthru = { inherit nix-git; };

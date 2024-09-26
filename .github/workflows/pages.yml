@@ -26,6 +26,7 @@ jobs:
       with:
         name: codchi
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+    - run: nix flake update
     - run: nix build -L
     - name: Deploy 🚀
       uses: JamesIves/github-pages-deploy-action@v4

@@ -91,6 +91,9 @@ in
         if [ -n "''${CODCHI_WSL_USE_VCXSRV:-}" ]; then
           export DISPLAY=$(ip route | awk '/^default/{print $3; exit}'):0
           unset WAYLAND_DISPLAY
+          export GDK_BACKEND=x11
+        else
+          export GDK_BACKEND=wayland
         fi
       '';
     };

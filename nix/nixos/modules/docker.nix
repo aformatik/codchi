@@ -17,6 +17,11 @@ in
     virtualisation.docker.enable = true;
     users.users.codchi.extraGroups = [ "docker" ];
     environment.systemPackages = [ pkgs.docker-compose ];
+
+    # Prevent WSL overwriting docker when docker-desktop is installed
+    environment.shellAliases = {
+      docker = "${pkgs.docker}/bin/docker";
+    };
   };
 
 }

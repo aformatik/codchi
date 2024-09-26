@@ -1,39 +1,32 @@
 #![deny(unused_crate_dependencies)]
 
-use std::{env, error::Error, fs, path::PathBuf};
-
-use clap::CommandFactory;
-use clap_complete::{generate_to, Shell::*};
+use clap::{CommandFactory, ValueEnum};
+use clap_complete::{generate_to, Shell};
+use clap_complete_fig::Fig;
+use clap_complete_nushell::Nushell;
+use cli::Cli;
 use embed_manifest::{
     manifest::{ActiveCodePage, DpiAwareness, Setting},
     new_manifest,
 };
+use std::{
+    env,
+    error::Error,
+    fs::{self},
+    path::{Path, PathBuf},
+};
 
-#[path = "src/cli.rs"]
 mod cli;
+mod docs;
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+pub type Result<A> = core::result::Result<A, Box<dyn Error>>;
 
-    let man_dir = out_dir.join("man");
-    fs::create_dir_all(&man_dir).unwrap();
-
-    let cmd = cli::Cli::command();
-    let name = cmd.get_name();
-
-    let man = clap_mangen::Man::new(cmd.to_owned());
-    let mut buffer: Vec<u8> = Default::default();
-    man.render(&mut buffer).expect("Man page generation failed");
-    fs::write(man_dir.join(format!("{}.1", name)), buffer).expect("Failed to write man page");
-
-    let comp_dir = out_dir.join("completions");
-    fs::create_dir_all(&comp_dir).unwrap();
-
-    let mut mut_cmd = cmd.clone();
-
-    for shell in [Bash, Elvish, Fish, PowerShell, Zsh] {
-        generate_to(shell, &mut mut_cmd, name, &comp_dir).unwrap();
-    }
+fn main() -> Result<()> {
+    let out_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?)
+        .join("target")
+        .join("codchi");
+    docs::render(&out_dir, Cli::command())?;
+    gen_completions(&out_dir)?;
 
     if std::env::var_os("CARGO_CFG_WINDOWS").is_some() {
         embed_manifest::embed_manifest(
@@ -54,7 +47,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("cargo:rustc-env=CODCHI_WSL_VERSION_MAX={wsl_ver_max}",);
         }
 
-        let commit = build_data::exec("nix-git-commit", &[]).unwrap();
+        let commit = build_data::exec("nix-git-commit", &[])?;
         println!("cargo:rustc-env=CODCHI_GIT_COMMIT={}", commit);
         build_data::set_SOURCE_TIMESTAMP();
 
@@ -63,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else {
             println!(
                 "cargo:rustc-env=CODCHI_GIT_BRANCH=v{}",
-                env::var("CARGO_PKG_VERSION").unwrap()
+                env::var("CARGO_PKG_VERSION")?
             );
         }
         if let Ok(profile) = env::var("PROFILE") {
@@ -72,7 +65,24 @@ fn main() -> Result<(), Box<dyn Error>> {
         build_data::no_debug_rebuilds();
     }
 
-    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=build/main.rs");
+    println!("cargo:rerun-if-changed=build/filter.lua");
+
+    Ok(())
+}
+
+fn gen_completions(out_dir: &Path) -> Result<()> {
+    let comp_dir = out_dir.join("completions");
+    fs::create_dir_all(&comp_dir).unwrap();
+
+    let mut mut_cmd = Cli::command();
+    let name = mut_cmd.clone();
+
+    for shell in Shell::value_variants() {
+        generate_to(*shell, &mut mut_cmd, name.get_name(), &comp_dir)?;
+    }
+    generate_to(Nushell, &mut mut_cmd, name.get_name(), &comp_dir)?;
+    generate_to(Fig, &mut mut_cmd, name.get_name(), &comp_dir)?;
 
     Ok(())
 }

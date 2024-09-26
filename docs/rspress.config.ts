@@ -1,6 +1,7 @@
 import { defineConfig } from 'rspress/config';
 import { RspressPlugin } from '@rspress/shared';
 import path from 'path';
+import fs from 'fs';
 import { pluginShiki } from '@rspress/plugin-shiki';
 
 export function global(): RspressPlugin {
@@ -10,6 +11,81 @@ export function global(): RspressPlugin {
         globalStyles: path.join(__dirname, 'src/global.css'),
     };
 }
+
+const sidebar = [];
+sidebar.push({
+    text: "Getting Started",
+    // collapsible: false,
+    items: [
+        "/docs/start/intro",
+        "/docs/start/installation",
+        "/docs/start/first-machine",
+        "/docs/start/config",
+        "/docs/start/troubleshooting"
+    ]
+})
+if (fs.existsSync(path.join(__dirname, 'src/docs/usage'))) {
+    sidebar.push({
+        text: "Command Reference",
+        items: [
+            "/docs/usage/codchi",
+            "/docs/usage/status",
+            "/docs/usage/init",
+            "/docs/usage/clone",
+            {
+                text: "Module",
+                collapsible: false,
+                items: [
+                    "/docs/usage/module/module",
+                    "/docs/usage/module/list",
+                    "/docs/usage/module/add",
+                    "/docs/usage/module/set",
+                    "/docs/usage/module/delete",
+                ],
+            },
+            "/docs/usage/rebuild",
+            "/docs/usage/exec",
+            "/docs/usage/delete",
+            "/docs/usage/gc",
+            "/docs/usage/completion",
+        ],
+    })
+}
+// {
+//     text: "Module Configuration",
+//     items: ["architecture"]
+// }
+sidebar.push({
+    text: "Module Configuration",
+    items: [
+        "/docs/config/overview",
+        "/docs/config/start",
+        "/docs/config/secrets",
+        "/docs/config/misc",
+        "/docs/config/devenv",
+        "/docs/config/editor",
+        {
+            text: "Environments",
+            collapsible: false,
+            items: [
+                "/docs/config/environments/nix",
+                "/docs/config/environments/jvm",
+                "/docs/config/environments/javascript",
+                "/docs/config/environments/python",
+                // "/docs/config/examples/c",
+                // "/docs/config/examples/rust",
+                // "/docs/config/examples/go",
+                // "/docs/config/examples/ai",
+            ],
+        },
+    ],
+})
+sidebar.push({
+    link: "/docs/options",
+    text: "NixOS Options Reference"
+})
+
+
 
 export default defineConfig({
     // base: '/new/',
@@ -50,35 +126,7 @@ export default defineConfig({
             },
         ],
         sidebar: {
-            "/docs/": [
-                {
-                    text: "Getting Started",
-                    items: [
-                        "/docs/start/intro",
-                        "/docs/start/installation",
-                        "/docs/start/first-machine",
-                        "/docs/start/usage",
-                        "/docs/start/config",
-                        "/docs/start/troubleshooting"
-                    ]
-                },
-                // {
-                //     text: "Module Configuration",
-                //     items: ["architecture"]
-                // },
-                {
-                    text: "Module Configuration",
-                    items: [
-                        "/docs/config/overview",
-                        "/docs/config/start",
-                        "/docs/config/secrets"
-                    ],
-                },
-                {
-                    link: "/docs/options",
-                    text: "NixOS Options Reference"
-                }
-            ]
+            "/docs/": sidebar
         },
         footer: {
             // copyright: "Contributors",

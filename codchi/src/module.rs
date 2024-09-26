@@ -1,15 +1,16 @@
-use crate::cli::{InputOptions, ModuleAttrPath, ModuleName, NixpkgsLocation};
+use crate::cli::{InputOptions, ModuleAttrPath, ModuleName, NixpkgsLocation, RelativePath};
 use crate::config::git_url::{GitUrl, Scheme};
-use crate::config::*;
 use crate::consts;
-use crate::logging::set_progress_status;
+use crate::logging::{log_progress, set_progress_status};
 use crate::platform::{nix::NixDriver, *};
 use crate::progress_scope;
 use crate::util::{Empty, Required, StringExt};
+use crate::{config::*, platform};
 use anyhow::{anyhow, bail, Context, Result};
 use inquire::{list_option::ListOption, validator::Validation};
 use lazy_regex::regex_is_match;
 use petname::petname;
+use std::sync::mpsc::channel;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
@@ -115,58 +116,6 @@ pub fn set(
     {
         bail!("Skipping empty command");
     }
-    // let (lock, mut cfg) = MachineConfig::open_existing(machine_name, true)?;
-
-    // if modules.is_empty() {
-    //     bail!("Please provide at least one module!");
-    // }
-
-    // // remove old modules
-    // let mut modules_to_remove = Vec::with_capacity(modules.len());
-    // for module_name in modules {
-    //     let Some(old) = cfg.modules.remove(module_name) else {
-    //         bail!("Machine '{machine_name}' doesn't have the module '{module_name}'.");
-    //     };
-    //     modules_to_remove.push(old);
-    // }
-
-    // // only one input is allowed
-    // let flake_input = match modules_to_remove
-    //     .iter()
-    //     .map(|m| m.with_attr(Default::default()))
-    //     .unique()
-    //     .collect_vec()
-    //     .as_slice()
-    // {
-    //     [single] => single.clone(),
-    //     many => {
-    //         bail!(
-    //             "You're trying to modify modules from different repositories / commits!: {}",
-    //             many.iter().map(|f| f.pretty_print()).join(", ")
-    //         );
-    //     }
-    //     [] => unreachable!("There must be at least one input!"),
-    // };
-
-    // for (name, module) in cfg.modules.clone() {
-    //     let input = module.with_attr(Default::default());
-    //     if input == flake_input {
-    //         if opts.dont_prompt {
-    //             log::warn!(
-    //                 "Machine '{machine_name}' contains another module '{}' from the \
-    // same repository which you are trying to modify.",
-    //                 input.pretty_print()
-    //             );
-    //         } else if inquire::Confirm::new(&format!(
-    //             "Module '{name}' also comes from '{}'. Do you want to modify it too?",
-    //             input.pretty_print()
-    //         ))
-    //         .prompt()?
-    //         {
-    //             modules_to_remove.push(cfg.modules.remove(&name).unwrap());
-    //         }
-    //     }
-    // }
 
     let (lock, mut cfg) = MachineConfig::open_existing(machine_name, true)?;
     // remove the old module
@@ -310,7 +259,10 @@ pub fn delete(machine_name: &str, module_name: &ModuleName) -> Result<Machine> {
         .as_ref()
         .is_some_and(|np| np == module_name)
     {
-        log::warn!("Machine '{machine_name}' uses this module for its nixpkgs. They will now default to codchi's nixpkgs!");
+        log::warn!(
+            "Machine '{machine_name}' uses this module for its nixpkgs. \
+                   They will now default to codchi's nixpkgs!"
+        );
         cfg.nixpkgs_from = None;
     }
     cfg.write(lock)?;
@@ -448,19 +400,6 @@ pub fn fetch_modules(
             if machine.nixpkgs_from.is_some() {
                 UseNixpkgs::DontCare // do nothing, machine already follows other module
             } else if Driver::store().cmd().has_nixpkgs_input(&nix_url)? {
-                // Some(
-                //     inquire::Confirm::new(&format!(
-                //         "Use nixpkgs from '{}'",
-                //         flake_url.pretty_print()
-                //     ))
-                //     .with_help_message(indoc! {"
-                //     This module has a nixpkgs input. Do you want to use it for the code machine? \
-                //     Otherwise the shared nixpkgs of codchi is used, which might decrease \
-                //     reproducibility but is faster. \
-                //     See <https://codchi.dev/docs/start/usage.html#which-nixpkgs-should-i-use> \
-                //     for more information."})
-                //     .prompt()?,
-                // )
                 log::warn!(
                     "Using nixpkgs from '{}'! You may override this with '--use-nixpkgs'. See \
                     <https://codchi.dev/docs/start/usage.html#which-nixpkgs-should-i-use> for \
@@ -556,7 +495,11 @@ fn inquire_module_url(
                             FS(FlakeScheme::Sourcehut),
                             FS(fallback_scheme),
                         ],
-                    ).with_help_message("Please select the type of code forge where this repository is hosted. This will speed up subsequent commands!");
+                    )
+                    .with_help_message(
+                        "Please select the type of code forge where this \
+                        repository is hosted. This will speed up subsequent commands!",
+                    );
                     // preset guessed scheme in prompt
                     let idx = if let Guess::Maybe(scheme) = guess {
                         select
@@ -589,12 +532,17 @@ fn inquire_module_url(
         }
         Scheme::File => {
             if !allow_local {
-                bail!("Local paths can only be used *after* the code machine was created and the remote repository was checked out locally. For further information see <https://codchi.dev/docs/start/usage.html#local-configuration>.")
+                bail!(
+                    "Local paths can only be used *after* the code machine was created and the \
+                      remote repository was checked out locally. For further information see \
+                      <https://codchi.dev/docs/start/usage.html#local-configuration>."
+                )
             }
             let home = &consts::user::DEFAULT_HOME.0;
             if !regex_is_match!("^[^~/]", &url.path) || regex_is_match!(r"\.\.", &url.path) {
                 bail!(
-                    "Only paths relative to the home directory ({home}) of the code machine are allowed. You provided: '{}'.",
+                    "Only paths relative to the home directory ({home}) of the code machine are \
+                    allowed. You provided: '{}'.",
                     url.path
                 );
             }
@@ -615,22 +563,117 @@ fn inquire_module_url(
                 flake_attr: PhantomData,
             })
         }
-        // Scheme::Ssh => {
-        //     if opts.token.is_some() {
-        //         Err(anyhow!("Token is not supported with SSH."))?;
-        //     }
-        //     let user = url.user.map_or_else(String::new, |user| format!("{user}@"));
-        //     let port = url.port.map_or_else(String::new, |port| format!(":{port}"));
-        //     let path = url.path;
-        //     Ok(format!("git+ssh://{user}{host}{port}/{path}?{reff}{commit}",))
-        // }
         _other => {
             bail!("Currently only HTTP(S) urls are supported.")
-        } //            "This type of link is currently not supported. You can use on of the following types:
-          //    - HTTP(s): 'https://github.com/aformatik/codchi
-          //    - SSH:
-          //        ssh://git@github.com/aformatik/codchi
-          //        OR
-          //        git@github.com:aformatik/codchi"
+        }
     }
+}
+
+pub fn clone(
+    machine_name: &str,
+    url: GitUrl,
+    input_options: &InputOptions,
+    module_paths: &Vec<ModuleAttrPath>,
+    dir: &Option<RelativePath>,
+    depth: &Option<u32>,
+    single_branch: &bool,
+    recurse_submodules: &bool,
+    shallow_submodules: &bool,
+) -> Result<()> {
+    let mut input_options = input_options.clone();
+    if input_options.no_build {
+        log::warn!("Ignoring option `--no-build`.");
+        input_options.no_build = true;
+    }
+    let git_url = GitUrl::from(url);
+    if git_url.scheme != Scheme::Http && git_url.scheme != Scheme::Https {
+        bail!("Only HTTP(S) is available at the moment.")
+    }
+
+    let mut machine = init(
+        machine_name,
+        Some(git_url.clone()),
+        &input_options,
+        module_paths,
+    )?;
+    machine.build(true)?;
+    progress_scope! {
+        set_progress_status("Cloning git repository...");
+
+        let target_dir = dir.clone().map(|d| d.0).unwrap_or_else(|| {
+            git_url
+                .name // name from url
+                .clone()
+                .none_if_empty()
+                .unwrap_or_else(|| petname::petname(1, "-")
+                                .expect("Failed to generate random name"))
+        });
+        let git_url = format!(
+            "{scheme}://{auth}{host}/{repo}",
+            auth = input_options
+                .token
+                .map(|t| format!("{t}@"))
+                .unwrap_or_default(),
+            scheme = git_url.scheme,
+            host = git_url.host.unwrap(),
+            repo = git_url.path,
+        );
+
+        let mut git_opts = vec![];
+        if let Some(depth) = depth {
+            git_opts.push(format!("--depth {depth}"));
+        }
+        if *single_branch {
+            git_opts.push(format!("--single-branch"));
+        }
+        if *recurse_submodules {
+            git_opts.push(format!("--recurse-submodules"));
+        }
+        if *shallow_submodules {
+            git_opts.push(format!("--shallow-submodules"));
+        }
+        let git_opts = git_opts.join(" ");
+
+        let cmd = if let Some(branch) = input_options.branch {
+            format!(
+                r#"nix run nixpkgs#git -- clone {git_opts} -b "{branch}" "{git_url}" \
+                "{target_dir}""#
+            )
+        } else if let Some(tag) = input_options.tag {
+            format!(
+                r#"
+nix run nixpkgs#git -- clone {git_opts} "{git_url}" "{target_dir}"
+cd "{target_dir}"
+nix run nixpkgs#git -- fetch --tags
+nix run nixpkgs#git -- checkout tags/{tag}
+"#
+            )
+        } else if let Some(commit) = input_options.commit {
+            format!(
+                r#"
+nix run nixpkgs#git -- clone {git_opts} "{git_url}" "{target_dir}"
+cd "{target_dir}"
+nix run nixpkgs#git -- checkout {commit}
+"#
+            )
+        } else {
+            format!(r#"nix run nixpkgs#git -- clone {git_opts} "{git_url}" "{target_dir}""#)
+        };
+        machine.start()?;
+        machine
+            .cmd()
+            .script(cmd)
+            .with_user(platform::LinuxUser::Default)
+            .output_ok_streaming(channel().1, |line| {
+                log_progress("git clone", log::Level::Info, &line)
+            })?;
+        let (lock, mut cfg) = MachineConfig::open_existing(&machine.config.name, true)?;
+        for url in cfg.modules.values_mut() {
+            url.location = FlakeLocation::Local{ path: target_dir.clone() }
+        }
+        cfg.write(lock)?;
+        machine.config = cfg;
+        machine.write_flake()?;
+    };
+    Ok(())
 }
