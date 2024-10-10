@@ -217,11 +217,15 @@ fi
         };
 
         set_progress_status(format!("Building {}...", self.config.name));
-        let update = if no_update {
-            ""
-        } else {
-            "ndd $NIX_VERBOSITY flake update"
-        };
+        if !no_update {
+            Driver::store()
+                .cmd()
+                .script(format!(r#"ndd $NIX_VERBOSITY flake update"#))
+                .with_cwd(consts::store::DIR_CONFIG.join_machine(&self.config.name))
+                .output_ok_streaming(channel().1, |line| {
+                    log_progress("build", log::Level::Debug, &line)
+                })?;
+        }
         Driver::store()
             .cmd()
             .script(format!(
@@ -229,7 +233,6 @@ fi
 NIX_CFG_FILE="$(ndd build $NIX_VERBOSITY --no-link --print-out-paths \
     '.#nixosConfigurations.default.config.environment.etc."nix/nix.conf".source')"
 export NIX_CONFIG="$(cat $NIX_CFG_FILE)"
-{update}
 if [ ! -e system ]; then
   ndd $NIX_VERBOSITY profile install --option warn-dirty false --profile system \
         '.#nixosConfigurations.default.config.system.build.toplevel'
@@ -395,10 +398,8 @@ git add flake.*
         #[cfg(target_os = "windows")]
         Driver::host().start_vcxsrv(false)?;
 
-        // if self.platform_status == PlatformStatus::Stopped {
         set_progress_status(format!("Starting {}...", self.config.name));
         self.start()?;
-        // }
 
         let cmd = match cmd.split_first() {
             Some((cmd, args)) => self
@@ -410,14 +411,6 @@ git add flake.*
         hide_progress();
 
         cmd.with_cwd(consts::user::DEFAULT_HOME.clone())
-            // .with_env(
-            //     self.config
-            //         .secrets
-            //         .clone()
-            //         .into_iter()
-            //         .map(|(name, val)| (format!("CODCHI_{name}"), val))
-            //         .collect(),
-            // )
             .with_user(LinuxUser::Default)
             .exec()?;
         Ok(())

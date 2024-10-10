@@ -131,10 +131,6 @@ pub trait Host: Sized {
             use windows::Win32::System::Threading::*;
             cmd.creation_flags(CREATE_NEW_PROCESS_GROUP.0 | CREATE_NO_WINDOW.0);
         }
-        // #[cfg(target_family = "unix")]
-        // {
-        // cmd.creation_flags();
-        // }
         cmd.spawn()?;
         anyhow::Ok(())
     }

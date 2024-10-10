@@ -1,6 +1,7 @@
 use crate::cli::{InputOptions, ModuleAttrPath, ModuleName, NixpkgsLocation, RelativePath};
 use crate::config::git_url::{GitUrl, Scheme};
 use crate::consts;
+use crate::consts::user::DEFAULT_HOME;
 use crate::logging::{log_progress, set_progress_status};
 use crate::platform::{nix::NixDriver, *};
 use crate::progress_scope;
@@ -664,6 +665,7 @@ nix run nixpkgs#git -- checkout {commit}
             .cmd()
             .script(cmd)
             .with_user(platform::LinuxUser::Default)
+            .with_cwd(DEFAULT_HOME.clone())
             .output_ok_streaming(channel().1, |line| {
                 log_progress("git clone", log::Level::Info, &line)
             })?;

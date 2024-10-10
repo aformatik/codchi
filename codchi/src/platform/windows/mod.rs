@@ -184,30 +184,39 @@ impl MachineDriver for Machine {
                 thread::sleep(Duration::from_millis(200));
             }
 
-            let mut env_file = OpenOptions::new()
-                .truncate(true)
-                .write(true)
-                .create(true)
-                .open(env_path)?;
+            if let Err(err) = (|| {
+                let mut env_file = OpenOptions::new()
+                    .truncate(true)
+                    .write(true)
+                    .create(true)
+                    .open(env_path)?;
 
-            for (key, value) in &env {
-                writeln!(env_file, r#"export CODCHI_{key}="{value}""#)?;
-            }
-            env_file.sync_all()?;
+                for (key, value) in &env {
+                    writeln!(env_file, r#"export CODCHI_{key}="{value}""#)?;
+                }
+                env_file.sync_all()?;
 
-            if self.platform_status == PlatformStatus::Running {
-                self.cmd()
-                    .script(format!(
-                        r#"
-while [ ! -f {} ]; do
+                if self.platform_status == PlatformStatus::Running {
+                    self.cmd()
+                        .script(format!(
+                            r#"
+while [ ! -f {tmp_env} ]; do
     sleep .25
 done
-mv -f {} {}
+mv -f {tmp_env} {etc_env}
 "#,
-                        CODCHI_ENV_TMP.0, CODCHI_ENV_TMP.0, CODCHI_ENV.0
-                    ))
-                    .with_user(LinuxUser::Root)
-                    .wait_ok()?;
+                            tmp_env = CODCHI_ENV_TMP.0,
+                            etc_env = CODCHI_ENV.0
+                        ))
+                        .with_user(LinuxUser::Root)
+                        .wait_ok()?;
+                }
+                anyhow::Ok(())
+            })() {
+                log::error!(
+                    "Failed to write '{}': {err}. Trying backup method...",
+                    CODCHI_ENV_TMP.0
+                );
             }
 
             Driver::store()

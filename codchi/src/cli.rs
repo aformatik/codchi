@@ -22,6 +22,9 @@ pub static DEBUG: LazyLock<bool> = LazyLock::new(|| {
         .unwrap()
         >= Level::Debug
 });
+#[cfg(target_os = "windows")]
+pub static TERMINAL: LazyLock<bool> =
+    LazyLock::new(|| CLI_ARGS.get().and_then(|cli| cli.terminal) != Some(false));
 
 type DefaultLogLevel = InfoLevel;
 

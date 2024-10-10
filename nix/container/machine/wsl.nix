@@ -23,6 +23,7 @@ let inherit (lib) mkEnableOption mkIf pipe concatLines;
 
   INIT_LOG = "${mnt}${consts.store.MACHINE_LOG}";
   INIT_ENV_TMP = "/tmp/codchi-env";
+  INIT_ENV_BACKUP = "/mnt/wsl/codchi/.machine-init-env";
 
 in
 {
@@ -58,15 +59,21 @@ in
     '';
 
     machine.init.hostSetup = /* bash */ ''
-      if [ ! -f "${INIT_ENV_TMP}" ]; then
+      [ -d /etc ] || mkdir /etc
+
+      if [ -f "${INIT_ENV_TMP}" ]; then
+        mv "${INIT_ENV_TMP}" "${consts.machine.INIT_ENV}"
+      elif [ -f "${INIT_ENV_BACKUP}" ]; then
+        mv "${INIT_ENV_BACKUP}" "${consts.machine.INIT_ENV}"
+      else
         echo "This distribution is only meant to be started by codchi.exe!" >&2
         /mnt/c/WINDOWS/system32/msg.exe '*' "This distribution is only meant to be started by codchi.exe!" >&2
         exit 1
       fi
 
-      [ -d /etc ] || mkdir /etc
-      mv "${INIT_ENV_TMP}" "${consts.machine.INIT_ENV}"
-      
+      # sometimes they don't get deleted...
+      rm -f "${INIT_ENV_TMP}" "${INIT_ENV_BACKUP}" || true
+
       source "${consts.machine.INIT_ENV}"
 
       if [ -z "''${CODCHI_MACHINE_NAME:-}" ]; then

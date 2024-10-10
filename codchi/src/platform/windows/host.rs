@@ -6,14 +6,12 @@ use crate::{
     util::PathExt,
 };
 use anyhow::{Context, Result};
+use itertools::Itertools;
 use known_folders::{get_known_folder_path, KnownFolder};
 use mslnk::ShellLink;
 use std::{env, fs, os::windows::process::CommandExt, process::Command};
 use sysinfo::System;
-use windows::Win32::System::Threading::{
-    CREATE_NEW_CONSOLE, CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW,
-};
-// use winreg::{enums::HKEY_CURRENT_USER, RegKey};
+use windows::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW};
 
 pub struct HostImpl;
 impl HostImpl {}
@@ -151,14 +149,21 @@ impl Host for HostImpl {
     }
 
     fn open_terminal(&self, cmd: &[&str]) -> Result<()> {
-        if let Some((cmd, args)) = cmd.split_first() {
-            Command::new(cmd)
-                .args(args)
-                .creation_flags(CREATE_NEW_CONSOLE.0)
-                .spawn()?;
-        } else {
-            anyhow::bail!("Failed to open terminal with an empty command");
+        let terms = vec![
+            ("wt.exe", vec!["nt"]),
+            ("alacritty.exe", vec!["-e"]),
+            ("wezterm.exe", vec!["-e"]),
+        ];
+        for (term, args) in &terms {
+            if let Ok(path) = which::which(term) {
+                Command::new(path).args(args).args(cmd).spawn()?;
+                return Ok(());
+            }
         }
-        Ok(())
+
+        anyhow::bail!(
+            "Could not find a terminal. Tried: {}",
+            terms.iter().map(|(term, _)| term).join(", ")
+        )
     }
 }

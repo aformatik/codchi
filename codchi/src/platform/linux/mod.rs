@@ -264,10 +264,11 @@ tail -f "{log_file}"
             .with_user(LinuxUser::Default)
             .retry_until_ok();
 
-        // self.cmd()
-        //     .run("ls", &[])
-        //     .with_user(LinuxUser::Default)
-        //     .retry_until_ok();
+        // somehow the above doesn't suffice when LXC container is freshly started
+        self.cmd()
+            .run("bash", &["-lc", "ls"])
+            .with_user(LinuxUser::Default)
+            .retry_until_ok();
 
         cancel_tx
             .send(())

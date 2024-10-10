@@ -6,6 +6,7 @@ use crate::{
 };
 use anyhow::Result;
 use core::*;
+use notify_rust::Notification;
 use std::{env, sync::mpsc::channel, thread};
 use tray_icon::menu::{CheckMenuItem, MenuItem};
 use TrayItem::*;
@@ -105,14 +106,21 @@ pub fn run() -> Result<()> {
                             Button {
                                 text: "Terminal".to_string(),
                                 on_click: Box::leak(Box::new(move |_| {
-                                    Driver::host()
+                                    if let Err(err) = Driver::host()
                                         .open_terminal(&[
                                             &env::current_exe().unwrap().display().to_string(),
                                             "exec",
                                             &name,
                                         ])
                                         .trace_err(&format!("Failed opening terminal for {name}"))
-                                        .ignore();
+                                    {
+                                        Notification::new()
+                                            .summary("Codchi Error")
+                                            .body(&err.to_string())
+                                            .auto_icon()
+                                            .show()
+                                            .ignore();
+                                    }
                                     TrayOp::Noop
                                 })),
                             }

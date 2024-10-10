@@ -42,13 +42,24 @@ download and install a newer codchi.msix at any time.
 
 ### Shell Completions
 
-On some Windows Systems running PowerShell scripts is considered a security vulnerability and often completely disabled. Therefore Codchi doesn't try to automatically run PowerShell Scripts and you have to manually add the completions:
+On some Windows Systems running PowerShell scripts is considered a security vulnerability and often completely disabled. Therefore Codchi doesn't try to automatically run PowerShell scripts and you have to manually add the following to the end of your PowerShell configuration (find it by running `$PROFILE` in PowerShell):
 
 ```ps1
-# In PowerShell:
-mkdir $env:USERPROFILE\Documents\WindowsPowerShell
-echo 'codchi completion powershell | invoke-expression' >> $PROFILE
+Invoke-Expression (& codchi completion powershell | Out-String)
 ```
+
+#### Further Recommendations
+
+- For better tab complete and history search:
+    ```ps1
+    # Shows navigable menu of all options when hitting tab
+    Set-PSReadlineKeyHandler -Key Tab -Function MenuComplete
+
+    # Autocompletion for arrow keys (when something was already typed)
+    Set-PSReadlineKeyHandler -Key UpArrow -Function HistorySearchBackward
+    Set-PSReadlineKeyHandler -Key DownArrow -Function HistorySearchForward
+    ```
+- Install [Starship.rs](https://starship.rs/) for a better prompt
 
 
 ## Linux
