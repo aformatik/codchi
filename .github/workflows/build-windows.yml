@@ -99,8 +99,8 @@ jobs:
         files-folder: build
         files-folder-filter: msix
         file-digest: SHA256
-    - if: ${{ failure() }}
-      uses: mxschmitt/action-tmate@v3
+    # - if: ${{ failure() }}
+    #   uses: mxschmitt/action-tmate@v3
     - uses: softprops/action-gh-release@v2
       with:
         prerelease: true

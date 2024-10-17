@@ -32,6 +32,19 @@ pub trait LinuxCommandTarget {
         }
     }
 
+    fn raw(&self, program: &str, args: &[&str]) -> LinuxCommandBuilder {
+        LinuxCommandBuilder {
+            driver: self.get_driver(),
+            program: Program::Raw {
+                program: program.to_string(),
+                args: args.iter().map(|arg| arg.to_string()).collect(),
+            },
+            user: None,
+            cwd: None,
+            env: HashMap::new(), // output: Output::Collect,
+        }
+    }
+
     fn script(&self, script: String) -> LinuxCommandBuilder {
         LinuxCommandBuilder {
             driver: self.get_driver(),
@@ -66,6 +79,7 @@ pub struct LinuxCommandBuilder {
 #[derive(Debug, Clone)]
 pub enum Program {
     Run { program: String, args: Vec<String> },
+    Raw { program: String, args: Vec<String> },
     Script(String),
 }
 
@@ -106,6 +120,12 @@ impl From<LinuxCommandBuilder> for Command {
             Program::Script(_) => {
                 cmd.arg("runin");
                 cmd.stdin(Stdio::piped());
+            }
+            Program::Raw { program, args } => {
+                cmd.arg(program);
+                for arg in args.iter() {
+                    cmd.arg(arg);
+                }
             }
         };
         cmd

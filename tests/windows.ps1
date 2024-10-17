@@ -16,6 +16,6 @@ Describe "codchi.msix" {
        { codchi.exe -vv clone codchi https://github.com/aformatik/codchi nixosModules.codchi } | Should -Not -Throw 
    }
    It "builds codchi inside codchi" {
-       { codchi.exe exec -vv codchi bash -lc 'cd codchi/codchi && direnv allow && cargo run -- --version' } | Should -Not -Throw
+       { codchi.exe exec -vv codchi bash -lc 'cd codchi/codchi && nix develop -c cargo run -- --version' } | Should -Not -Throw
    }
 }

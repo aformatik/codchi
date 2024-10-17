@@ -1,4 +1,6 @@
-use super::{platform::HostImpl, Host, LinuxCommandTarget, LinuxUser, NixDriver};
+use super::{
+    platform::HostImpl, Host, LinuxCommandBuilder, LinuxCommandTarget, LinuxUser, NixDriver,
+};
 use crate::{
     cli::CODCHI_DRIVER_MODULE,
     config::{EnvSecret, FlakeLocation, MachineConfig},
@@ -28,6 +30,8 @@ pub trait MachineDriver: Sized {
 
     /// Delete container
     fn delete_container(&self) -> Result<()>;
+
+    fn create_exec_cmd(&self, cmd: &[&str]) -> LinuxCommandBuilder;
 }
 
 #[derive(Debug, Clone)]
@@ -400,18 +404,8 @@ git add flake.*
 
         set_progress_status(format!("Starting {}...", self.config.name));
         self.start()?;
-
-        let cmd = match cmd.split_first() {
-            Some((cmd, args)) => self
-                .cmd()
-                .run(cmd, &args.iter().map(|str| str.as_str()).collect_vec()),
-            None => self.cmd().run("bash", &["-l"]),
-        };
-
         hide_progress();
-
-        cmd.with_cwd(consts::user::DEFAULT_HOME.clone())
-            .with_user(LinuxUser::Default)
+        self.create_exec_cmd(&cmd.iter().map(|str| str.as_str()).collect_vec())
             .exec()?;
         Ok(())
     }

@@ -283,6 +283,16 @@ tail -f "{log_file}"
             .wait_ok()?;
         Ok(())
     }
+
+    fn create_exec_cmd(&self, cmd: &[&str]) -> super::LinuxCommandBuilder {
+        let cmd = match cmd.split_first() {
+            Some((cmd, args)) => self.cmd().run(cmd, args),
+            None => self.cmd().run("bash", &["-l"]),
+        };
+
+        cmd.with_cwd(consts::user::DEFAULT_HOME.clone())
+            .with_user(LinuxUser::Default)
+    }
 }
 
 #[derive(Debug, Clone)]
