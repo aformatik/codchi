@@ -63,7 +63,7 @@ in
         echo "Linking $src to $target" >&2
         [ -d "$(dirname $target)" ] || mkdir -p "$(dirname $target)" 
         [ -L "$target" ] && rm "$target"
-        ln -s "$src" "$target"
+        ln -fs "$src" "$target"
       }
 
       mkLink "$WSL_CODCHI_DIR_CONFIG" "${consts.store.DIR_CONFIG}" 

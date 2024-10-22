@@ -58,7 +58,7 @@ in
         export PATH="/bin:${consts.store.PROFILE_STORE}/bin:/root/.nix-profile/bin:$PATH"
 
         # Ensure a consistent umask.
-        umask 0022
+        umask 022
 
         # Make nixs' https work
         export NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt

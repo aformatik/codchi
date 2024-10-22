@@ -71,8 +71,8 @@ jobs:
       id: winver
       with:
         string: '${{ github.ref_name }}'
-        pattern: '^v(\d+).(\d+).(\d+)-?.*$'
-        replace-with: '$1.$2.$3.0'
+        pattern: '^v(\d+).(\d+).(\d+)(\.(\d+))?$'
+        replace-with: '$1.$2.$3$4'
     - name: Insert version ${{ github.ref_name }} / ${{ steps.winver.outputs.replaced }}
       env:
         VERSION: ${{ github.ref_name }}

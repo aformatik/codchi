@@ -41,76 +41,67 @@ impl Store for StoreImpl {
     fn start_or_init_container() -> Result<Self> {
         wsl::check_wsl()?;
 
-        fn start_or_init(after_install: bool) -> Result<StoreImpl> {
-            let status = wsl::get_platform_status(consts::CONTAINER_STORE_NAME)?;
-            log::trace!("WSL store container status: {status:#?}");
+        let status = wsl::get_platform_status(consts::CONTAINER_STORE_NAME)?;
+        log::trace!("WSL store container status: {status:#?}");
 
-            let store = StoreImpl {};
-            match status {
-                PlatformStatus::NotInstalled => wsl::import(
-                    files::STORE_ROOTFS_NAME,
-                    consts::CONTAINER_STORE_NAME,
-                    consts::host::DIR_DATA
-                        .join_store()
-                        .get_or_create()?
-                        .to_path_buf(),
-                    || {
-                        wsl::set_sparse(consts::CONTAINER_STORE_NAME)?;
-                        start_or_init(true)
-                    },
-                )
-                .inspect_err(|_| {
-                    if !log::log_enabled!(Level::Debug) {
-                        log::error!("Removing leftovers of store files...");
-                        let _ = fs::remove_dir_all(consts::host::DIR_CONFIG.join_store());
-                        let _ = fs::remove_dir_all(consts::host::DIR_DATA.join_store());
-                    }
-                }),
-                PlatformStatus::Running => {
-                    while store
-                        .cmd()
-                        .run("ps", &[])
-                        .output_utf8_ok()?
-                        .contains("/sbin/init")
-                    {
-                        set_progress_status(
-                            "The store is currently initializing. Please wait a moment...",
-                        );
-                        thread::sleep(Duration::from_millis(500));
-                    }
-                    if store.cmd().ping_store() {
-                        Ok(store)
-                    } else {
-                        let _ = wsl::wsl_command()
-                            .arg("--terminate")
-                            .arg(consts::CONTAINER_STORE_NAME)
-                            .wait_ok()
-                            .trace_err("Failed stopping incorrectly started store container");
-                        anyhow::bail!(
-                            "The store container was started incorrectly. Please try again!"
-                        );
-                    }
+        let store = StoreImpl {};
+        match status {
+            PlatformStatus::NotInstalled => wsl::import(
+                files::STORE_ROOTFS_NAME,
+                consts::CONTAINER_STORE_NAME,
+                consts::host::DIR_DATA
+                    .join_store()
+                    .get_or_create()?
+                    .to_path_buf(),
+                || {
+                    wsl::set_sparse(consts::CONTAINER_STORE_NAME)?;
+                    set_progress_status(
+                        "Initializing store container. This takes a while the first time...",
+                    );
+                    Store::init()
+                },
+            )
+            .inspect_err(|_| {
+                if !log::log_enabled!(Level::Debug) {
+                    log::error!("Removing leftovers of store files...");
+                    let _ = fs::remove_dir_all(consts::host::DIR_CONFIG.join_store());
+                    let _ = fs::remove_dir_all(consts::host::DIR_DATA.join_store());
                 }
-                PlatformStatus::Stopped => {
-                    if after_install {
-                        set_progress_status(
-                            "Initializing store container. This takes a while the first time...",
-                        );
-                    }
-
-                    store
-                        .cmd()
-                        .run("/sbin/init", &[])
-                        .output_ok_streaming(channel().1, |line| {
-                            log_progress("store_init", Level::Debug, &line)
-                        })?;
-
+            }),
+            PlatformStatus::Running => {
+                while store
+                    .cmd()
+                    .run("ps", &[])
+                    .output_utf8_ok()?
+                    .contains("/sbin/init")
+                {
+                    set_progress_status(
+                        "The store is currently initializing. Please wait a moment...",
+                    );
+                    thread::sleep(Duration::from_millis(500));
+                }
+                if store.cmd().ping_store() {
                     Ok(store)
+                } else {
+                    let _ = wsl::wsl_command()
+                        .arg("--terminate")
+                        .arg(consts::CONTAINER_STORE_NAME)
+                        .wait_ok()
+                        .trace_err("Failed stopping incorrectly started store container");
+                    anyhow::bail!("The store container was started incorrectly. Please try again!");
                 }
             }
-        }
+            PlatformStatus::Stopped => {
+                store
+                    .cmd()
+                    .run("/sbin/init", &[])
+                    .output_ok_streaming(channel().1, |line| {
+                        log_progress("store_init", Level::Debug, &line)
+                    })?;
 
-        start_or_init(false)
+                Ok(store)
+            }
+        }
     }
 
     fn cmd(&self) -> impl NixDriver {

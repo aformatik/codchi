@@ -11,6 +11,7 @@ use crate::{
 };
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
+use log::Level;
 use std::{collections::HashMap, fs, sync::mpsc::channel, thread};
 
 pub trait MachineDriver: Sized {
@@ -297,20 +298,22 @@ git add flake.*
         if status == PlatformStatus::NotInstalled {
             set_progress_status(format!("Installing {}...", self.config.name));
             self.install().inspect_err(|_err| {
-                log::error!(
-                    "Removing leftovers of machine files for {}...",
-                    self.config.name
-                );
-                log::trace!(
-                    "Deleting config data for {}: {:?}",
-                    self.config.name,
-                    fs::remove_dir_all(host::DIR_CONFIG.join_machine(&self.config.name))
-                );
-                log::trace!(
-                    "Deleting data for {}: {:?}",
-                    self.config.name,
-                    fs::remove_dir_all(host::DIR_DATA.join_machine(&self.config.name))
-                );
+                if !log::log_enabled!(Level::Debug) {
+                    log::error!(
+                        "Removing leftovers of machine files for {}...",
+                        self.config.name
+                    );
+                    log::trace!(
+                        "Deleting config data for {}: {:?}",
+                        self.config.name,
+                        fs::remove_dir_all(host::DIR_CONFIG.join_machine(&self.config.name))
+                    );
+                    log::trace!(
+                        "Deleting data for {}: {:?}",
+                        self.config.name,
+                        fs::remove_dir_all(host::DIR_DATA.join_machine(&self.config.name))
+                    );
+                }
             })?;
         } else {
             if status == PlatformStatus::Stopped {
