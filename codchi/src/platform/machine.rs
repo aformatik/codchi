@@ -191,6 +191,17 @@ fi
         Ok(())
     }
 
+    pub fn update_flake(&self) -> Result<()> {
+        Driver::store()
+            .cmd()
+            .script(r#"ndd $NIX_VERBOSITY flake update"#.to_string())
+            .with_cwd(consts::store::DIR_CONFIG.join_machine(&self.config.name))
+            .output_ok_streaming(channel().1, |line| {
+                log_progress("build", log::Level::Debug, &line)
+            })?;
+        Ok(())
+    }
+
     pub fn build(&self, no_update: bool) -> Result<()> {
         self.write_flake()?;
 
@@ -223,17 +234,11 @@ fi
 
         set_progress_status(format!("Building {}...", self.config.name));
         if !no_update {
-            Driver::store()
-                .cmd()
-                .script(format!(r#"ndd $NIX_VERBOSITY flake update"#))
-                .with_cwd(consts::store::DIR_CONFIG.join_machine(&self.config.name))
-                .output_ok_streaming(channel().1, |line| {
-                    log_progress("build", log::Level::Debug, &line)
-                })?;
+            self.update_flake()?;
         }
         Driver::store()
             .cmd()
-            .script(format!(
+            .script(
                 r#"
 NIX_CFG_FILE="$(ndd build $NIX_VERBOSITY --no-link --print-out-paths \
     '.#nixosConfigurations.default.config.environment.etc."nix/nix.conf".source')"
@@ -247,7 +252,8 @@ fi
 pwd
 git add flake.*
 "#
-            ))
+                .to_string(),
+            )
             .with_cwd(consts::store::DIR_CONFIG.join_machine(&self.config.name))
             .output_ok_streaming(channel().1, |line| {
                 log_progress("build", log::Level::Debug, &line)

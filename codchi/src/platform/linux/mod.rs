@@ -287,7 +287,7 @@ tail -f "{log_file}"
     }
 
     fn create_exec_cmd(&self, cmd: &[&str]) -> super::LinuxCommandBuilder {
-        let args = [&vec![consts::user::DEFAULT_NAME], cmd].concat();
+        let args = [&[consts::user::DEFAULT_NAME], cmd].concat();
         let cmd = self.cmd().raw("su", &args);
 
         cmd.with_cwd(consts::user::DEFAULT_HOME.clone())

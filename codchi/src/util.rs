@@ -245,21 +245,21 @@ pub trait PathExt: AsRef<Path> + Sized + Debug {
 
     /// Create the directory recursively if it doesn't exist and return its path
     fn list_dir(&self) -> anyhow::Result<Vec<String>> {
-        if let Ok(meta) = fs::metadata(&self) {
+        if let Ok(meta) = fs::metadata(self) {
             if meta.is_dir() {
                 let mut filenames = vec![];
 
-                for entry in fs::read_dir(&self)? {
+                for entry in fs::read_dir(self)? {
                     let entry =
                         entry.with_context(|| format!("Failed to read an entry in {:?}", self))?;
                     filenames.push(entry.file_name().to_string_lossy().to_string());
                 }
-                return Ok(filenames);
+                Ok(filenames)
             } else {
-                bail!("Path '{self:?}' is not a directory");
+                bail!("Path '{self:?}' is not a directory")
             }
         } else {
-            bail!("Couldn't find path '{self:?}'");
+            bail!("Couldn't find path '{self:?}'")
         }
     }
 }

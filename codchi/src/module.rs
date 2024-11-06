@@ -68,6 +68,7 @@ pub fn init(
         platform_status: PlatformStatus::NotInstalled,
     };
     machine.write_flake()?;
+    machine.update_flake()?;
     Ok(machine)
 }
 
@@ -570,9 +571,10 @@ fn inquire_module_url(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn clone(
     machine_name: &str,
-    url: GitUrl,
+    git_url: GitUrl,
     input_options: &InputOptions,
     module_paths: &Vec<ModuleAttrPath>,
     dir: &Option<RelativePath>,
@@ -586,7 +588,6 @@ pub fn clone(
         log::warn!("Ignoring option `--no-build`.");
         input_options.no_build = true;
     }
-    let git_url = GitUrl::from(url);
     if git_url.scheme != Scheme::Http && git_url.scheme != Scheme::Https {
         bail!("Only HTTP(S) is available at the moment.")
     }
@@ -625,13 +626,13 @@ pub fn clone(
             git_opts.push(format!("--depth {depth}"));
         }
         if *single_branch {
-            git_opts.push(format!("--single-branch"));
+            git_opts.push("--single-branch".to_string());
         }
         if *recurse_submodules {
-            git_opts.push(format!("--recurse-submodules"));
+            git_opts.push("--recurse-submodules".to_string());
         }
         if *shallow_submodules {
-            git_opts.push(format!("--shallow-submodules"));
+            git_opts.push("--shallow-submodules".to_string());
         }
         let git_opts = git_opts.join(" ");
 

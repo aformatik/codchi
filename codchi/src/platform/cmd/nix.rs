@@ -61,6 +61,7 @@ pub trait NixDriver: LinuxCommandTarget {
         let list_attr_names = |attr_path: &str| -> Result<Vec<String>> {
             let args = [
                 "eval",
+                "--refresh",
                 "--no-write-lock-file",
                 "--json",
                 "--quiet",
@@ -101,6 +102,7 @@ pub trait NixDriver: LinuxCommandTarget {
         let args = [
             "flake",
             "metadata",
+            "--refresh",
             "--json",
             "--no-write-lock-file",
             &self.quote_shell_arg(url),
