@@ -1,7 +1,7 @@
 use crate::{
     cli::DEBUG,
     config::CodchiConfig,
-    consts,
+    consts::{self, APP_NAME},
     platform::{DesktopEntry, Host},
     util::PathExt,
 };
@@ -40,7 +40,7 @@ impl Host for HostImpl {
             is_terminal,
         } in apps
         {
-            let mut lnk = ShellLink::new(&codchi_exe)?;
+            let mut lnk = ShellLink::new(codchi_exe.clone())?;
             if let Some(ico_path) = icon {
                 let target = ico_folder.join(format!("{app_name}.ico"));
                 fs::copy(ico_path, &target)?;
@@ -165,5 +165,75 @@ impl Host for HostImpl {
             "Could not find a terminal. Tried: {}",
             terms.iter().map(|(term, _)| term).join(", ")
         )
+    }
+
+    fn post_install(machine_name: &str) -> Result<()> {
+        // write json fragments for windows terminal
+        {
+            // from https://learn.microsoft.com/en-us/windows/terminal/json-fragment-extensions#calculating-a-guid-for-a-built-in-profile
+            let guid = {
+                use uuid::Uuid;
+                // Windows Terminal namespace GUID for auto-generated profiles
+                let terminal_namespace_guid =
+                    Uuid::parse_str("2bde4a90-d05f-401c-9492-e40884ead1d8")?;
+                let profile_name = consts::machine::machine_name(machine_name);
+
+                let utf16le_bytes: Vec<u8> = profile_name
+                    .encode_utf16()
+                    .flat_map(|unit| unit.to_le_bytes()) // little-endian (BOM-less)
+                    .collect();
+
+                Uuid::new_v5(&terminal_namespace_guid, &utf16le_bytes)
+            };
+            let fragment_dir = get_known_folder_path(KnownFolder::LocalAppData)
+                .expect("FOLDERID_LocalAppData missing")
+                .join("Microsoft")
+                .join("Windows Terminal")
+                .join("Fragments")
+                .join(APP_NAME);
+            fragment_dir.get_or_create()?;
+
+            let fragment_path = fragment_dir.join(format!("{machine_name}.json"));
+
+            // omit icon for now because if its missing, the fragment doesn't work. Also, after
+            // each codchi update the icon path changes until the machine is rebuilt
+            // let codchi_icon = env::current_exe()?
+            //     .parent()
+            //     .context("Failed to access codchi.exe install dir.")?
+            //     .join("Assets")
+            //     .join("favicon150.png");
+            // let codchi_icon = codchi_icon.display();
+            // "icon": "{codchi_icon}",
+
+            fs::write(
+                fragment_path,
+                format!(
+                    r#"{{
+  "profiles": [
+    {{
+      "updates": "{{{guid}}}",
+      "commandline": "codchi.exe exec {machine_name}",
+      "name": "Codchi - {machine_name}",
+    }}
+  ]
+}}"#
+                ),
+            )?;
+        }
+
+        Ok(())
+    }
+
+    fn post_delete(machine_name: &str) -> Result<()> {
+        get_known_folder_path(KnownFolder::LocalAppData)
+            .expect("FOLDERID_LocalAppData missing")
+            .join("Microsoft")
+            .join("Windows Terminal")
+            .join("Fragments")
+            .join(APP_NAME)
+            .join(format!("{machine_name}.json"))
+            .remove();
+
+        Ok(())
     }
 }

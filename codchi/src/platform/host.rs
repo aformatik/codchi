@@ -92,7 +92,8 @@ pub trait Host: Sized {
             });
         }
 
-        Self::write_shortcuts(&machine.config.name, desktop_entries.iter())
+        Self::write_shortcuts(&machine.config.name, desktop_entries.iter())?;
+        Ok(())
     }
 
     fn open_terminal(&self, cmd: &[&str]) -> Result<()>;
@@ -137,6 +138,14 @@ pub trait Host: Sized {
 
     #[cfg(target_os = "windows")]
     fn start_vcxsrv(&self, kill_running: bool) -> Result<()>;
+
+    fn post_install(_machine_name: &str) -> Result<()> {
+        Ok(())
+    }
+
+    fn post_delete(_machine_name: &str) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug)]

@@ -81,7 +81,10 @@ in
       environment.variables.NIX_REMOTE = "daemon";
       # Setup nix flakes
       nix = {
-        package = pkgs.nixFlakes;
+        package =
+          if lib.versionAtLeast config.system.stateVersion "24.11"
+          then pkgs.nix
+          else pkgs.nixFlakes;
         extraOptions = ''
           experimental-features = nix-command flakes
         '';

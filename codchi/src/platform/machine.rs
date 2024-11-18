@@ -337,6 +337,7 @@ git add flake.*
 
         set_progress_status("Updating start menu shortcuts...");
         HostImpl::write_machine_shortcuts(self)?;
+        HostImpl::post_install(&self.config.name)?;
 
         hide_progress();
 
@@ -391,6 +392,7 @@ git add flake.*
 
         set_progress_status("Deleting start menu shortcuts...");
         HostImpl::delete_shortcuts(&self.config.name)?;
+        HostImpl::post_delete(&self.config.name)?;
 
         println!("Successfully deleted {}. You might also want to run a garbage collection (`codchi gc`).", self.config.name);
 

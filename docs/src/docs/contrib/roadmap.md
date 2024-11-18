@@ -2,36 +2,36 @@
 
 - Docs
     - [ ] Demo Video
-    - NixOS options
-        - [ ] hosts / resolv.conf
-    - auto update
-        - update available notification / working auto update
-    
-
-- MVP Features
-    - [ ] Codchi doctor (periodical check)
-
-- [ ] License
-
-- Future
-    - Custom certs auto adding
-        - => how to handle inside code machines?
-    - Announcement Post (Discourse, HN?, Product Hunt?)
-    - [/] GPU
-    - WSL:
-        Terminal integration (#14)
-    - Docs
-        - [ ] Internal Docs / Contrib
-        - [ ] Uninstalling Codchi, Migrating away
+    - [ ] Architecture
+    - [ ] Landing Page
 
 - Bugs
-    - update required with local repos => invalidate nix cache flag?
-    - (testing: dont prompt)
+    - [ ] shortcuts / terminal fragments win
+        - update path on every update => autostart codchi tray => run "migration"
+
+- Future
+    - Announcement Post (Discourse, HN?, Product Hunt?)
+    - [/] GPU
+
+- Features
+    - [ ] codchi status on windows is slow
+        => move wsl status checking / store container starting to scheduled / time based task
+    - [ ] `codchi recover` => fs tar export
+    - [ ] `codchi debug` => machine / store debug shell
+    - [ ] `codchi export {vmware,virtualbox,qemu,hyperv}` 
+        => export machine to VM image
+        => backup / migrating away
+    - [ ] (`codchi state export`) => creating a base fs for files like IJ / eclipse config
+    - [ ] (codchi daemon inside each code machine)
+        - current bash solution too fragile
+        => Does init (secret / config fetching, log reporting)
+    - [ ] (Custom certs auto adding)
+        - => how to handle inside code machines?
+    - [ ] (Linux Wayland support)
+
 
 - open questions:
     - WSL
         - what happens if store stops and machines runs?
         - how to handle network reset (VcXsrv)? 
             => wslg as default?
-    - LXD
-        - Wayland support / xwayland?
