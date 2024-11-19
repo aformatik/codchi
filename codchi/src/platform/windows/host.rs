@@ -195,15 +195,12 @@ impl Host for HostImpl {
 
             let fragment_path = fragment_dir.join(format!("{machine_name}.json"));
 
-            // omit icon for now because if its missing, the fragment doesn't work. Also, after
-            // each codchi update the icon path changes until the machine is rebuilt
-            // let codchi_icon = env::current_exe()?
-            //     .parent()
-            //     .context("Failed to access codchi.exe install dir.")?
-            //     .join("Assets")
-            //     .join("favicon150.png");
-            // let codchi_icon = codchi_icon.display();
-            // "icon": "{codchi_icon}",
+            // format! with Debug {codchi_icon:?} because Windows Terminal wants double backspaces
+            let codchi_icon = env::current_exe()?
+                .parent()
+                .context("Failed to access codchi.exe install dir.")?
+                .join("Assets")
+                .join("favicon.ico");
 
             fs::write(
                 fragment_path,
@@ -214,6 +211,7 @@ impl Host for HostImpl {
       "updates": "{{{guid}}}",
       "commandline": "codchi.exe exec {machine_name}",
       "name": "Codchi - {machine_name}",
+      "icon": {codchi_icon:?},
     }}
   ]
 }}"#

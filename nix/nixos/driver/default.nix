@@ -7,6 +7,7 @@ in
     ./lxd
     ./wsl
     ./secrets.nix
+    ./host-integration.nix
   ];
 
   options.codchi.driver = {

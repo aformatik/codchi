@@ -1,9 +1,9 @@
 # Roadmap
 
 - Docs
-    - [ ] Demo Video
     - [ ] Architecture
     - [ ] Landing Page
+        - Demo Video
 
 - Bugs
     - [ ] shortcuts / terminal fragments win
@@ -11,10 +11,11 @@
 
 - Future
     - Announcement Post (Discourse, HN?, Product Hunt?)
-    - [/] GPU
+    - [ ] GPU
 
 - Features
-    - [ ] codchi status on windows is slow
+    - [ ] codchiw.exe
+    - [ ] `codchi status` on windows is slow
         => move wsl status checking / store container starting to scheduled / time based task
     - [ ] `codchi recover` => fs tar export
     - [ ] `codchi debug` => machine / store debug shell

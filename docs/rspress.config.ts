@@ -72,6 +72,7 @@ sidebar.push({
                 "/docs/config/environments/jvm",
                 "/docs/config/environments/javascript",
                 "/docs/config/environments/python",
+                "/docs/config/environments/gpu",
                 // "/docs/config/examples/c",
                 // "/docs/config/examples/rust",
                 // "/docs/config/examples/go",
