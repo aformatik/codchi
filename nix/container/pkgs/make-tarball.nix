@@ -48,16 +48,14 @@ let
       # Copy relative symlinks as is
       for f in $rel_links; do
         mkdir -p "$(dirname "$f")"
-        [ -e "$f" ] && rm -f "$f"
-        cp -af "$pkg/$f" "$f"
+        cp -af "$pkg/$f" "$f" || true # file might already exist
         echo "$f" >> .files
       done
 
       # Copy files and derefenrence absolute symlinks as is
       for f in $files; do
         mkdir -p "$(dirname "$f")"
-        [ -e "$f" ] && rm -f "$f"
-        cp -afL "$pkg/$f" "$f"
+        cp -afL "$pkg/$f" "$f" || true # file might already exist
         echo "$f" >> .files
       done
     done

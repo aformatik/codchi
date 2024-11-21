@@ -8,7 +8,7 @@ use std::{
 pub const APP_NAME: &str = "codchi";
 
 pub static GIT_BRANCH: &str = env!("CODCHI_GIT_BRANCH");
-pub static CODCHI_FLAKE_URL: &str = concat!("github:aformatik/codchi/", env!("CODCHI_GIT_BRANCH"));
+pub static CODCHI_FLAKE_URL: &str = concat!("github:aformatik/codchi/", env!("CODCHI_GIT_COMMIT"));
 
 pub const CONTAINER_STORE_NAME: &str = "codchistore";
 

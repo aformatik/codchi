@@ -7,6 +7,7 @@ in
     // { default = true; };
 
   config = mkIf config.codchi.enableRecommendedConfig {
+    codchi.keyring.enable = true;
     environment.systemPackages = with pkgs; [
       vim
       git

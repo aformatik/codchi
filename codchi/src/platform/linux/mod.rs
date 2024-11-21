@@ -287,11 +287,43 @@ tail -f "{log_file}"
     }
 
     fn create_exec_cmd(&self, cmd: &[&str]) -> super::LinuxCommandBuilder {
-        let args = [&[consts::user::DEFAULT_NAME], cmd].concat();
-        let cmd = self.cmd().raw("su", &args);
+        // let args = [&[consts::user::DEFAULT_NAME], cmd].concat();
+        let cmd = if cmd.is_empty() {
+            self.cmd().raw(
+                "machinectl",
+                &[
+                    &[
+                        "shell",
+                        "-q",
+                        "-E",
+                        "DISPLAY",
+                        "-E",
+                        "XAUTHORITY",
+                        &format!("{}@", consts::user::DEFAULT_NAME),
+                    ],
+                    cmd,
+                ]
+                .concat(),
+            )
+        } else {
+            self.cmd().raw(
+                "machinectl",
+                &[
+                    "shell",
+                    "-q",
+                    "-E",
+                    "DISPLAY",
+                    "-E",
+                    "XAUTHORITY",
+                    &format!("{}@", consts::user::DEFAULT_NAME),
+                    "/bin/bash",
+                    "-c",
+                    &cmd.join(" "),
+                ],
+            )
+        };
 
-        cmd.with_cwd(consts::user::DEFAULT_HOME.clone())
-            .with_user(LinuxUser::Root)
+        cmd.with_user(LinuxUser::Root)
     }
 }
 
