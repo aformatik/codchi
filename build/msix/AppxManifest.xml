@@ -51,7 +51,14 @@
             <uap5:ExecutionAlias Alias="codchi.exe" />
           </uap5:AppExecutionAlias>
         </uap5:Extension>
-        <desktop:Extension Category="windows.startupTask" Executable="codchi.exe" EntryPoint="Windows.FullTrustApplication">
+      </Extensions>
+    </Application>
+    <Application Id="Codchi.Gui" Executable="codchiw.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="Codchiw" Description="Codchi's launcher for GUI apps" 
+			Square150x150Logo="Assets\favicon150.png"  Square44x44Logo="Assets\favicon44.png" 
+			BackgroundColor="transparent" AppListEntry="none"/>
+      <Extensions>
+        <desktop:Extension Category="windows.startupTask" Executable="codchiw.exe" EntryPoint="Windows.FullTrustApplication">
             <desktop:StartupTask TaskId="codchi-tray" Enabled="true" DisplayName="Codchi Tray Icon" />
         </desktop:Extension>
       </Extensions>

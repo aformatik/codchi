@@ -24,6 +24,7 @@
           (self: _: {
             codchi = self.callPackage ./codchi { inherit (inputs) self; platform = "linux"; };
             codchi-windows = self.callPackage ./codchi { inherit (inputs) self; platform = "win"; };
+            codchiw-windows = self.callPackage ./codchiw { inherit (inputs) self; platform = "win"; };
             codchi-utils = self.callPackage ./utils { };
 
             mkContainer = type: driver: (import ./nix/container
@@ -89,6 +90,7 @@
             inherit (pkgs) store-lxd store-wsl machine-lxd machine-wsl codchi-utils;
             default = pkgs.codchi;
             windows = pkgs.codchi-windows;
+            inherit (pkgs) codchiw-windows;
             # editor = pkgs.nixvim.makeNixvim (import ./editor.nix);
           };
 

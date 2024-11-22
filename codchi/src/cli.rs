@@ -22,9 +22,6 @@ pub static DEBUG: LazyLock<bool> = LazyLock::new(|| {
         .unwrap()
         >= Level::Debug
 });
-#[cfg(target_os = "windows")]
-pub static TERMINAL: LazyLock<bool> =
-    LazyLock::new(|| CLI_ARGS.get().and_then(|cli| cli.terminal) != Some(false));
 
 type DefaultLogLevel = InfoLevel;
 
@@ -80,11 +77,6 @@ pub struct Cli {
     /// Produce output in JSON format, suitable for consumption by another program.
     #[arg(long, global = true)]
     pub json: bool,
-
-    /// Hide or show console window on Windows. Used when launching GUI apps via shortcuts.
-    #[cfg(target_os = "windows")]
-    #[arg(long, hide = true, default_value = "true")]
-    pub terminal: Option<bool>,
 
     #[command(subcommand)]
     pub command: Option<Cmd>,

@@ -31,6 +31,10 @@ impl Host for HostImpl {
             .cleanup_and_get()?;
 
         let codchi_exe = env::current_exe()?;
+        let codchiw_exe = codchi_exe
+            .parent()
+            .with_context(|| format!("Missing parent of {codchi_exe:?}"))?
+            .join("codchiw.exe");
 
         for DesktopEntry {
             app_name,
@@ -40,16 +44,17 @@ impl Host for HostImpl {
             is_terminal,
         } in apps
         {
-            let mut lnk = ShellLink::new(codchi_exe.clone())?;
+            let mut lnk = ShellLink::new(if *is_terminal {
+                codchi_exe.clone()
+            } else {
+                codchiw_exe.clone()
+            })?;
             if let Some(ico_path) = icon {
                 let target = ico_folder.join(format!("{app_name}.ico"));
                 fs::copy(ico_path, &target)?;
                 lnk.set_icon_location(Some(target.to_string_lossy().to_string()));
             }
-            // lnk.set_name(Some(name.clone()));
-            lnk.set_arguments(Some(format!(
-                "--terminal {is_terminal} exec {machine_name} {exec}"
-            )));
+            lnk.set_arguments(Some(format!("exec {machine_name} {exec}")));
             lnk.set_working_dir(
                 get_known_folder_path(KnownFolder::Profile)
                     .map(|p| p.to_string_lossy().to_string()),

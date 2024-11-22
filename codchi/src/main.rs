@@ -34,30 +34,8 @@ fn main() -> anyhow::Result<()> {
 
     logging::init(cli.verbose.log_level_filter())?;
 
-    #[cfg(target_os = "windows")]
-    {
-        // https://github.com/rust-lang/cargo/issues/1721
-        use util::dbg_duration;
-        use windows::Win32::{
-            System::Console::GetConsoleWindow,
-            UI::WindowsAndMessaging::{self, ShowWindow},
-        };
-        if cli.terminal == Some(false) {
-            dbg_duration("hide console", || {
-                let window = unsafe { GetConsoleWindow() };
-                if !window.0.is_null() {
-                    if let Err(err) =
-                        unsafe { ShowWindow(window, WindowsAndMessaging::SW_HIDE).ok() }
-                    {
-                        log::error!("Failed to hide console window. Reason: {err}");
-                    }
-                    println!();
-                }
-            });
-        }
-    }
-
     log::trace!("Started codchi with args: {:?}", cli);
+
     // preload config
     let cfg = CodchiConfig::get();
 
