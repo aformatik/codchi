@@ -30,7 +30,8 @@
 
 let
   createFiles = writeShellScriptBin "create-files" ''
-    set -euo pipefail
+    set -u
+    # set -euo pipefail
 
     if [ ! -e .files ]; then
       touch .files

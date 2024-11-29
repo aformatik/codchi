@@ -29,6 +29,10 @@
     - [ ] (Custom certs auto adding)
         - => how to handle inside code machines?
     - [ ] (Linux Wayland support)
+    - [ ] Shortcuts
+        - Config option
+        - tray icon
+        - ip kopieren
 
 
 - open questions:

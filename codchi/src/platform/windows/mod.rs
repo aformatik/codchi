@@ -95,6 +95,7 @@ impl Store for StoreImpl {
                 store
                     .cmd()
                     .run("/sbin/init", &[])
+                    .with_cwd(LinuxPath("/".to_string()))
                     .output_ok_streaming(channel().1, |line| {
                         log_progress("store_init", Level::Debug, &line)
                     })?;
