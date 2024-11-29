@@ -1,16 +1,22 @@
 {
-  "name": "codchi-docs",
-  "version": "0.0.0",
+  "name": "docus-starter",
+  "version": "0.1.0",
+  "private": true,
   "scripts": {
-    "dev": "rspress dev",
-    "build": "rspress build",
-    "preview": "rspress preview"
+    "dev": "nuxi dev",
+    "build": "nuxi build",
+    "generate": "nuxi generate",
+    "preview": "nuxi preview",
+    "lint": "eslint .",
+    "ghpages": "nuxt build --preset github_pages"
   },
   "devDependencies": {
-    "@mdx-js/language-server": "^0.4.10",
-    "@rspress/plugin-shiki": "^1.30.0",
-    "rspress": "^1.30.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.6.2"
+    "@nuxt-themes/docus": "latest",
+    "@nuxt/devtools": "^1.6.0",
+    "@nuxt/eslint-config": "^0.6.1",
+    "@nuxtjs/plausible": "^1.0.3",
+    "@types/node": "^22.9.0",
+    "eslint": "^9.14.0",
+    "nuxt": "^3.14.159"
   }
 }

@@ -56,18 +56,22 @@
         in
         pkgs.buildNpmPackage {
           pname = "codchi-docs";
-          version = "0.0.0";
+          version = "0.1.0";
           src = ./.;
-          npmDepsHash = "sha256-fj1CeWOap8bKt+S5YrNbi8c04Pa14LUAtvRtn6RZjUg=";
-          preBuild = ''
-            cp -f ${optionsDoc.optionsCommonMark} ./src/docs/options.md
+          npmDepsHash = "sha256-YA5eGyHTEDy/qpDqMtnFQ/NMDpFL6sGqAC7p8mb+Uic=";
+          buildPhase = ''
+            cp -f ${optionsDoc.optionsCommonMark} "./content/3.config/99.Codchi specific NixOS Options.md"
 
             # remove symlink (used during development)
-            rm  ./src/docs/usage
-            cp -r ${super.packages.${system}.default.docs}/usage/codchi ./src/docs/usage
+            ${pkgs.rsync}/bin/rsync -a ${super.packages.${system}.default.docs}/usage/codchi/ ./content/2.usage/
+
+            export NUXT_TELEMETRY_DISABLED=1
+
+            npm run generate
           '';
+          npmBuildScript = "ghpages";
           installPhase = ''
-            mv doc_build $out
+            mv .output/public $out
           '';
         };
 

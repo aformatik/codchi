@@ -210,6 +210,7 @@ in
       in {
         runtimePackages = [ program ];
         store.init.files = /* bash */ ''
+          cd /
           ${program.meta.mainProgram}
         '';
       }
