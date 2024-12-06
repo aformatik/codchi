@@ -1,13 +1,10 @@
 export default defineNuxtConfig({
     // https://github.com/nuxt-themes/docus
-    router: {
-        base: '/',
-    },
     extends: ['@nuxt-themes/docus'],
     devtools: { enabled: true },
     content: {
         highlight: {
-            preload: ["nix", "toml"],
+            preload: ["nix", "toml", "ps1"],
         },
     },
 
@@ -16,6 +13,6 @@ export default defineNuxtConfig({
         // https://github.com/nuxt-modules/plausible
         // '@nuxtjs/plausible'
     ],
-    ssr: true,
+    // ssr: true,
     compatibilityDate: '2024-10-24'
 })

@@ -15,25 +15,23 @@ Codchi is a tool that manages your project's development environment in a reprod
 
 ## Getting Started
 
-Read [What is Codchi?](https://codchi.dev/docs/start/intro.html) for an introduction to Codchi, or directly go to [Installation](https://codchi.dev/docs/start/installation.html).
+Read [What is Codchi?](https://codchi.dev/introduction/what-is-codchi) for an introduction to Codchi, or directly go to [Installation](https://codchi.dev/introduction/installation).
 
 ## Contributing
 
-Make sure to read [Internals](https://codchi.dev/docs/contrib/internals.html) to understand how Codchi works under the hood.
+Make sure to read [Internals](https://codchi.dev/contrib/internals) to understand how Codchi works under the hood.
 
 ## Support
 
-Codchi is a fully open-source project building on open foundations like NixOS modules. There is no vendor lock-in or open-core model. Codchi is funded through its use at aformatik as well as through professional support, training, and consulting services.
+Codchi is a fully open source project built on open foundations such as NixOS modules. We actively avoid vendor lock-in. Codchi is financed by its use at aformatik as well as by professional support, training and consulting services.
 
 ### Community Support
 
-For community support, we encourage users to engage through our GitHub page:
-
-- **Feature Requests & Issues**: Report bugs, suggest new features, or ask questions via [GitHub Issues](https://github.com/aformatik/codchi/issues).
+Report bugs, suggest new features, or ask questions via [GitHub Issues](https://github.com/aformatik/codchi/issues).
 
 ### Professional Support
 
-For professional support, please contact [aformatik](https://aformatik.de/kontakt):
+For professional support, please contact [aformatik](https://www.aformatik.de/kontakt):
 
 - **Feature Requests & Issues**: We offer dedicated assistance for feature requests, bug fixes, and troubleshooting.
 - **Training and Consulting**: Need help building a tailored *code machine* for your organization? We provide specialized training and consulting services to help you leverage Codchi to its full potential in your environment.

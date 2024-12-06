@@ -1,12 +1,12 @@
 # Internals
 
-This page describes the internals of Codchi. For an overview of what Codchi is read [What is Codchi?](..//start/intro.md).
+This page describes the internals of Codchi. For an overview of what Codchi is read [What is Codchi?](../1.introduction/0.what-is-codchi.md)
 
 ## Overview
 
 Technically Codchi is just a "driver" for any NixOS module, such as:
 ```nix
-{
+{ 
 }
 ```
 That is just an empty NixOS module. To build this into a bootable machine without Codchi, you need to provide the hardware configuration (e.g. file system layout, boot loader, kernel, kernel module & options, desktop environment, ...). This can vary a lot from machine to machine, although virtual machines alleviate some of this.
@@ -18,23 +18,22 @@ codchi exec empty-machine -- uname -a
 > Linux nixos 6.6.32 #1-NixOS SMP PREEMPT_DYNAMIC Sat May 25 14:22:56 UTC 2024 x86_64 GNU/Linux
 ```
 
-This works because Codchi provides the hardware configuration, the drivers (i.e. WSL, LXD and so on), as well as host integration such as GUI and sound support, file system sharing between code machine and host, and much more:
+This works because Codchi provides the hardware configuration, the drivers (i.e. WSL, LXD and so on), as well as host integration such as GUI and sound support, file system sharing between code machine and host, and much more.
 
-![Codchi architecture diagram](/architecture.png)
-
-The goal is to provide an easy to use NixOS driver for different platforms, where everything hardware related just works.
+The goal is to provide an easy to use NixOS driver for different platforms (currently Windows & Linux), where everything hardware related just works.
 
 
 
 ## Capabilities
 
-These are the capabilities provided by Codchi. Every new driver must at least fully implement the "must" section.
+These are the capabilities provided by Codchi. Every new driver must at least fully implement the "must" items.
 
 
 
 | Category         | Capability                                                                                                                                                                                                                              | Must / Should  | Windows + WSL  | Linux + LXD                                              |
 | -------------    | --------------                                                                                                                                                                                                                          | -------------- | -------------- | --------------                                           |
 | Architecture     | Each code machine on a host uses a shared store accessible via `nix-daemon`                                                                                                                                                             | Must           | ✅             | ✅                                                       |
+| Architecture     | The file system of each code machine on a host can be accessed by the store for local NixOS configuration                                                                                                                               | Must           | ✅             | ✅                                                       |
 | Run full NixOS   | SystemD working properly                                                                                                                                                                                                                | Must           | ✅             | ✅                                                       |
 | Run full NixOS   | Proper login shell, i.e. `codchi exec` creates a proper login shell with `$DISPLAY` set.  This is essential for the environment variables to be set correctly and for everything to start up correctly, including XDG autostart entries | Must           | ✅             | ❔                                                       |
 | Host Integration | GUI & Sound: `codchi exec <MACHINE_NAME> -- nix run nixpkgs#xorg.xeyes` must open xeyes on the host's desktop. X11 and wayland apps (with sound) must work.                                                                             | Must           | ✅             | ❔                                                       |
@@ -54,189 +53,92 @@ These are the capabilities provided by Codchi. Every new driver must at least fu
 - 📝 = Planned
 - ❌ = Not implemented
 
+
 ## Drivers
+
+A Codchi driver has three parts:
+
+1. **The host driver:** This is a part of the Codchi executable that runs natively on the host and interfaces between generic code, the operating system and the virtualization software. Codchi's configuration and machine data files also reside on the host and must be shared with `codchistore` and each code machine. Repository: `codchi`, `codchiw`
+2. **The Store Driver:** The `codchistore` is a minimal container in which the shared store resides and machines are built. This is where `nix-daemon` runs. `codchistore` must share the `/nix` directory with each code machine via a bind mount. Repository: `nix/container/store`
+3. **The Machine Driver:** The Codchi machine driver is just a NixOS module that acts as a bridge between a hardware agnostic NixOS module and the host's virtualization software (Windows: WSL, Linux: LXD). It must make the file system of the code machine available to `codchistore` in order to allow local NixOS configuration. The WSL part is heavily inspired by [NixOS-WSL](https://github.com/nix-community/NixOS-WSL). Repository: `nix/nixos/driver`
+
+::alert{type="info"}
+
+**Note**
+
+<br>
+<br>
+
+One thing to note is that since a code machine doesn't have its own store, it can only run if `codchistore` is also running, and should therefore only be started by Codchi.
+
+::
 
 
 ### WSL
 
+- **SystemD:** WSL natively supports SystemD.
+- **GUI:** Windows natively supports GUI applications within WSL with WSLg using a mixture of Wayland and RDP. Unfortunately, because of the latter, this doesn't really provide a native experience for Linux GUI applications. Therefore, by default, [VcXsrv](https://github.com/marchaesen/vcxsrv), a native Windows X server, is included and enabled in codchi. It can be disabled in [configuration](../1.introduction/3.config.md).
+- **Sound:** WSLg provides a PulseAudio server by default which works well enough.
+- **File sharing:** Files are shared accross WSL instances via bind mounts in `/mnt/wsl/codchi`.
+- **Environment variables, secrets:** Shared via `$env:WSLENV` and a file which is written by the host driver to `\\wsl$\codchi-*\...`.
+- **Shortcuts:** Although WSL creates shortcuts itself, they only work if the code machine is already running. Therefore they are disabled and rather created by codchi itself so we can ensure that `codchistore` is running.
+- **Terminal integration:** <https://learn.microsoft.com/en-us/windows/terminal/json-fragment-extensions>
+- **GPU:** WSL provides access to the GPU installed on the host via dynamic libraries and executables. Since a code machine is a NixOS system some LD hacks are neccessary.
+- **Host Integration:** The default applications inside each code machine are configured such that files or webpages open in the default Windows browser
+
+
+::alert{type="warning"}
+
+**Issues with WSL**
+
+<br>
+<br>
+
+In the Windows tradition, WSL can sometimes fail for no apparent reason. For example, a Codchi command might fail, only to work when the same command is issued again. More work is needed in this area to catch all WSL hickups.
+
+::
+
 ### LXD
+
+- **SystemD:** LXD doesn't care about the init system.
+- **GUI:** X11 and wayland sockets are shared via bind mounts. Also `.Xauthority` is copied into each machine.
+- **Sound:** PulseAudio / PipeWire sockets are shared.
+- **File sharing:** All files reside on the host and are bind-mounted into `codchistore` and each machine.
+- **Environment variables, secrets:** Shared via `lxc exec --env` and a file which is copied into the machine.
+- **Shortcuts:** Desktop entries and menus are generated in the corresponding XDG directories.
 
 ### VM Export
 
+::alert{type="info"}
+
+**Planned**
+
+<br>
+<br>
+
+Integration with [nixos-generators](https://github.com/nix-community/nixos-generators) is planned to allow exporting a code machine to any / some VM format(s).
+
+::
+
+## Codchi Modules
+
+Codchi also provides its own set of [NixOS Options](../3.config/99.Codchi specific NixOS Options.md) in order to provide
+- Codchi-specific options (`codchi.secrets`, `codchi.welcome`)
+- options to easy the creation of a development environment (`codchi.enableRecommendedConfig`, `codchi.docker`).
+
+Repository: `nix/nixos/modules`
+
 ## Guidelines
 
-- reliable & reproducible
-- fast
-- easy to use
-- Building on "standards" (NixOS modules)
+These are the general design and contribution guidelines for Codchi. The goal is to make Codchi / NixOS easy to use and enjoyable while reducing the maintanence burden.
 
+- **Reliable & Reproducible:** The native Codchi executable, `codchistore` and Codchi's NixOS configuration must be reliable. Quality of life features such as secrets must not affect the reproducibility of NixOS accross different hosts.
+- **Fast**
+- **Easy to Use:** 
+    - Features should be kept to a minimum.
+    - Codchi should feel familiar (`git clone`, `docker exec`).
+- **Building on Standards (NixOS modules):** No custom configuration format / vendor lock-in.
+- **Simplicity:** 
+    - Fewer but better features.
+    - Simple design without a central Codchi-daemon.
 
-<!--
-Codchi = driver
-    - 1. OS => WSL, LXD - Linux
-        - 
-        - Nix store sharing
-    - 2. NixOS
-
-Code / design guidelines
-    - Easy to use
-    - Simplicity
-        - no daemon neccessary
-    - Performant
-    - plain NixOS
-    - No vendor lockin
-
-
-
-- Testing
-
-## Codchi Drivers
-
-### Responsibilities
-
-#### Nix
-
-- A Running nix-daemon (`/bin/ctrl-serve`)
-    - [X] WSL
-    - [ ] LXD
-
-- Mounts per code machine
-    - Needed directories
-        - /nix/store ro
-        - /nix/var/nix/daemon-socket rw
-            - nix-daemon does builds, gc, ...
-        - /nix/var/nix/profiles/per-instance/&lt;NAME> -> /nix/var/nix/profiles rw
-            - needed for /run/current-system & gc
-        - /nix/var/nix/db ro
-            - needed for gc
-        - ln /nix/var/nix/profiles /nix/var/nix/gcroots/
-            - needed for gc
-    - [X] WSL
-        - [X] codchi-controller: mount /nix in /mnt/wsl/nix
-        - [X] code machine: do all mounts from /mnt/wsl/nix pre systemd
-    - [X] LXD: lxd devices
-
-- Code machine installation
-    - Controller must install `config.system.build.toplevel` per code machine as a profile: `nix-env -p "/nix/var/nix/profiles/per-instance/$NAME/system" --set $(cat $DRV/system-store-path)`. This adds gc roots and could allow rollbacks in the future
-    - [ ] All: `nix run github:aformatik/codchi#ctrl-install`
-    - [ ] WSL: `wsl --import`
-    - [ ] LXD: `lxc image import && lxc init && lxc config {devices, security.nesting} && lxd image delete`
-
-- Reverse instance mounts
-    - [ ] WSL
-        - in instance pre systemd start OR
-        - on `codchi rebuild` with `/bin/mount` (to avoid systemd start)
-        - `mount <instance dir> /mnt/wsl/codchi-instances/$NAME`
-    - [ ] LXD full: root device as bind mount from controller accessible dir
-
-
-## Codchifile
-
-Idea: A single source of truth for a codchi module which exist in a repository.
-This allows the `codchi add` command to only take the url to the repository and
-figure everything out from there.
-
-### Implementation
-
-- Nix Flake with nixosModules.NAME / codchiModules.NAME
-    - Plain Old NixOS Module inside flake.nix
-    - Pros:
-        - Compatible with Nix(OS)
-        - Flake: Required for pinning nixpkgs
-    - Cons: 
-        - Tooling not obvious from filename: "flake" != "codchi"
-        - Requires manual updating of flake.lock
-            => Maybe add `codchi lock update MACHINE MODULE`, autocommit with saved credentials
-- Goals:
-    - Dont invent new file format
-        => Move Codchi config into NixOS modules (e.g. secrets, capabilities)
-    - provide `codchi.addNixpkgs`, `codchi.injectInputs` as special arg to allow extending
-        => User may provide custom flake inputs directly inside his
-           flake.nix which doesn't need additional magic.
-
-### `codchi init NAME MODULE_URL`
-
-- Alternative: `codchi init --empty`
-
-### `codchi add NAME MODULE_URL`
-
-
-## Code Machines
-
-### Concept
-
-A code machines is an instance or container inside codchi on a particular
-computer. They consist of zero to `n` codchi modules (plain NixOS modules).
-Also there is the hidden, internal codchi module itself which configures the
-driver (LXD, WSL, ...). In previous version there were also some non
-reproducible option (like the local name of the code machine) which are set
-dynamically now (TBD).
-
-### Intended Usage
-
-1. The development environment for a software project is defined in a codchi
-   module inside the project repository. Optionally nixpkgs is locked to a
-   fixed commit / revision.
-2. Each developer creates a code machine with this module on his local machine.
-3. Optionally, each developer can include a personal module with for example
-   his git config / editor setup. This can be shared between different
-   projects.
-
-## Nixpkgs
-
-Every code machine needs a particular version of nixpkgs. There are two
-possibilities to choose from:
-
-1. A code machine is just a NixOS with some preconfigured, platform specific
-   NixOS options and therefore needs nixpkgs anyway. The version of the builtin
-   nixpkgs is also needed by the codchi controller and therefore already
-   present when codchi is installed, so reusing this nixpkgs decreases
-   duplication. But there is one catch: When using the local nixpkgs, exact
-   reproducibility isn't guaranteed anymore because even if multiple persons
-   use the exactly same codchi modules, their codchi version might differ.
-2. Pin nixpkgs of a code machine to that of a codchi module. This guarantees
-   exact reproducibility when using the same codchi module revision across
-   different machines but increases duplication and installation time.
-
-### Secrets
-
-There are some things which don't belong into a NixOS Module since they would
-land in the world readable store.
-
-#### Host secrets (TBD)
-
-These differ from user to user and are loaded dynamically. Also they're needed
-by both the codchi controller and its code machines. TODO: Should they
-atomatically be loaded in each code machine or only when requested via the
-NixOS Module?
-
-Examples are: 
-    - CA Certificates
-    - SSH Keys
-    - Authentication Tokens
-
-
-#### User defined secrets
-
-User defined secrets are specific to a codchi module and can be requested by
-setting `codchi.secrets.<name>`. When an user adds a module with a secret, he
-will be prompted to add it interactively.
-
-TODO: Possible Implemtations:
-    - ENV
-    - File
-
-#### Capabilities (TBD)
-
-Capabilities already exist in Nix: `nix.settings.system-features`. A codchi
-module can request them by setting `codchi.requiredCapabilities`. When an user
-adds a module, codchi will check if the neccessary system drivers are
-installed.
-
-Examples for capabilities:
-    - GPU / Cuda
-    - USB?
-    - SSH Agent?
-    - Sound / Video?
-
-    -->

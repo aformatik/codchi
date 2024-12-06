@@ -7,7 +7,7 @@ Try it out with `codchi init <NAME> https://github.com/aformatik/codchi nixosMod
 
 ## General, Java & Kotlin
 
-IntelliJ wants to download JDKs automatically, but they don't work on NixOS. Therefore you need to enable `programs.java` which sets `$JAVA_HOME` to the default JDK (OpenJDK) which IntelliJ can use. If multiple JDKs are needed, use [`programs.java.packages`](/docs/options.html#programsjavapackages) (an option added by Codchi) which installes them in `~/.jdks`.
+IntelliJ wants to download JDKs automatically, but they don't work on NixOS. Therefore you need to enable `programs.java` which sets `$JAVA_HOME` to the default JDK (OpenJDK) which IntelliJ can use. If multiple JDKs are needed, use [`programs.java.packages`](../99.Codchi specific NixOS Options.md#programsjavapackages) (an option added by Codchi) which installes them in `~/.jdks`.
 
 ```nix
 { pkgs, ... }: {

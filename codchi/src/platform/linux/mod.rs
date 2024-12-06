@@ -33,7 +33,7 @@ impl Store for StoreImpl {
     fn start_or_init_container() -> Result<Self> {
         let status = lxd::container::get_platform_status(consts::CONTAINER_STORE_NAME).context(
             "Failed to run LXD. It seems like LXD is not installed or set up correctly! \
-Please see <https://codchi.dev/docs/start/installation.html#linux> for setup instructions!",
+Please see <https://codchi.dev/introduction/installation#linux> for setup instructions!",
         )?;
         trace!("LXD store container status: {status:#?}");
 

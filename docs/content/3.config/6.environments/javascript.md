@@ -37,7 +37,7 @@ Try it out with `codchi init <NAME> https://github.com/aformatik/codchi nixosMod
     # pkgs.nodePackages.prettier
 
     # Editor:
-    # See <https://codchi.dev/docs/config/editor.html> for more info
+    # See <https://codchi.dev/config/editor> for more info
     pkgs.vscodium
     # Or, if you have problems with manually installed plugins:
     # pkgs.vscodium-fhs

@@ -16,7 +16,7 @@ pub enum Error {
     #[error("SSL peer certificate or SSH remote key was not OK.")]
     InvalidRemoteSSLOrSSH,
 
-    #[error("Couldn't access repository. If the repository is private you need to provide the correct credentials. If it's a local repository, make sure it is checked out locally in the machine at the provided path. See <https://codchi.dev/docs/start/usage.html#creating-a-machine> on how to access private repositories.")]
+    #[error("Couldn't access repository. If the repository is private you need to provide the correct credentials. If it's a local repository, make sure it is checked out locally in the machine at the provided path. See `codchi init --help` on how to access private repositories.")]
     InvalidURLOrCredentials,
 
     #[error("There is a file missing (maybe its wasn't added to git): {0}")]

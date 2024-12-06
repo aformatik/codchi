@@ -44,7 +44,7 @@ pub fn get_api() -> Result<&'static Library> {
     static WSLAPI: OnceLock<Library> = OnceLock::new();
     WSLAPI.get_or_try_init(Library::new).context(
         "Failed to load wslapi.dll. This usually means the Windows feature 'Windows Subsystem for \
-        Linux' is not active. Please see <https://codchi.dev/docs/start/installation.html#prerequisites> \
+        Linux' is not active. Please see <https://codchi.dev/introduction/installation#prerequisites> \
         for the installation instructions.",
     )
 }
@@ -67,7 +67,7 @@ pub fn get_wsl_version() -> Result<String> {
         .filter(|version| Version::from(version).is_some())
         .ok_or(anyhow!(
             "Failed to parse WSL's version from output '{version_line:?}'. \
-            Please see <https://codchi.dev/docs/start/installation.html#prerequisites> \
+            Please see <https://codchi.dev/introduction/installation#prerequisites> \
             for the installation instructions."
         ))
 }
@@ -200,7 +200,7 @@ including all running programs. Is this OK?",
             log::warn!(
                 "WSL distro {name} was NOT set to sparse. \
 You can do this manually with `wsl.exe --manage {name} --set-sparse true`. \
-See <https://codchi.dev/docs/start/usage.html#large-wsl-distributions> for more information."
+See <https://codchi.dev/usage/gc#large-wsl-distributions> for more information."
             );
             return Ok(());
         }
