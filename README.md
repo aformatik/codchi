@@ -15,11 +15,11 @@ Codchi is a tool that manages your project's development environment in a reprod
 
 ## Getting Started
 
-Read [What is Codchi?](https://codchi.dev/docs/start/intro.html) for an introduction to Codchi, or directly go to [Installation](https://codchi.dev/docs/start/installation.html).
+Read [What is Codchi?](https://codchi.dev/introduction/what-is-codchi) for an introduction to Codchi, or directly go to [Installation](https://codchi.dev/introduction/installation).
 
 ## Contributing
 
-Make sure to read [Internals](https://codchi.dev/docs/contrib/internals.html) to understand how Codchi works under the hood.
+Make sure to read [Internals](https://codchi.dev/contrib/internals) to understand how Codchi works under the hood.
 
 ## Support
 

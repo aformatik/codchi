@@ -404,7 +404,7 @@ pub fn fetch_modules(
             } else if Driver::store().cmd().has_nixpkgs_input(&nix_url)? {
                 log::warn!(
                     "Using nixpkgs from '{}'! You may override this with '--use-nixpkgs'. See \
-                    <https://codchi.dev/docs/start/usage.html#which-nixpkgs-should-i-use> for \
+                    <https://codchi.dev/usage/init#which-nixpkgs-should-i-use> for \
                     more information.",
                     flake_url.pretty_print()
                 );
@@ -537,7 +537,7 @@ fn inquire_module_url(
                 bail!(
                     "Local paths can only be used *after* the code machine was created and the \
                       remote repository was checked out locally. For further information see \
-                      <https://codchi.dev/docs/start/usage.html#local-configuration>."
+                      <https://codchi.dev/usage/module/module#local-configuration>."
                 )
             }
             let home = &consts::user::DEFAULT_HOME.0;

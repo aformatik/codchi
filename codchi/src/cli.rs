@@ -36,9 +36,9 @@ type DefaultLogLevel = InfoLevel;
     about = "Codchi is a tool that manages your project's development environment in a reproducible
     and easy-to-use way. Setting up a development environment should be as easy as a `git clone`!
 
-- [What is Codchi?](https://codchi.dev/docs/start/intro)
-- [Configuring Codchi](https://codchi.dev/docs/start/config)
-- [Codchi Module Configuration](https://codchi.dev/docs/config/overview)
+- [What is Codchi?](https://codchi.dev/introduction/what-is-codchi)
+- [Configuring Codchi](https://codchi.dev/introduction/config)
+- [Codchi Module Configuration](https://codchi.dev/config/overview)
 
 The default subcommand is `codchi status`.", 
     after_long_help = r#"
@@ -436,9 +436,9 @@ codchi gc --all --delete-old
         long_about = r#"
 See the following docs on how to register the completions with your shell:
 
-- [Windows](https://codchi.dev/docs/start/installation.html#shell-completions)
-- [Linux](https://codchi.dev/docs/start/installation.html#shell-completions-1)
-- [NixOS](https://codchi.dev/docs/start/installation.html#shell-completions-2)
+- [Windows](https://codchi.dev/introduction/installation#shell-completions)
+- [Linux](https://codchi.dev/introduction/installation#shell-completions-1)
+- [NixOS](https://codchi.dev/introduction/installation#shell-completions-2)
 "#
     )]
     Completion {

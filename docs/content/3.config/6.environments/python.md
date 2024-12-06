@@ -13,7 +13,7 @@ Try it out with `codchi init <NAME> https://github.com/aformatik/codchi nixosMod
     pkgs.python39Packages.virtualenv
 
     # Editor:
-    # See <https://codchi.dev/docs/config/editor.html> for more info
+    # See <https://codchi.dev/config/editor> for more info
     pkgs.jetbrains.pycharm-community
     # Or VSCode(ium)
     (pkgs.vscode-with-extensions.override {
