@@ -74,12 +74,15 @@
           nixosModules.codchi = { pkgs, ... }: {
             nixpkgs.config.allowUnfree = true;
             environment.systemPackages = self.devShells.${system}.default.nativeBuildInputs ++ [
-              pkgs.vscodium
+              (pkgs.vscode-with-extensions.override {
+                vscode = pkgs.vscodium;
+                vscodeExtensions = with pkgs.vscode-extensions; [
+                  rust-lang.rust-analyzer
+                  jnoortheen.nix-ide
+                  mkhl.direnv
+                ];
+              })
             ];
-            # programs.neovim = {
-            #   enable = true;
-            # package = pkgs.nixvim.makeNixvim (import ./editor.nix);
-            # };
             programs.direnv = {
               enable = true;
               nix-direnv.enable = true;

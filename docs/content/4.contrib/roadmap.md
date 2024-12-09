@@ -1,20 +1,13 @@
 # Roadmap
 
-- Docs
-    - [ ] Architecture
-    - [ ] Landing Page
-        - Demo Video
-
 - Bugs
     - [ ] shortcuts / terminal fragments win
         - update path on every update => autostart codchi tray => run "migration"
 
 - Future
-    - Announcement Post (Discourse, HN?, Product Hunt?)
-    - [ ] GPU
+    - Announcement Post (Discourse, Reddit)
 
 - Features
-    - [ ] codchiw.exe
     - [ ] `codchi status` on windows is slow
         => move wsl status checking / store container starting to scheduled / time based task
     - [ ] `codchi recover` => fs tar export
@@ -33,7 +26,6 @@
         - Config option
         - tray icon
         - ip kopieren
-
 
 - open questions:
     - WSL
