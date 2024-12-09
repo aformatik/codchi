@@ -33,6 +33,9 @@ pub trait MachineDriver: Sized {
     fn delete_container(&self) -> Result<()>;
 
     fn create_exec_cmd(&self, cmd: &[&str]) -> LinuxCommandBuilder;
+
+    /// Export file system of a machine to a tar WITHOUT starting the store or the machine.
+    fn tar(&self, target_file: &std::path::Path) -> Result<()>;
 }
 
 #[derive(Debug, Clone)]
@@ -97,23 +100,30 @@ fi
         };
         Ok(self)
     }
-    pub fn read(config: MachineConfig) -> Result<Self> {
-        Self {
+    pub fn read(config: MachineConfig, update_status: bool) -> Result<Self> {
+        let machine = Self {
             config,
             config_status: ConfigStatus::NotInstalled,
             platform_status: PlatformStatus::NotInstalled,
+        };
+        if update_status {
+            machine.update_status()
+        } else {
+            Ok(machine)
         }
-        .update_status()
     }
 
     /// Returns Err if machine doesn't exist
-    pub fn by_name(name: &str) -> Result<Self> {
+    pub fn by_name(name: &str, update_status: bool) -> Result<Self> {
         let (_, cfg) = MachineConfig::open_existing(name, false)?;
-        Self::read(cfg)
+        Self::read(cfg, update_status)
     }
 
-    pub fn list() -> Result<Vec<Self>> {
-        MachineConfig::list()?.into_iter().map(Self::read).collect()
+    pub fn list(update_status: bool) -> Result<Vec<Self>> {
+        MachineConfig::list()?
+            .into_iter()
+            .map(|cfg| Self::read(cfg, update_status))
+            .collect()
     }
 
     pub fn write_flake(&self) -> Result<()> {

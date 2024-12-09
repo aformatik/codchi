@@ -7,7 +7,7 @@
 
 , codchi
 
-, nixd
+, nil
 , nixpkgs-fmt
 , strace
 , gdb
@@ -50,7 +50,7 @@ mkShell (lib.recursiveUpdate
   inputsFrom = [ codchi ];
 
   packages = [
-    nixd
+    nil
     nixpkgs-fmt
 
     codchi.passthru.rust

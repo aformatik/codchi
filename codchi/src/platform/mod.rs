@@ -19,6 +19,8 @@ use anyhow::Result;
 use platform::HostImpl;
 use std::sync::OnceLock;
 
+pub use platform::store_debug_shell;
+
 pub struct Driver {
     store: StoreImpl,
 }

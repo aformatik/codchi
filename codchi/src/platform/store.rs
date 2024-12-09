@@ -17,6 +17,7 @@ use std::{
     sync::mpsc::channel,
 };
 
+
 /// Internal name of driver module in codchi's NixOS modules
 pub const NIXOS_DRIVER_NAME: &str = platform::NIXOS_DRIVER_NAME;
 
@@ -126,3 +127,4 @@ using 'nix build' or direnv. Still procceed?",
         Ok(host_path)
     }
 }
+

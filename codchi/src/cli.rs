@@ -7,6 +7,7 @@ use git_url_parse::{GitUrl, Scheme};
 use lazy_regex::regex_is_match;
 use log::Level;
 use std::{
+    path::PathBuf,
     str::FromStr,
     sync::{LazyLock, OnceLock},
 };
@@ -450,6 +451,21 @@ See the following docs on how to register the completions with your shell:
     /// Start the codchi tray if not running.
     #[clap(hide = true)]
     Tray {},
+
+    #[clap(about = "Export the file system of a code machine.")]
+    Tar {
+        /// Name of the code machine
+        name: String,
+
+        /// Path to export to.
+        target_file: PathBuf,
+    },
+
+    #[clap(
+        about = "Open a debug shell inside `codchistore` without starting \
+/ requiring any services. Usefull for debugging."
+    )]
+    DebugStore,
 }
 
 mod module {

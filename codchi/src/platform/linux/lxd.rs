@@ -66,6 +66,19 @@ pub mod container {
         Ok(())
     }
 
+    pub fn export(name: &str, target_path: &str) -> Result<()> {
+        let mut cmd = lxc_command(&[
+            "export",
+            "--instance-only",
+            "--compression",
+            "none",
+            name,
+            target_path,
+        ]);
+        cmd.wait_ok()?;
+        Ok(())
+    }
+
     pub fn get_info(name: &str) -> Result<Option<Info>> {
         let info = lxc_command(&["list", "--format", "json"])
             .output_json::<Vec<Info>>()?

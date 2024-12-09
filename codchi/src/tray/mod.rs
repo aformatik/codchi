@@ -41,7 +41,7 @@ impl App {
     fn new() -> Result<Self> {
         Ok(Self {
             config: CodchiConfig::get(),
-            machines: Machine::list()?,
+            machines: Machine::list(true)?,
         })
     }
 }

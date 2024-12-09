@@ -1,10 +1,10 @@
 use super::nix::{self, Activity, ActivityType, LogItem, LogResult};
+use crate::util::store_path_base;
 use console::style;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use log::Level;
 use number_prefix::NumberPrefix;
-use crate::util::store_path_base;
 use std::{borrow::Cow, collections::HashMap, sync::LazyLock, time::Duration};
 use throttle::Throttle;
 

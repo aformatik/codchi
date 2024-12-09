@@ -94,7 +94,7 @@ pub fn add(
     }
     cfg.write(lock)?;
 
-    let machine = Machine::by_name(machine_name)?;
+    let machine = Machine::by_name(machine_name, true)?;
     machine.write_flake()?;
     machine.update_status()
 }
@@ -244,7 +244,7 @@ pub fn set(
     }
     cfg.write(lock)?;
 
-    let machine = Machine::by_name(machine_name)?;
+    let machine = Machine::by_name(machine_name, true)?;
     machine.write_flake()?;
     machine.update_status()
 }
@@ -269,7 +269,7 @@ pub fn delete(machine_name: &str, module_name: &ModuleName) -> Result<Machine> {
     }
     cfg.write(lock)?;
 
-    let machine = Machine::by_name(machine_name)?;
+    let machine = Machine::by_name(machine_name, true)?;
     machine.write_flake()?;
     machine.update_status()
 }

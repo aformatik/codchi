@@ -71,19 +71,9 @@
           inherit lib;
 
           nixosModules.default = import ./nix/nixos;
-          nixosModules.codchi = { pkgs, ... }: {
-            nixpkgs.config.allowUnfree = true;
-            environment.systemPackages = self.devShells.${system}.default.nativeBuildInputs ++ [
-              pkgs.vscodium
-            ];
-            # programs.neovim = {
-            #   enable = true;
-            # package = pkgs.nixvim.makeNixvim (import ./editor.nix);
-            # };
-            programs.direnv = {
-              enable = true;
-              nix-direnv.enable = true;
-            };
+          nixosModules.codchi = {
+            imports = [ ./configuration.nix ];
+            environment.systemPackages = self.devShells.${system}.default.nativeBuildInputs;
           };
 
           packages.${system} = {

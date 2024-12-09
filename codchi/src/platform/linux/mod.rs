@@ -5,14 +5,15 @@ use super::{Driver, LinuxCommandTarget, LinuxUser, NixDriver, Store};
 use crate::{
     cli::DEBUG,
     consts::{self, machine::machine_name, store, user, ToPath},
-    logging::{log_progress, set_progress_status},
+    logging::{log_progress, set_progress_status, with_suspended_progress},
     platform::{
         platform::lxd::container::LxdDevice, CommandExt, Machine, MachineDriver, PlatformStatus,
     },
     util::{with_tmp_file, LinuxPath, PathExt, ResultExt, UtilExt},
 };
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 pub use host::*;
+use inquire::Confirm;
 use log::*;
 use std::{
     collections::HashMap,
@@ -20,6 +21,7 @@ use std::{
     fs::{self, File},
     io::Write,
     path::PathBuf,
+    process::Command,
     sync::mpsc::channel,
     thread,
 };
@@ -124,6 +126,15 @@ Please see <https://codchi.dev/introduction/installation#linux> for setup instru
                 .ok_or(anyhow::anyhow!("Path '{path}' doesn't start with '/nix/'"))?,
         ))
     }
+}
+
+pub fn store_debug_shell() -> anyhow::Result<()> {
+    LinuxCommandDriver {
+        container_name: consts::CONTAINER_STORE_NAME.to_string(),
+    }
+    .run("bash", &[])
+    .exec()?;
+    Ok(())
 }
 
 impl MachineDriver for Machine {
@@ -324,6 +335,101 @@ tail -f "{log_file}"
         };
 
         cmd.with_user(LinuxUser::Root)
+    }
+
+    fn tar(&self, target_file: &std::path::Path) -> Result<()> {
+        fn command_with_privileges(reason: &str, command: &[&str]) -> Result<Command> {
+            let sudo_path = which::which("sudo").ok();
+            let doas_path = which::which("doas").ok();
+
+            let (sudo_name, sudo) = if let Some(path) = sudo_path {
+                ("sudo", path)
+            } else if let Some(path) = doas_path {
+                ("doas", path)
+            } else {
+                bail!(
+                    "Neither sudo nor doas was found on this system. \
+This is needed in order to {reason}."
+                );
+            };
+            log::debug!("Found {sudo_name} at {sudo:?}");
+
+            let message = format!(
+                "Codchi needs to invoke `{}` as root in order to {reason}. Is it okay to use {sudo_name}?",
+                command.join(" ")
+            );
+            let user_confirmed = Confirm::new(&message).with_default(true).prompt()?;
+
+            if user_confirmed {
+                let mut cmd = Command::new(sudo);
+                cmd.args(command);
+                Ok(cmd)
+            } else {
+                bail!("Operation was canceled by the user");
+            }
+        }
+
+        with_tmp_file(&format!("codchi-backup-{}", self.config.name), |tmp_dir| {
+            fs::create_dir_all(tmp_dir)?;
+            let lxc_export = tmp_dir.join("lxc_export.tar").display().to_string();
+            let target_file = target_file.display().to_string();
+            lxd::container::export(
+                &consts::machine::machine_name(&self.config.name),
+                &lxc_export,
+            )?;
+            Command::new("tar")
+                .args(["-C", &tmp_dir.display().to_string(), "-xf", &lxc_export])
+                .wait_ok()?;
+            with_suspended_progress(|| {
+                command_with_privileges(
+                    "export the code machine root file system",
+                    &[
+                        "tar",
+                        "-C",
+                        &tmp_dir
+                            .join("backup/container/rootfs")
+                            .display()
+                            .to_string(),
+                        "-cf",
+                        &target_file,
+                        ".",
+                    ],
+                )?
+                .wait_ok()?;
+
+                // add home dir
+                command_with_privileges(
+                    "export the code machine home directory",
+                    &[
+                        "tar",
+                        "--append",
+                        "-f",
+                        &target_file,
+                        "-C",
+                        &consts::host::DIR_DATA
+                            .join_machine(&self.config.name)
+                            .display()
+                            .to_string(),
+                        "--transform",
+                        "s|^./|./home/codchi/|",
+                        "--owner=1000",
+                        "--group=100",
+                        "--numeric-owner",
+                        ".",
+                    ],
+                )?
+                .wait_ok()?;
+
+                command_with_privileges(
+                    "cleanup temporary files",
+                    &["rm", "-rf", &tmp_dir.display().to_string()],
+                )?
+                .wait_ok()?;
+                Ok(())
+            })
+        })?;
+
+        Ok(())
     }
 }
 

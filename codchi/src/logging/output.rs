@@ -1,8 +1,8 @@
 use std::{fmt::Display, io::stdout};
 
+use crate::config::{MachineModules, MachineStatus, Mod, ModLsOutput, StatusOutput};
 use itertools::Itertools;
 use serde::Serialize;
-use crate::config::{MachineModules, MachineStatus, Mod, ModLsOutput, StatusOutput};
 
 use crate::platform::{ConfigStatus, Machine};
 

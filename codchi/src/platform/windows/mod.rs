@@ -120,6 +120,15 @@ impl Store for StoreImpl {
     }
 }
 
+pub fn store_debug_shell() -> anyhow::Result<()> {
+    LinuxCommandDriver {
+        instance_name: consts::CONTAINER_STORE_NAME.to_string(),
+    }
+    .run("bash", &[])
+    .exec()?;
+    Ok(())
+}
+
 impl MachineDriver for Machine {
     fn cmd(&self) -> impl LinuxCommandTarget {
         LinuxCommandDriver {
@@ -284,6 +293,49 @@ tail -f "{log_file}"
 
         cmd.with_cwd(consts::user::DEFAULT_HOME.clone())
             .with_user(LinuxUser::Default)
+    }
+
+    fn tar(&self, target_file: &std::path::Path) -> Result<()> {
+        let target_absolute = if target_file.is_absolute() {
+            target_file.to_path_buf()
+        } else {
+            env::current_dir()?.join(target_file)
+        };
+        let wsl_path = wsl_command()
+            .args([
+                "-d",
+                &consts::machine::machine_name(&self.config.name),
+                "--system",
+                "--user",
+                "root",
+            ])
+            .args([
+                "wslpath",
+                "-u",
+                &target_absolute.display().to_string().replace("\\", "/"),
+            ])
+            .output_utf8_ok()
+            .map(|path| path.trim().to_owned())
+            .with_context(|| format!("Failed to run 'wslpath' with path {target_absolute:?}."))?;
+        wsl_command()
+            .args([
+                "-d",
+                &consts::machine::machine_name(&self.config.name),
+                "--system",
+                "--user",
+                "root",
+            ])
+            .args([
+                "/mnt/wslg/distro/bin/tar",
+                "-C",
+                "/mnt/wslg/distro",
+                "-cf",
+                &wsl_path,
+                ".",
+            ])
+            .wait_ok()?;
+
+        Ok(())
     }
 }
 

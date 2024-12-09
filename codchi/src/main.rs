@@ -8,8 +8,8 @@ use crate::{
 };
 use clap::{CommandFactory, Parser};
 use config::{git_url::GitUrl, CodchiConfig, MachineConfig};
-use logging::CodchiOutput;
-use platform::{ConfigStatus, Host};
+use logging::{set_progress_status, CodchiOutput};
+use platform::{store_debug_shell, ConfigStatus, Host, MachineDriver};
 use std::{env, process::exit};
 use util::{ResultExt, UtilExt};
 
@@ -27,6 +27,7 @@ fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
+    // process immediate commands
     if let Some(Cmd::Completion { shell }) = &cli.command {
         shell.generate(&mut Cli::command(), &mut std::io::stdout());
         exit(0);
@@ -39,11 +40,25 @@ fn main() -> anyhow::Result<()> {
     // preload config
     let cfg = CodchiConfig::get();
 
-    if !matches!(cli.command, Some(Cmd::Tray {})) && cfg.tray.autostart {
-        Driver::host()
-            .start_tray(false)
-            .trace_err("Failed starting codchi's tray")
-            .ignore();
+    // process commands without the store commands
+    match &cli.command {
+        Some(Cmd::Tray {}) if cfg.tray.autostart => {
+            Driver::host()
+                .start_tray(false)
+                .trace_err("Failed starting codchi's tray")
+                .ignore();
+            exit(0);
+        }
+        Some(Cmd::Tar { name, target_file }) => {
+            progress_scope! {
+                set_progress_status(format!("Exporting files of {name} to {target_file:?}..."));
+                Machine::by_name(name, false)?.tar(target_file)?;
+                log::info!("Success! Exported file system of machine {name} to {target_file:?}");
+            }
+            exit(0);
+        }
+        Some(Cmd::DebugStore) => store_debug_shell()?,
+        _ => {}
     }
 
     CLI_ARGS
@@ -52,8 +67,9 @@ fn main() -> anyhow::Result<()> {
 
     let _ = Driver::store();
 
+    // all other commands
     match &cli.command.unwrap_or(Cmd::Status {}) {
-        Cmd::Status {} => Machine::list()?.print(cli.json),
+        Cmd::Status {} => Machine::list(true)?.print(cli.json),
         Cmd::Init {
             machine_name,
             url,
@@ -99,12 +115,15 @@ fn main() -> anyhow::Result<()> {
                 "Machine '{machine_name}' is ready! Use `codchi exec {machine_name}` to start it."
             );
         }
-        Cmd::Rebuild { no_update, name } => Machine::by_name(name)?.build(*no_update)?,
-        Cmd::Exec { name, cmd } => Machine::by_name(name)?.exec(cmd)?,
+        Cmd::Rebuild { no_update, name } => {
+            Machine::by_name(name, true)?.build(*no_update)?;
+            log::info!("Machine {name} rebuilt successfully!");
+        }
+        Cmd::Exec { name, cmd } => Machine::by_name(name, true)?.exec(cmd)?,
         Cmd::Delete {
             name,
             i_am_really_sure,
-        } => Machine::by_name(name)?.delete(*i_am_really_sure)?,
+        } => Machine::by_name(name, true)?.delete(*i_am_really_sure)?,
         Cmd::Module(cmd) => match cmd {
             cli::ModuleCmd::List { name } => {
                 let json = cli.json;
@@ -157,6 +176,8 @@ fn main() -> anyhow::Result<()> {
         } => Driver::store().gc(delete_old.map(|x| x.unwrap_or_default()), *all, machines)?,
         Cmd::Tray {} => tray::run()?,
         Cmd::Completion { .. } => unreachable!(),
+        Cmd::Tar { .. } => unreachable!(),
+        Cmd::DebugStore => unreachable!(),
     }
     if CodchiConfig::get().tray.autostart {
         Driver::host()
