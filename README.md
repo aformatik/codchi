@@ -31,7 +31,7 @@ Report bugs, suggest new features, or ask questions via [GitHub Issues](https://
 
 ### Professional Support
 
-For professional support, please contact [aformatik](https://www.aformatik.de/kontakt):
+For professional support, please contact [aformatik](https://www.aformatik.de/kontakt) or send an email to <codchi [at] aformatik [dot] de>:
 
 - **Feature Requests & Issues**: We offer dedicated assistance for feature requests, bug fixes, and troubleshooting.
 - **Training and Consulting**: Need help building a tailored *code machine* for your organization? We provide specialized training and consulting services to help you leverage Codchi to its full potential in your environment.

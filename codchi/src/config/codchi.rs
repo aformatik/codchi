@@ -20,7 +20,7 @@ pub struct CodchiConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct VcXsrvConfig {
-    #[serde(default = "def_true")]
+    #[serde(default = "def_false")]
     pub enable: bool,
     #[serde(default = "def_false")]
     pub tray: bool,
@@ -29,7 +29,7 @@ pub struct VcXsrvConfig {
 impl Default for VcXsrvConfig {
     fn default() -> Self {
         Self {
-            enable: true,
+            enable: false,
             tray: false,
         }
     }
@@ -152,7 +152,7 @@ vcxsrv.tray = true
         assert_eq!(
             Ok(CodchiConfig {
                 vcxsrv: VcXsrvConfig {
-                    enable: true,
+                    enable: false,
                     tray: true
                 },
                 ..Default::default()

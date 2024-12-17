@@ -104,9 +104,13 @@ pub trait Host: Sized {
         if let Some(p) = System::new_all()
             .processes_by_name("codchi".as_ref())
             .find(|p| {
+                log::trace!("Found candidate {:?} while searching for {exe:?}", p.cmd());
+                log::trace!("Found {p:?} while searching for {exe:?}");
                 p.exe().is_some_and(|p| p == exe) && p.cmd().get(1).is_some_and(|arg| arg == "tray")
             })
         {
+            
+            log::trace!("Kill running: {kill_running}. Process: {:?}", p.cmd());
             if kill_running {
                 log::debug!("Killing running tray");
                 p.kill();

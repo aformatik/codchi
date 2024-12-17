@@ -72,11 +72,11 @@
     <!-- <DeviceCapability Name="webcam" /> -->
     <!-- <DeviceCapability Name="bluetooth" /> -->
   </Capabilities>
-  <Extensions>
-	<desktop2:Extension Category="windows.firewallRules">
-  	  <desktop2:FirewallRules Executable="VFS\ProgramFilesX64\VcXsrv\codchi_vcxsrv.exe">
-        <desktop2:Rule Direction="in" IPProtocol="TCP" LocalPortMax="6000" LocalPortMin="6000" Profile="all"/>
-  	  </desktop2:FirewallRules>
-	</desktop2:Extension>
-  </Extensions>
+  <!-- <Extensions> -->
+	<!-- <desktop2:Extension Category="windows.firewallRules"> -->
+  <!-- 	  <desktop2:FirewallRules Executable="VFS\ProgramFilesX64\VcXsrv\codchi_vcxsrv.exe"> -->
+  <!--       <desktop2:Rule Direction="in" IPProtocol="TCP" LocalPortMax="6000" LocalPortMin="6000" Profile="all"/> -->
+  <!-- 	  </desktop2:FirewallRules> -->
+	<!-- </desktop2:Extension> -->
+  <!-- </Extensions> -->
 </Package>
