@@ -80,7 +80,7 @@ impl Host for HostImpl {
         let cfg = CodchiConfig::get();
         if cfg.vcxsrv.enable {
             if let Some(p) = System::new_all()
-                .processes_by_name("codchi_vcxsrv.exe".as_ref())
+                .processes_by_name("vcxsrv.exe".as_ref())
                 .next()
             {
                 if kill_running {
@@ -94,7 +94,7 @@ impl Host for HostImpl {
             let vcxsrv_exe = known_folders::get_known_folder_path(KnownFolder::ProgramFilesX64)
                 .expect("Missing FOLDERID_ProgramFilesX64.")
                 .join("VcXsrv")
-                .join("codchi_vcxsrv.exe");
+                .join("vcxsrv.exe");
             vcxsrv_exe
                 .assert_exists()
                 .context("VcXsrv executable not found.")?;

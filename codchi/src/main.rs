@@ -8,9 +8,10 @@ use crate::{
 };
 use clap::{CommandFactory, Parser};
 use config::{git_url::GitUrl, CodchiConfig, MachineConfig};
+use console::style;
 use logging::{set_progress_status, CodchiOutput};
 use platform::{store_debug_shell, ConfigStatus, Host, MachineDriver};
-use std::{env, process::exit};
+use std::{env, panic::{self, PanicInfo}, process::exit};
 use util::{ResultExt, UtilExt};
 
 pub mod cli;
@@ -23,7 +24,43 @@ pub mod tray;
 pub mod util;
 
 fn main() -> anyhow::Result<()> {
-    not_so_human_panic::setup_panic!();
+    panic::set_hook(Box::new(move |info: &PanicInfo<'_>| {
+        let meta = human_panic::Metadata::new(
+            env!("CARGO_PKG_NAME"),
+            format!(
+                "{} Commit: {}",
+                env!("CARGO_PKG_VERSION"),
+                env!("CODCHI_GIT_COMMIT")
+            ),
+        );
+        let cause = get_panic_cause(info);
+        let report_file = match human_panic::handle_dump(&meta, info) {
+            Some(fp) => format!("{}", fp.display()),
+            None => "<Failed to store file to disk>".to_owned(),
+        };
+        let msg = format!(
+            r#"Well, this is embarrassing.
+
+Codchi had a problem and crashed. It seems that the problem has to do with the following:
+
+{cause}
+
+Codchi is currently in beta and still under active development and testing. Sometimes it can help to execute the same command 2 or 3 times. In the worst case you should be able to export your machine files with `codchi tar <CODCHI_MACHINE> export.tar`.
+
+To help us diagnose the problem you can send us a crash report.
+We have generated a report file at "{report_file}". Submit an issue or email with the subject of "Codchi Crash Report" and include the report as an attachment.
+
+To submit the crash report:
+
+- Create an issue at <https://github.com/aformatik/codchi/issues>.
+- For professional support contact aformatik: <https://www.aformatik.de/kontakt/> or <codchi[at]aformatik[dot]de>.
+
+We take privacy very seriously - we don't perform any automated error collection. In order to improve the software, we rely on users like you to submit reports.
+
+Thank you kindly!"#
+        );
+        eprintln!("{}", style(msg).red());
+    }));
 
     let cli = Cli::parse();
 
@@ -40,15 +77,15 @@ fn main() -> anyhow::Result<()> {
     // preload config
     let cfg = CodchiConfig::get();
 
+    if !matches!(cli.command, Some(Cmd::Tray {})) && cfg.tray.autostart {
+        Driver::host()
+            .start_tray(false)
+            .trace_err("Failed starting codchi's tray")
+            .ignore();
+    }
+
     // process commands without the store commands
     match &cli.command {
-        Some(Cmd::Tray {}) if cfg.tray.autostart => {
-            Driver::host()
-                .start_tray(false)
-                .trace_err("Failed starting codchi's tray")
-                .ignore();
-            exit(0);
-        }
         Some(Cmd::Tar { name, target_file }) => {
             progress_scope! {
                 set_progress_status(format!("Exporting files of {name} to {target_file:?}..."));
@@ -214,4 +251,30 @@ fn alert_dirty(machine: Machine) {
             println!("Everything up to date!");
         }
     }
+}
+
+fn get_panic_cause(panic_info: &PanicInfo) -> String {
+    #[cfg(feature = "nightly")]
+    let message = panic_info.message().map(|m| format!("{}", m));
+
+    #[cfg(not(feature = "nightly"))]
+    let message = match (
+        panic_info.payload().downcast_ref::<&str>(),
+        panic_info.payload().downcast_ref::<String>(),
+    ) {
+        (Some(s), _) => Some(s.to_string()),
+        (_, Some(s)) => Some(s.to_string()),
+        (None, None) => None,
+    };
+
+    match message {
+        Some(m) => m,
+        None => "Unknown".into(),
+    }
+
+    // Note: The `None` case will almost NEVER happen. I couldn't find an immediately obvious way to make it occur.
+    // Using unwrap(), panic!(), array[38924], etc. still provided some message.
+    // I'd reckon we could twist a None out at some point, but I couldn't find anything common at all...
+    //
+    // Please let me know if you have some ideas which may neccessite other forms of handling.
 }

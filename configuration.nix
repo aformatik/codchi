@@ -10,7 +10,9 @@
         asvetliakov.vscode-neovim
       ];
     })
+    pkgs.bashInteractive # fix terminal in VSCode
   ];
+  programs.neovim.enable = true;
   programs.direnv = {
     enable = true;
     nix-direnv.enable = true;
