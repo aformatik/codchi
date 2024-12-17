@@ -23,7 +23,17 @@ pub mod tray;
 pub mod util;
 
 fn main() -> anyhow::Result<()> {
-    not_so_human_panic::setup_panic!();
+    human_panic::setup_panic!(human_panic::Metadata::new(
+        env!("CARGO_PKG_NAME"),
+        format!("{} Commit: {}", env!("CARGO_PKG_VERSION"), env!("CODCHI_GIT_COMMIT"))
+    )
+    // .authors("Codchi contributers: <https://github.com/aformatik/codchi>")
+    // .homepage("https://codchi.dev")
+    .support("- Create an issue at <https://github.com/aformatik/codchi/issues>
+- For professional support contact aformatik: <https://aformatik.de/kontakt/>
+
+Codchi is currently in beta and still under active development and testing. Sometimes it can help to execute the same command 2 or 3 times. In the worst case you should be able to export your machine files with `codchi tar <CODCHI_MACHINE> export.tar`.
+"));
 
     let cli = Cli::parse();
 
@@ -40,15 +50,15 @@ fn main() -> anyhow::Result<()> {
     // preload config
     let cfg = CodchiConfig::get();
 
+    if !matches!(cli.command, Some(Cmd::Tray {})) && cfg.tray.autostart {
+        Driver::host()
+            .start_tray(false)
+            .trace_err("Failed starting codchi's tray")
+            .ignore();
+    }
+
     // process commands without the store commands
     match &cli.command {
-        Some(Cmd::Tray {}) if cfg.tray.autostart => {
-            Driver::host()
-                .start_tray(false)
-                .trace_err("Failed starting codchi's tray")
-                .ignore();
-            exit(0);
-        }
         Some(Cmd::Tar { name, target_file }) => {
             progress_scope! {
                 set_progress_status(format!("Exporting files of {name} to {target_file:?}..."));

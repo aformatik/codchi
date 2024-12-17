@@ -27,8 +27,8 @@ jobs:
         cp result store.tar.gz
         nix build .#machine-wsl.config.build.tarball -L
         cp result machine.tar.gz
-        nix build ./build#vcxsrv-bin -L
-        cp result vcxsrv-installer.exe
+        # nix build ./build#vcxsrv-bin -L
+        # cp result vcxsrv-installer.exe
     - uses: actions/upload-artifact@v4
       with:
           name: windows
@@ -56,11 +56,11 @@ jobs:
         mkdir -p "msix/VFS/Common AppData/codchi/"
         mv .\msix\*.tar.gz "msix/VFS/Common AppData/codchi/"
 
-        .\msix\vcxsrv-installer.exe /S | Out-Null # wait for installer to finish...
-        mkdir -p "msix/VFS/ProgramFilesX64"
-        cp -r "${env:ProgramFiles}\VcXsrv" "msix/VFS/ProgramFilesX64"
-        rm .\msix\vcxsrv-installer.exe
-        mv .\msix\VFS\ProgramFilesX64\VcXsrv\vcxsrv.exe .\msix\VFS\ProgramFilesX64\VcXsrv\codchi_vcxsrv.exe
+        # .\msix\vcxsrv-installer.exe /S | Out-Null # wait for installer to finish...
+        # mkdir -p "msix/VFS/ProgramFilesX64"
+        # cp -r "${env:ProgramFiles}\VcXsrv" "msix/VFS/ProgramFilesX64"
+        # rm .\msix\vcxsrv-installer.exe
+        # mv .\msix\VFS\ProgramFilesX64\VcXsrv\vcxsrv.exe .\msix\VFS\ProgramFilesX64\VcXsrv\codchi_vcxsrv.exe
     # - run: |
     #     reg add "HKCU\ROOT\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers" /v "[{ProgramFilesX64}]\VcXsrv\codchi_vcxsrv.exe" /t REG_SZ /d "~ HIGHDPIAWARE"
     #     reg save "HKCU\ROOT" .\msix\User.dat

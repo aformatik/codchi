@@ -13,6 +13,10 @@ Codchi is a tool that manages your project's development environment in a reprod
 > [!WARNING]  
 > Codchi is currently in beta and still under active development and testing. Please expect potential bugs and incomplete features. We welcome feedback and contributions to help improve stability and functionality!
 
+## See Codchi in Action
+[![YouTube](https://github.com/user-attachments/assets/ac67405a-9963-405e-8849-4d2cd2d90f4d)](https://www.youtube.com/watch?v=CBWrj0v-O0c)
+
+
 ## Getting Started
 
 Read [What is Codchi?](https://codchi.dev/introduction/what-is-codchi) for an introduction to Codchi, or directly go to [Installation](https://codchi.dev/introduction/installation).
@@ -31,7 +35,7 @@ Report bugs, suggest new features, or ask questions via [GitHub Issues](https://
 
 ### Professional Support
 
-For professional support, please contact [aformatik](https://www.aformatik.de/kontakt):
+For professional support, please contact [aformatik](https://www.aformatik.de/kontakt) or send an email to <codchi [at] aformatik [dot] de>:
 
 - **Feature Requests & Issues**: We offer dedicated assistance for feature requests, bug fixes, and troubleshooting.
 - **Training and Consulting**: Need help building a tailored *code machine* for your organization? We provide specialized training and consulting services to help you leverage Codchi to its full potential in your environment.

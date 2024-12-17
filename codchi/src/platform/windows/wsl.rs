@@ -75,18 +75,9 @@ pub fn get_wsl_version() -> Result<String> {
 pub fn check_wsl() -> Result<()> {
     get_api()?;
 
-    let version_str = match get_wsl_version() {
-        Err(e) => {
-            if let Some(e) = e.root_cause().downcast_ref::<io::Error>() {
-                if e.kind() == io::ErrorKind::NotFound {
-                    // todo ref docs
-                    bail!("Failed to run wsl.exe. Please install Windows Subsystem for Linux!",)
-                }
-            }
-            Err(e)
-        }
-        version => version,
-    }?;
+    let version_str = get_wsl_version()
+        .context("Failed to run wsl.exe. Please install Windows Subsystem for Linux!
+See <https://codchi.dev/introduction/installation#prerequisites> for instructions on how to do this.")?;
     let version = Version::from(&version_str);
 
     if !(Version::from(WSL_VERSION_MIN)..=Version::from(WSL_VERSION_MAX)).contains(&version) {

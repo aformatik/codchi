@@ -77,7 +77,7 @@ One thing to note is that since a code machine doesn't have its own store, it ca
 ### WSL
 
 - **SystemD:** WSL natively supports SystemD.
-- **GUI:** Windows natively supports GUI applications within WSL with WSLg using a mixture of Wayland and RDP. Unfortunately, because of the latter, this doesn't really provide a native experience for Linux GUI applications. Therefore, by default, [VcXsrv](https://github.com/marchaesen/vcxsrv), a native Windows X server, is included and enabled in codchi. It can be disabled in [configuration](../1.introduction/3.config.md).
+- **GUI:** Windows natively supports GUI applications within WSL with WSLg using a mixture of Wayland and RDP. Unfortunately, because of the latter, this doesn't really provide a native experience for Linux GUI applications. ~~Therefore, by default, [VcXsrv](https://github.com/marchaesen/vcxsrv), a native Windows X server, is included and enabled in codchi. It can be disabled in [configuration](../1.introduction/3.config.md).~~[^1]
 - **Sound:** WSLg provides a PulseAudio server by default which works well enough.
 - **File sharing:** Files are shared accross WSL instances via bind mounts in `/mnt/wsl/codchi`.
 - **Environment variables, secrets:** Shared via `$env:WSLENV` and a file which is written by the host driver to `\\wsl$\codchi-*\...`.
@@ -85,6 +85,8 @@ One thing to note is that since a code machine doesn't have its own store, it ca
 - **Terminal integration:** <https://learn.microsoft.com/en-us/windows/terminal/json-fragment-extensions>
 - **GPU:** WSL provides access to the GPU installed on the host via dynamic libraries and executables. Since a code machine is a NixOS system some LD hacks are neccessary.
 - **Host Integration:** The default applications inside each code machine are configured such that files or webpages open in the default Windows browser
+
+[^1]: Currently there are some security concerns in the GitHub repo of VcXsrv which is why it isn't included in Codchi by default anymore. But, if installed manually, it can still be used by Codchi (see [config](../1.introduction/3.config.md)).
 
 
 ::alert{type="warning"}
