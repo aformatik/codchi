@@ -1,8 +1,8 @@
 # JVM
 
-::: tip
+::alert{type="info"}
 Try it out with `codchi init <NAME> https://github.com/aformatik/codchi nixosModules.jvm`.
-:::
+::
 
 
 ## General, Java & Kotlin

@@ -1,8 +1,8 @@
 # Javascript
 
-::: tip
+::alert{type="info"}
 Try it out with `codchi init <NAME> https://github.com/aformatik/codchi nixosModules.javascript`.
-:::
+::
 
 ```nix
 { pkgs, ... }: {

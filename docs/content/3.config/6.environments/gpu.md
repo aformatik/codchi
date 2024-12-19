@@ -1,8 +1,8 @@
 # GPU
 
-::: tip
+::alert{type="info"}
 Try it out with `codchi init <NAME> https://github.com/aformatik/codchi nixosModules.gpu`.
-:::
+::
 
 GPU usage should work by default inside a code machine. Codchi uses the GPU driver from your host and therefore only works when the driver is installed on your host. Currently only Nvidia/CUDA is tested.
 
