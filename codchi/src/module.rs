@@ -110,7 +110,7 @@ pub fn set(
     if opts.tag.is_none()
         && opts.commit.is_none()
         && opts.branch.is_none()
-        && opts.token.is_none()
+        && opts.auth.is_none()
         && opts.use_nixpkgs.is_none()
         && new_name.is_none()
         && module_path.is_none()
@@ -137,12 +137,12 @@ pub fn set(
     if cfg.nixpkgs_from.as_ref() == Some(module_name) {
         cfg.nixpkgs_from = Some(new_name.clone());
     }
-    let old_token = match old.location.clone() {
-        FlakeLocation::Remote { token, .. } => token,
+    let old_auth = match old.location.clone() {
+        FlakeLocation::Remote { auth, .. } => auth,
         FlakeLocation::Local { .. } => None,
     };
     let (url, new_module_path, opts) = if let Some(url) = url {
-        // if the URL changed, prompt if branch, token etc... stay the same
+        // if the URL changed, prompt if branch, auth etc... stay the same
         let keep_or_edit = |name: &str, value: Option<String>| -> Result<Option<String>> {
             let Some(value) = value else { return Ok(None) };
             if opts.dont_prompt {
@@ -178,10 +178,10 @@ pub fn set(
                 dont_prompt: opts.dont_prompt,
                 use_nixpkgs: opts.use_nixpkgs.clone(), // is prompted inside fetch_module
                 no_build: opts.no_build,
-                token: opts
-                    .token
+                auth: opts
+                    .auth
                     .clone()
-                    .map_or_else(|| keep_or_edit("token", old_token), |x| Ok(Some(x)))?,
+                    .map_or_else(|| keep_or_edit("auth", old_auth), |x| Ok(Some(x)))?,
                 branch: opts
                     .branch
                     .clone()
@@ -210,7 +210,7 @@ pub fn set(
                     }
                 }),
                 no_build: opts.no_build,
-                token: opts.token.clone().or(old_token),
+                auth: opts.auth.clone().or(old_auth),
                 branch: opts.branch.clone().or(old.r#ref.clone()),
                 tag: opts.branch.clone().or(old.r#ref.clone()),
                 commit: opts.commit.clone().or(old.commit.clone()),
@@ -478,10 +478,10 @@ fn inquire_module_url(
                 _ => unreachable!(),
             };
 
-            // Token in URL / port only work with git+http(s)
+            // Auth in URL / port only work with git+http(s)
             let (host, scheme) = if let Some(port) = url.port {
                 (format!("{host}:{port}"), fallback_scheme)
-            } else if opts.token.is_some() {
+            } else if opts.auth.is_some() {
                 (host, fallback_scheme)
             } else {
                 let guess = guess_scheme(&host);
@@ -525,7 +525,7 @@ fn inquire_module_url(
                     scheme,
                     host,
                     repo,
-                    token: opts.token.clone(),
+                    auth: opts.auth.clone(),
                 },
                 commit: opts.commit.clone(),
                 r#ref: opts.branch.as_ref().or(opts.tag.as_ref()).cloned(),
@@ -613,7 +613,7 @@ pub fn clone(
         let git_url = format!(
             "{scheme}://{auth}{host}/{repo}",
             auth = input_options
-                .token
+                .auth
                 .map(|t| format!("{t}@"))
                 .unwrap_or_default(),
             scheme = git_url.scheme,
