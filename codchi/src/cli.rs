@@ -620,13 +620,13 @@ codchi module set <MACHINE_NAME> <MODULE_NAME> --url=my-project-name
         #[arg(long, short = 'p')]
         pub use_nixpkgs: Option<NixpkgsLocation>,
 
-        /// Authorisation token for private repositories. Generally, the syntax is `<user>:<token>`
+        /// Authorisation string for private repositories. Generally, the syntax is `<user>:<token>`
         /// or just `<token>`.
         ///
         /// GitHub for example has something like `ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
         /// whereas GitLab uses `oauth2:glpat-xxxxxxxxxxxxxxxxxxxx`.
         #[arg(long, short)]
-        pub token: Option<String>,
+        pub auth: Option<String>,
 
         /// The git branch to use for the code machine module.
         #[arg(long, short)]

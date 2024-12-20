@@ -26,7 +26,7 @@ pub enum FlakeLocation {
         /// domain:port combination
         host: String,
         repo: String,
-        token: Option<String>,
+        auth: Option<String>,
     },
     Local {
         /// relative to /home/codchi, no leading '/' or '~'
@@ -53,7 +53,7 @@ impl<W: Hkd> FlakeUrl<W> {
                 scheme,
                 host,
                 repo,
-                token,
+                auth,
             } => {
                 let query = metadata_to_query(&[
                     ("commit", self.commit.as_ref()),
@@ -65,12 +65,12 @@ impl<W: Hkd> FlakeUrl<W> {
                         format!("{scheme}:{repo}?{query}")
                     }
                     Http | Https | Ssh => {
-                        let auth = if let Some(token) = &token {
-                            format!("{token}@")
+                        let auth_host_prefix = if let Some(auth) = &auth {
+                            format!("{auth}@")
                         } else {
                             String::new()
                         };
-                        format!("git+{scheme}://{auth}{host}/{repo}?{query}",)
+                        format!("git+{scheme}://{auth_host_prefix}{host}/{repo}?{query}",)
                     }
                 }
             }
@@ -91,7 +91,7 @@ impl<W: Hkd> FlakeUrl<W> {
                 scheme,
                 host,
                 repo,
-                token,
+                auth,
             } => {
                 let scheme = match scheme {
                     FlakeScheme::Http => Scheme::Http,
@@ -103,13 +103,12 @@ impl<W: Hkd> FlakeUrl<W> {
                     Some(name) => (name.to_owned(), true),
                     None => (suffixed_name.to_owned(), false),
                 };
-                let (user, token) = token
+                let (user, auth) = auth
                     .as_ref()
-                    .map(|token| {
-                        token
-                            .split_once(':')
+                    .map(|auth| {
+                        auth.split_once(':')
                             .map(|(user, pwd)| (Some(user.to_owned()), Some(pwd.to_owned())))
-                            .unwrap_or((Some(token.to_owned()), None))
+                            .unwrap_or((Some(auth.to_owned()), None))
                     })
                     .unwrap_or((None, None));
                 // let repo = repo.strip_suffix(".git").unwrap_or(repo).to_string();
@@ -122,7 +121,7 @@ impl<W: Hkd> FlakeUrl<W> {
                     git_suffix,
                     path: format!("/{repo}"),
                     user,
-                    token,
+                    token: auth,
                     organization: None,
                     port: None,
                     scheme_prefix: true,
@@ -153,7 +152,7 @@ impl<W: Hkd> FlakeUrl<W> {
                 scheme: _,
                 host,
                 repo,
-                token: _,
+                auth: _,
             } => format!("{host}/{repo}"),
             FlakeLocation::Local { path } => format!("~/{path}"),
         }
@@ -167,10 +166,10 @@ impl<W: Hkd> Display for FlakeUrl<W> {
                 scheme,
                 host,
                 repo,
-                token,
+                auth,
             } => {
                 let metadata = metadata_to_query(&[
-                    ("token", token.as_ref()),
+                    ("token", auth.as_ref()),
                     ("commit", self.commit.as_ref()),
                     ("ref", self.r#ref.as_ref()),
                 ]);
@@ -251,7 +250,7 @@ impl FromStr for FlakeUrl<Optional> {
                 scheme,
                 host: host.to_string(),
                 repo: repo.to_string(),
-                token: metadata.get("token").cloned(),
+                auth: metadata.get("token").cloned(),
             }
         };
 
@@ -321,7 +320,7 @@ mod tests {
                 scheme: FlakeScheme::Github,
                 host: "github.com".to_owned(),
                 repo: "aformatik/codchi".to_owned(),
-                token: None,
+                auth: None,
             },
             commit: None,
             r#ref: None,
@@ -334,7 +333,7 @@ mod tests {
                 scheme: FlakeScheme::Https,
                 host: "foo.bar".to_owned(),
                 repo: "aformatik/codchi.git".to_owned(),
-                token: Some("my:token".to_owned()),
+                auth: Some("my:token".to_owned()),
             },
             commit: Some("jakfkl2".to_owned()),
             r#ref: Some("my-branch".to_owned()),
