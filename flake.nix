@@ -1,6 +1,11 @@
 {
   description = "CODe maCHInes - Declarative and Reprodicible Development Environements as Code";
 
+  nixConfig = {
+    extra-substituters = "https://codchi.cachix.org";
+    extra-trusted-public-keys = "codchi.cachix.org-1:dVwdzogJgZO2x8kPKW02HNt2dpd/P/z46pY465MkokY=";
+  };
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
     rust-overlay = {
