@@ -11,7 +11,11 @@ use config::{git_url::GitUrl, CodchiConfig, MachineConfig};
 use console::style;
 use logging::{set_progress_status, CodchiOutput};
 use platform::{store_debug_shell, ConfigStatus, Host, MachineDriver};
-use std::{env, panic::{self, PanicInfo}, process::exit};
+use std::{
+    env,
+    panic::{self, PanicInfo},
+    process::exit,
+};
 use util::{ResultExt, UtilExt};
 
 pub mod cli;
@@ -94,7 +98,14 @@ Thank you kindly!"#
             }
             exit(0);
         }
-        Some(Cmd::DebugStore) => store_debug_shell()?,
+        Some(Cmd::Store(store)) => match store {
+            cli::StoreCmd::Debug => store_debug_shell()?,
+            #[cfg(target_os = "windows")]
+            cli::StoreCmd::Recover => {
+                platform::store_recover()?;
+                exit(0);
+            }
+        },
         _ => {}
     }
 
@@ -214,7 +225,7 @@ Thank you kindly!"#
         Cmd::Tray {} => tray::run()?,
         Cmd::Completion { .. } => unreachable!(),
         Cmd::Tar { .. } => unreachable!(),
-        Cmd::DebugStore => unreachable!(),
+        Cmd::Store(_) => unreachable!(),
     }
     if CodchiConfig::get().tray.autostart {
         Driver::host()

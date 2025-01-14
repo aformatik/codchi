@@ -8,6 +8,13 @@ use std::{
 pub const APP_NAME: &str = "codchi";
 
 pub static GIT_BRANCH: &str = env!("CODCHI_GIT_BRANCH");
+
+/// When building with cargo (locally), use the branch as the main flake ref (easier testing)
+#[cfg(debug_assertions)]
+pub static CODCHI_FLAKE_URL: &str = concat!("github:aformatik/codchi/", env!("CODCHI_GIT_BRANCH"));
+
+/// When building with nix (release mode), use the exact commit
+#[cfg(not(debug_assertions))]
 pub static CODCHI_FLAKE_URL: &str = concat!("github:aformatik/codchi/", env!("CODCHI_GIT_COMMIT"));
 
 pub const CONTAINER_STORE_NAME: &str = "codchistore";

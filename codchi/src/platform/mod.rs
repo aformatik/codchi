@@ -21,6 +21,9 @@ use std::sync::OnceLock;
 
 pub use platform::store_debug_shell;
 
+#[cfg(target_os = "windows")]
+pub use platform::store_recover;
+
 pub struct Driver {
     store: StoreImpl,
 }

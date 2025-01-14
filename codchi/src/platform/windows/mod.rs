@@ -49,7 +49,7 @@ impl Store for StoreImpl {
             PlatformStatus::NotInstalled => wsl::import(
                 files::STORE_ROOTFS_NAME,
                 consts::CONTAINER_STORE_NAME,
-                consts::host::DIR_DATA
+                &consts::host::DIR_DATA
                     .join_store()
                     .get_or_create()?
                     .to_path_buf(),
@@ -120,6 +120,25 @@ impl Store for StoreImpl {
     }
 }
 
+pub fn win_path_to_wsl(path: &PathBuf) -> anyhow::Result<LinuxPath> {
+    wsl_command()
+        .args([
+            "-d",
+            &consts::CONTAINER_STORE_NAME,
+            "--system",
+            "--user",
+            "root",
+        ])
+        .args([
+            "wslpath",
+            "-u",
+            &path.display().to_string().replace("\\", "/"),
+        ])
+        .output_utf8_ok()
+        .map(|path| LinuxPath(path.trim().to_owned()))
+        .with_context(|| format!("Failed to run 'wslpath' with path {path:?}."))
+}
+
 pub fn store_debug_shell() -> anyhow::Result<()> {
     LinuxCommandDriver {
         instance_name: consts::CONTAINER_STORE_NAME.to_string(),
@@ -127,6 +146,54 @@ pub fn store_debug_shell() -> anyhow::Result<()> {
     .run("bash", &[])
     .exec()?;
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+pub fn store_recover() -> anyhow::Result<()> {
+    use wsl::extract_from_msix;
+
+    extract_from_msix(files::STORE_ROOTFS_NAME, |store_tar| {
+        let tar_from_wsl = win_path_to_wsl(store_tar)?;
+        extract_from_msix("busybox", |busybox| {
+            let busybox_from_wsl = win_path_to_wsl(busybox)?;
+            wsl_command()
+                .args([
+                    "-d",
+                    &consts::CONTAINER_STORE_NAME,
+                    "--system",
+                    "--user",
+                    "root",
+                ])
+                .args(["mount", "-o", "remount,rw", "/mnt/wslg/distro"])
+                .wait_ok()?;
+            wsl_command()
+                .args([
+                    "-d",
+                    &consts::CONTAINER_STORE_NAME,
+                    "--system",
+                    "--user",
+                    "root",
+                ])
+                .args([
+                    &busybox_from_wsl.0,
+                    "tar",
+                    "-C",
+                    "/mnt/wslg/distro",
+                    "-xzf",
+                    &tar_from_wsl.0,
+                ])
+                .wait_ok()?;
+
+            let _ = wsl::wsl_command()
+                .arg("--terminate")
+                .arg(consts::CONTAINER_STORE_NAME)
+                .wait_ok()
+                .trace_err("Failed stopping store container");
+
+            log::info!("Restored file system of `codchistore`.");
+            Ok(())
+        })
+    })
 }
 
 impl MachineDriver for Machine {
@@ -144,7 +211,7 @@ impl MachineDriver for Machine {
         wsl::import(
             files::MACHINE_ROOTFS_NAME,
             &machine::machine_name(&self.config.name),
-            consts::host::DIR_DATA
+            &consts::host::DIR_DATA
                 .join_machine(&self.config.name)
                 .get_or_create()?
                 .to_path_buf(),

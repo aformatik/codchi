@@ -15,7 +15,7 @@ in
       wantedBy = [ "default.target" ];
       serviceConfig = {
         ExecStart =
-          "${pkgs.gnome.gnome-keyring}/bin/gnome-keyring-daemon  --start --foreground --components=pkcs11,secrets,ssh";
+          "${pkgs.gnome-keyring or pkgs.gnome.gnome-keyring}/bin/gnome-keyring-daemon  --start --foreground --components=pkcs11,secrets,ssh";
         Restart = "on-abort";
       };
     };

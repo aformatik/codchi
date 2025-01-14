@@ -171,11 +171,22 @@ in
         '';
       in
       {
-        hardware.opengl = {
-          enable = true;
-          driSupport = true;
-          extraPackages = [ wslLib ];
-        };
+        hardware =
+          if lib.versionAtLeast config.system.stateVersion "24.11"
+          then {
+            graphics = {
+              enable = true;
+              extraPackages = [ wslLib ];
+            };
+          }
+          else {
+            opengl = {
+              enable = true;
+              driSupport = true;
+              extraPackages = [ wslLib ];
+            };
+          };
+
         programs.nix-ld = {
           enable = true;
           libraries = [ wslLib ];

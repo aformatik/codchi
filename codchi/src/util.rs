@@ -177,7 +177,10 @@ pub fn with_tmp_file<F, T>(name: &str, f: F) -> anyhow::Result<T>
 where
     F: Fn(&PathBuf) -> anyhow::Result<T>,
 {
-    let path = env::temp_dir().get_or_create()?.join(name);
+    let nonce: u32 = rand::random();
+    let path = env::temp_dir()
+        .get_or_create()?
+        .join(format!("{name}-{nonce}"));
     if path.try_exists().is_ok_and(|exists| exists) {
         bail!("Tmpfile {} already exists!", path.display());
     }

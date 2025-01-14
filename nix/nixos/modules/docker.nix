@@ -51,6 +51,7 @@ in
         enable = true;
         mount-nvidia-executables = false;
       };
+      services.xserver.videoDrivers = [ "nvidia" ];
       virtualisation.docker.daemon.settings.features.cdi = true;
     })
     (mkIf (cfg.enableNvidia && !lib.versionAtLeast config.system.stateVersion "24.11") {

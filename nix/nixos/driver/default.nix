@@ -133,7 +133,10 @@ in
       };
       security.sudo.wheelNeedsPassword = mkDefault false;
 
-      hardware.opengl.enable = lib.mkDefault true; # Enable GPU acceleration
+      hardware =
+        if lib.versionAtLeast config.system.stateVersion "24.11"
+        then { graphics.enable = lib.mkDefault true; }
+        else { opengl.enable = lib.mkDefault true; };
       # powerManagement.enable = false;
 
     }

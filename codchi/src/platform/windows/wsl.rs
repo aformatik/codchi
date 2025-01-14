@@ -1,6 +1,6 @@
-use crate::util::{make_writeable_if_exists, LinuxPath, PathExt, ResultExt};
+use crate::util::{make_writeable_if_exists, with_tmp_file, LinuxPath, PathExt, ResultExt};
 use crate::{
-    consts::{self, host},
+    consts,
     logging::with_suspended_progress,
     platform::{CommandExt, PlatformStatus},
 };
@@ -19,16 +19,6 @@ use std::{
 use sysinfo::System;
 use version_compare::Version;
 use wslapi::Library;
-// use windows::Win32::System::Console::GetConsoleOutputCP as _;
-// use codepage_strings::Coding as _;
-
-// #[derive(Error, Debug)]
-// pub enum Error {
-//     #[error("Failed to run WSL.exe")]
-//     IO(#[from] io::Error),
-// }
-
-// type Result<T> = std::result::Result<T, Error>;
 
 const WSL_VERSION_MIN: &str = env!("CODCHI_WSL_VERSION_MIN");
 const WSL_VERSION_MAX: &str = env!("CODCHI_WSL_VERSION_MAX");
@@ -106,36 +96,30 @@ pub fn get_platform_status(container_name: &str) -> Result<PlatformStatus> {
     }
 }
 
-pub fn import<T, F: FnMut() -> Result<T>>(
-    rootfs_name: &str,
-    name: &str,
-    installation_path: PathBuf,
-    mut additional_setup: F,
-) -> Result<T> {
-    (|| {
-        let msix_path = get_known_folder_path(KnownFolder::ProgramData)
-            .ok_or(anyhow!("FOLDERID_ProgramData missing"))?
-            .join(consts::APP_NAME)
-            .join(rootfs_name);
-        if fs::metadata(&msix_path).is_err() {
-            bail!(
-                "WSL rootfs for {name} missing in MSIX. \
+/// Extract file from codchi.msix/VFS/Common Appdata/codchi
+pub fn extract_from_msix<T, F: Fn(&PathBuf) -> Result<T>>(file_name: &str, f: F) -> Result<T> {
+    let msix_path = get_known_folder_path(KnownFolder::ProgramData)
+        .ok_or(anyhow!("FOLDERID_ProgramData missing"))?
+        .join(consts::APP_NAME)
+        .join(file_name);
+    if fs::metadata(&msix_path).is_err() {
+        bail!(
+            "File '{file_name}' missing in MSIX. \
                   Search path was: {msix_path:?}. \
                   Directory contents: {:?}",
-                msix_path
-                    .parent()
-                    .ok_or(anyhow!("Missing parent"))
-                    .and_then(|p| p.list_dir())
-            );
-        }
-
-        let tmp_path = host::DIR_RUNTIME.get_or_create()?.join(rootfs_name);
+            msix_path
+                .parent()
+                .ok_or(anyhow!("Missing parent"))
+                .and_then(|p| p.list_dir())
+        );
+    }
+    with_tmp_file(&format!("msix-extract-{file_name}"), |tmp_path| {
         make_writeable_if_exists(&tmp_path)?;
         fs::copy(&msix_path, &tmp_path)?;
 
         if fs::metadata(&tmp_path).is_err() {
             bail!(
-                "WSL rootfs for {name} missing in tmp path. \
+                "Failed copying file '{file_name}' in MSIX from {msix_path:?} to {tmp_path:?}. \
                   Search path was: {tmp_path:?}. \
                   Directory contents: {:?}",
                 tmp_path
@@ -144,7 +128,19 @@ pub fn import<T, F: FnMut() -> Result<T>>(
                     .and_then(|p| p.list_dir())
             );
         }
+        let result = f(tmp_path);
+        make_writeable_if_exists(&tmp_path)?;
+        result
+    })
+}
 
+pub fn import<T, F: Fn() -> Result<T>>(
+    rootfs_name: &str,
+    name: &str,
+    installation_path: &PathBuf,
+    additional_setup: F,
+) -> Result<T> {
+    extract_from_msix(rootfs_name, |tmp_path| {
         wsl_command()
             .arg("--import")
             .arg(name)
@@ -152,11 +148,8 @@ pub fn import<T, F: FnMut() -> Result<T>>(
             .arg(&tmp_path)
             .args(["--version", "2"])
             .wait_ok()?;
-
-        make_writeable_if_exists(&tmp_path)?;
-        fs::remove_file(&tmp_path)?;
         additional_setup()
-    })()
+    })
     .inspect_err(|_| {
         if !log::log_enabled!(Level::Debug) {
             log::error!("Removing leftovers of WSL container {name}...");

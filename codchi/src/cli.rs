@@ -461,11 +461,9 @@ See the following docs on how to register the completions with your shell:
         target_file: PathBuf,
     },
 
-    #[clap(
-        about = "Open a debug shell inside `codchistore` without starting \
-/ requiring any services. Usefull for debugging."
-    )]
-    DebugStore,
+    #[command(subcommand)]
+    #[clap(about = "Utilities for interacting with the `codchistore` container.")]
+    Store(StoreCmd),
 }
 
 mod module {
@@ -748,4 +746,15 @@ impl FromStr for RelativePath {
         }
         Ok(Self(s.to_string()))
     }
+}
+
+#[derive(Debug, Subcommand, Clone)]
+pub enum StoreCmd {
+    #[clap(about = "Open a debug shell inside `codchistore` without starting \
+/ requiring any services. Usefull for debugging.")]
+    Debug,
+
+    #[cfg(target_os = "windows")]
+    #[clap(about = "Try to restore the `codchistore` container without deleting /nix/store.")]
+    Recover,
 }

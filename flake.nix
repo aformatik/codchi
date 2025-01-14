@@ -86,6 +86,7 @@
             default = pkgs.codchi;
             windows = pkgs.codchi-windows;
             inherit (pkgs) codchiw-windows;
+            inherit (pkgs.pkgsStatic) busybox;
             # editor = pkgs.nixvim.makeNixvim (import ./editor.nix);
           };
 
