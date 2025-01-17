@@ -1,11 +1,30 @@
 use crate::platform::CommandExt;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::process::Command;
+use std::sync::OnceLock;
+use which::which;
+
+static LXD_COMMAND: OnceLock<&str> = OnceLock::new();
+
+pub fn init_lxc_command() -> Result<()> {
+    LXD_COMMAND.get_or_try_init(|| {
+        if let Ok(_) = which("lxd") {
+            log::trace!("Using LXD as container runtime.");
+            Ok("lxc")
+        } else if let Ok(_) = which("incus") {
+            log::trace!("Using Incus as container runtime.");
+            Ok("incus")
+        } else {
+            bail!("Either LXD or Incus is required to run Codchi.")
+        }
+    })?;
+    Ok(())
+}
 
 pub fn lxc_command(args: &[&str]) -> Command {
-    let mut cmd = Command::new("lxc");
+    let mut cmd = Command::new(LXD_COMMAND.get().expect("init_lxc_command was not called"));
     cmd.arg("-q");
     cmd.args(args);
     cmd
@@ -13,6 +32,26 @@ pub fn lxc_command(args: &[&str]) -> Command {
 
 pub mod image {
     use super::*;
+
+    #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+    /// LXD image information
+    pub struct ImageInfo {
+        pub filename: String,
+        pub fingerprint: String,
+        pub aliases: Vec<ImageAlias>,
+    }
+
+    #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+    pub struct ImageAlias {
+        pub name: String,
+        pub description: String,
+    }
+
+    pub fn list() -> Result<Vec<ImageInfo>> {
+        let info =
+            lxc_command(&["image", "list", "--format", "json"]).output_json::<Vec<ImageInfo>>()?;
+        Ok(info)
+    }
 
     pub fn import<P: AsRef<Path>>(path: P, alias: &str) -> Result<()> {
         Ok(lxc_command(&[
@@ -44,6 +83,8 @@ pub mod container {
     use anyhow::{anyhow, Context};
     use nix::unistd::{getgid, getuid, Group};
     use std::path::PathBuf;
+    use std::thread;
+    use std::time::Duration;
 
     #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
     /// LXD container information
@@ -210,12 +251,27 @@ to '{connect}' in container {container_name}.",
         I: Iterator<Item = &'a LxdDevice>,
     {
         (|| {
+            if image::list()?
+                .iter()
+                .any(|img| img.aliases.iter().any(|alias| alias.name == name))
+            {
+                image::delete(name)?;
+            }
+
             image::import(&rootfs, name).with_context(|| {
                 format!(
                     "Failed to import LXD image {name} from {}.",
                     rootfs.as_ref().to_string_lossy()
                 )
             })?;
+
+            while !image::list()?
+                .iter()
+                .any(|img| img.aliases.iter().any(|alias| alias.name == name))
+            {
+                log::trace!("Waiting for LXD to import image '{name}'");
+                thread::sleep(Duration::from_millis(250));
+            }
 
             image::init(name, name).with_context(|| {
                 format!(

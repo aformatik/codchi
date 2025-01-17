@@ -7,7 +7,8 @@ use crate::{
     consts::{self, host, ToPath},
     logging::{hide_progress, log_progress, set_progress_status, with_suspended_progress},
     platform::{self, CommandExt, Driver, Store},
-    util::PathExt,
+    progress_scope,
+    util::{PathExt, ResultExt, UtilExt},
 };
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
@@ -212,7 +213,7 @@ fi
         Ok(())
     }
 
-    pub fn build(&self, no_update: bool) -> Result<()> {
+    pub fn build(&mut self, no_update: bool) -> Result<()> {
         self.write_flake()?;
 
         set_progress_status(format!("Building {}...", self.config.name));
@@ -308,6 +309,7 @@ git add flake.*
         }
         cfg.secrets = all_secrets;
         cfg.write(lock)?;
+        self.config = cfg;
 
         set_progress_status(format!("Building {}...", self.config.name));
         let status = Self::read_platform_status(&self.config.name)?;
@@ -404,9 +406,59 @@ git add flake.*
         HostImpl::delete_shortcuts(&self.config.name)?;
         HostImpl::post_delete(&self.config.name)?;
 
-        println!("Successfully deleted {}. You might also want to run a garbage collection (`codchi gc`).", self.config.name);
+        log::info!(
+            "Successfully deleted {}. You might also want to run a garbage collection \
+(`codchi gc`).",
+            self.config.name
+        );
 
         Ok(())
+    }
+
+    pub fn force_delete(self) {
+        let name = &self.config.name;
+
+        log::trace!("Force deleting machine '{name}'");
+
+        // if self.platform_status == PlatformStatus::Running {
+        self.stop(true)
+            .trace_err("Failed stopping machine")
+            .ignore();
+        // }
+        // if self.platform_status != PlatformStatus::NotInstalled {
+        MachineDriver::delete_container(&self)
+            .trace_err("Failed deleting container")
+            .ignore();
+        // }
+
+        Driver::store()
+            .cmd()
+            .run(
+                "rm",
+                &[
+                    "-rf",
+                    &consts::store::DIR_DATA.join_machine(&self.config.name).0,
+                    &consts::store::DIR_CONFIG.join_machine(&self.config.name).0,
+                ],
+            )
+            .wait_ok()
+            .trace_err("Failed deleting data")
+            .ignore();
+
+        fs::remove_dir_all(host::DIR_CONFIG.join_machine(&self.config.name))
+            .trace_err("Failed deleting config dir")
+            .ignore();
+
+        fs::remove_dir_all(host::DIR_DATA.join_machine(&self.config.name))
+            .trace_err("Failed deleting data dir")
+            .ignore();
+
+        HostImpl::delete_shortcuts(&self.config.name)
+            .trace_err("Failed deleting shortcuts")
+            .ignore();
+        HostImpl::post_delete(&self.config.name)
+            .trace_err("Failed post delete")
+            .ignore();
     }
 
     pub fn exec(&self, cmd: &[String]) -> Result<()> {
@@ -428,6 +480,24 @@ git add flake.*
         hide_progress();
         self.create_exec_cmd(&cmd.iter().map(|str| str.as_str()).collect_vec())
             .exec()?;
+        Ok(())
+    }
+
+    pub fn run_init_script(&self, dont_run_init: bool) -> Result<()> {
+        if dont_run_init {
+            return Ok(());
+        }
+        log::info!("Running init script of machine '{}'...", self.config.name);
+        progress_scope! {
+            if Self::read_platform_status(&self.config.name)? == PlatformStatus::Running {
+                set_progress_status(format!("Stopping {}...", self.config.name));
+                let _ = self.stop(true);
+            }
+            set_progress_status(format!("Starting {}...", self.config.name));
+            self.start()?;
+        }
+        self.create_exec_cmd(&["codchi-init"]).wait_inherit()?;
+
         Ok(())
     }
 }

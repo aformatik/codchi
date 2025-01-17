@@ -100,6 +100,10 @@ impl Store for StoreImpl {
                         log_progress("store_init", Level::Debug, &line)
                     })?;
 
+                if CodchiConfig::get().enable_wsl_vpnkit {
+                    start_wsl_vpnkit(&store)?;
+                }
+
                 Ok(store)
             }
         }
@@ -118,6 +122,25 @@ impl Store for StoreImpl {
             .map(|path| PathBuf::from(path.trim()))
             .with_context(|| format!("Failed to run 'wslpath' with path '{path}'."))
     }
+}
+
+pub fn start_wsl_vpnkit(store: &impl Store) -> Result<()> {
+    store
+        .cmd()
+        .script(
+            r#"
+mkdir -p /var/log
+daemonize -e /var/log/wsl-vpnkit -o /var/log/wsl-vpnkit /bin/nix run 'nixpkgs#wsl-vpnkit'
+"#
+            .to_string(),
+        )
+        .wait_ok()?;
+    Ok(())
+}
+
+pub fn stop_wsl_vpnkit(store: &impl Store) -> Result<()> {
+    store.cmd().run("pkill", &["wsl-vpnkit"]).wait_ok()?;
+    Ok(())
 }
 
 pub fn win_path_to_wsl(path: &PathBuf) -> anyhow::Result<LinuxPath> {
@@ -281,7 +304,7 @@ mv -f {tmp_env} {etc_env}
                 }
                 anyhow::Ok(())
             })() {
-                log::error!(
+                log::warn!(
                     "Failed to write '{}': {err}. Trying backup method...",
                     CODCHI_ENV_TMP.0
                 );

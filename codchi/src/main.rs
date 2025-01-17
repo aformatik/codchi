@@ -9,12 +9,16 @@ use crate::{
 use clap::{CommandFactory, Parser};
 use config::{git_url::GitUrl, CodchiConfig, MachineConfig};
 use console::style;
+use log::Level;
 use logging::{set_progress_status, CodchiOutput};
 use platform::{store_debug_shell, ConfigStatus, Host, MachineDriver};
 use std::{
     env,
     panic::{self, PanicInfo},
     process::exit,
+    sync::{mpsc::channel, OnceLock},
+    thread,
+    time::Duration,
 };
 use util::{ResultExt, UtilExt};
 
@@ -82,10 +86,14 @@ Thank you kindly!"#
     let cfg = CodchiConfig::get();
 
     if !matches!(cli.command, Some(Cmd::Tray {})) && cfg.tray.autostart {
-        Driver::host()
-            .start_tray(false)
-            .trace_err("Failed starting codchi's tray")
-            .ignore();
+        thread::spawn(|| {
+            // prevent race condition when initializing codchistore
+            thread::sleep(Duration::from_millis(1000));
+            Driver::host()
+                .start_tray(false)
+                .trace_err("Failed starting codchi's tray")
+                .ignore();
+        });
     }
 
     // process commands without the store commands
@@ -115,6 +123,31 @@ Thank you kindly!"#
 
     let _ = Driver::store();
 
+    fn interrupt_machine_creation(machine_name: &str) {
+        if !log::log_enabled!(Level::Debug) {
+            log::error!("Failed initializing machine '{machine_name}'. Removing leftovers...");
+            if let Ok(machine) = Machine::by_name(machine_name, false) {
+                machine.force_delete();
+            }
+        }
+    }
+    fn init_ctrl_c(machine_name: &str) {
+        let (tx, rx) = channel();
+
+        static NAME: OnceLock<String> = OnceLock::new();
+        NAME.set(machine_name.to_string()).unwrap();
+
+        ctrlc::set_handler(move || tx.send(()).expect("Could not send signal on channel."))
+            .expect("Error setting Ctrl-C handler");
+        thread::spawn(move || {
+            log::trace!("Waiting for Ctrl-C...");
+            rx.recv().expect("Could not receive from channel.");
+            log::trace!("Got Ctrl-C! Exiting...");
+            interrupt_machine_creation(&NAME.get().unwrap());
+            exit(1);
+        });
+    }
+
     // all other commands
     match &cli.command.unwrap_or(Cmd::Status {}) {
         Cmd::Status {} => Machine::list(true)?.print(cli.json),
@@ -123,19 +156,26 @@ Thank you kindly!"#
             url,
             input_options: options,
             module_paths,
+            dont_run_init,
         } => {
-            let machine = module::init(
-                machine_name,
-                url.as_ref().map(GitUrl::from),
-                options,
-                module_paths,
-            )?;
-            if !options.no_build {
-                machine.build(true)?;
-                log::info!("Machine '{machine_name}' is ready! Use `codchi exec {machine_name}` to start it.")
-            } else {
-                alert_dirty(machine);
-            }
+            init_ctrl_c(machine_name);
+            (|| {
+                let mut machine = module::init(
+                    machine_name,
+                    url.as_ref().map(GitUrl::from),
+                    options,
+                    module_paths,
+                )?;
+                if !options.no_build {
+                    machine.build(true)?;
+                    machine.run_init_script(*dont_run_init)?;
+                    log::info!("Machine '{machine_name}' is ready! Use `codchi exec {machine_name}` to start it.")
+                } else {
+                    alert_dirty(machine);
+                }
+                anyhow::Ok(())
+            })()
+            .inspect_err(|_| interrupt_machine_creation(machine_name))?;
         }
         Cmd::Clone {
             machine_name,
@@ -147,18 +187,26 @@ Thank you kindly!"#
             single_branch,
             recurse_submodules,
             shallow_submodules,
+            keep_remote,
+            dont_run_init,
         } => {
-            module::clone(
-                machine_name,
-                GitUrl::from(url),
-                input_options,
-                module_paths,
-                dir,
-                depth,
-                single_branch,
-                recurse_submodules,
-                shallow_submodules,
-            )?;
+            init_ctrl_c(machine_name);
+            (|| {
+                let machine = module::clone(
+                    machine_name,
+                    GitUrl::from(url),
+                    input_options,
+                    module_paths,
+                    dir,
+                    depth,
+                    single_branch,
+                    recurse_submodules,
+                    shallow_submodules,
+                    keep_remote,
+                )?;
+                machine.run_init_script(*dont_run_init)
+            })()
+            .inspect_err(|_| interrupt_machine_creation(machine_name))?;
             log::info!(
                 "Machine '{machine_name}' is ready! Use `codchi exec {machine_name}` to start it."
             );
@@ -184,7 +232,8 @@ Thank you kindly!"#
                 options,
                 module_paths,
             } => {
-                let machine = module::add(machine_name, GitUrl::from(url), options, module_paths)?;
+                let mut machine =
+                    module::add(machine_name, GitUrl::from(url), options, module_paths)?;
                 if !options.no_build {
                     machine.build(true)?;
                 } else {
@@ -199,7 +248,7 @@ Thank you kindly!"#
                 new_name,
                 module_path,
             } => {
-                let machine = module::set(
+                let mut machine = module::set(
                     machine_name,
                     name,
                     options,
@@ -241,25 +290,28 @@ Thank you kindly!"#
 fn alert_dirty(machine: Machine) {
     match machine.config_status {
         ConfigStatus::NotInstalled => {
-            println!(
+            log::info!(
                 "{} is not installed yet. Install with `codchi rebuild {}`",
-                machine.config.name, machine.config.name
+                machine.config.name,
+                machine.config.name
             );
         }
         ConfigStatus::Modified => {
-            println!(
+            log::info!(
                 "{} was modified. Apply changes with `codchi rebuild {}`",
-                machine.config.name, machine.config.name
+                machine.config.name,
+                machine.config.name
             );
         }
         ConfigStatus::UpdatesAvailable => {
-            println!(
+            log::info!(
                 "{} has been updated upstream. Update with `codchi rebuild {}`",
-                machine.config.name, machine.config.name
+                machine.config.name,
+                machine.config.name
             );
         }
         ConfigStatus::UpToDate => {
-            println!("Everything up to date!");
+            log::info!("Everything up to date!");
         }
     }
 }

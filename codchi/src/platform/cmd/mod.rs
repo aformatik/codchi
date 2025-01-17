@@ -215,6 +215,20 @@ Stderr:
         log::trace!("Execing command: {self:?}");
         exit(self.spawn(OutputType::Inherit)?.wait()?.code().unwrap_or(1))
     }
+
+    fn wait_inherit(&mut self) -> Result<()> {
+        log::trace!("Executing command with inherited stdio: {self:?}");
+        let result = self.spawn(OutputType::Inherit)?.wait()?;
+        if result.success() {
+            Ok(())
+        } else {
+            Err(Error::Other {
+                cmd: format!("{self:?}"),
+                exit_status: result,
+                stderr: String::new(),
+            })
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

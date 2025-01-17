@@ -213,6 +213,20 @@ pub fn run() -> Result<()> {
                     },
                 ],
             });
+            settings.push(mk_checkbox(
+                "Enable wsl-vpnkit",
+                |config| config.enable_wsl_vpnkit,
+                |cfg, enabled| {
+                    cfg.enable_wsl_vpnkit(enabled);
+                    if enabled {
+                        crate::platform::start_wsl_vpnkit(Driver::store())
+                    } else {
+                        crate::platform::stop_wsl_vpnkit(Driver::store())
+                    }
+                    .trace_err("Failed starting / stopping wsl-vpnkit")
+                    .ignore();
+                },
+            ));
         }
         items.extend([
             Separator,

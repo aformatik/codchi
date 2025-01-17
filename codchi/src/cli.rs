@@ -141,6 +141,10 @@ codchi init <MACHINE_NAME>
         /// When omitted Codchi will create a base machine without modules.
         url: Option<CodchiUrl>,
 
+        /// Do not execute the init script automatically (NixOS option `codchi.initScript`)
+        #[arg(long, short = 'n')]
+        dont_run_init: bool,
+
         #[command(flatten)]
         input_options: Box<InputOptions>,
 
@@ -201,8 +205,16 @@ cargo build
         #[arg(long, short = 'd')]
         dir: Option<RelativePath>,
 
+        /// Don't switch to the local codchi module
+        #[arg(long, short = 'r')]
+        keep_remote: bool,
+
         /// HTTP(S) URL to the git repository.
         url: CodchiUrl,
+
+        /// Do not execute the init script automatically (NixOS option `codchi.initScript`)
+        #[arg(long, short = 'n')]
+        dont_run_init: bool,
 
         #[command(flatten)]
         input_options: Box<InputOptions>,
@@ -631,7 +643,7 @@ codchi module set <MACHINE_NAME> <MODULE_NAME> --url=my-project-name
         pub branch: Option<String>,
 
         /// The git tag to use for the code machine module.
-        #[arg(long, short = 'r')]
+        #[arg(long)]
         pub tag: Option<String>,
 
         /// The git commit to use for the code machine module.

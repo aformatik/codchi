@@ -14,6 +14,12 @@ pub struct CodchiConfig {
     #[serde(default)]
     pub vcxsrv: VcXsrvConfig,
 
+    /// Allows internet access in WSL inside some company VPNs
+    /// https://github.com/sakai135/wsl-vpnkit
+    #[cfg(target_os = "windows")]
+    #[serde(default)]
+    pub enable_wsl_vpnkit: bool,
+
     // $XDG_DATA_HOME/codchi by default
     pub data_dir: Option<String>,
 }
@@ -91,6 +97,11 @@ pub struct ConfigMut {
 impl ConfigMut {
     pub fn tray_autostart(&mut self, autostart: bool) {
         self.doc["tray"]["autostart"] = value(autostart);
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn enable_wsl_vpnkit(&mut self, enable: bool) {
+        self.doc["enable_wsl_vpnkit"] = value(enable);
     }
 
     #[cfg(target_os = "windows")]

@@ -60,6 +60,7 @@ human-panic = "2.0.2"
 # clap-help = "1.3.0"
 # termimad = "0.30.0"
 rand = "0.8.5"
+ctrlc = { version = "3.4.5", features = ["termination"] }
 
 [target.'cfg(unix)'.dependencies]
 indoc = "2.0.5"

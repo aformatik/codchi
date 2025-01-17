@@ -15,6 +15,7 @@ use anyhow::{bail, Context, Result};
 pub use host::*;
 use inquire::Confirm;
 use log::*;
+use lxd::lxc_command;
 use std::{
     collections::HashMap,
     env,
@@ -33,11 +34,13 @@ pub struct StoreImpl {}
 
 impl Store for StoreImpl {
     fn start_or_init_container() -> Result<Self> {
+        lxd::init_lxc_command()?;
         let status = lxd::container::get_platform_status(consts::CONTAINER_STORE_NAME).context(
             "Failed to run LXD. It seems like LXD is not installed or set up correctly! \
 Please see <https://codchi.dev/introduction/installation#linux> for setup instructions!",
         )?;
         trace!("LXD store container status: {status:#?}");
+
 
         let start = || {
             lxd::container::config_set(
@@ -328,7 +331,7 @@ tail -f "{log_file}"
                     "XAUTHORITY",
                     &format!("{}@", consts::user::DEFAULT_NAME),
                     "/bin/bash",
-                    "-c",
+                    "-lc",
                     &cmd.join(" "),
                 ],
             )
@@ -445,9 +448,7 @@ impl LinuxCommandTarget for LinuxCommandDriver {
         cwd: &Option<LinuxPath>,
         env: &HashMap<String, String>,
     ) -> std::process::Command {
-        let mut cmd = std::process::Command::new("lxc");
-        cmd.arg("-q");
-        cmd.args(["exec", &self.container_name]);
+        let mut cmd = lxc_command(&["exec", &self.container_name]);
         if let Some(cwd) = &cwd {
             cmd.args(["--cwd", &cwd.0]);
         }

@@ -105,7 +105,7 @@ pub trait Host: Sized {
             .processes_by_name("codchi".as_ref())
             .find(|p| {
                 log::trace!("Found candidate {:?} while searching for {exe:?}", p.cmd());
-                log::trace!("Found {p:?} while searching for {exe:?}");
+                // log::trace!("Found {p:?} while searching for {exe:?}");
                 p.exe().is_some_and(|p| p == exe) && p.cmd().get(1).is_some_and(|arg| arg == "tray")
             })
         {

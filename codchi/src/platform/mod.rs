@@ -24,6 +24,12 @@ pub use platform::store_debug_shell;
 #[cfg(target_os = "windows")]
 pub use platform::store_recover;
 
+#[cfg(target_os = "windows")]
+pub use platform::start_wsl_vpnkit;
+
+#[cfg(target_os = "windows")]
+pub use platform::stop_wsl_vpnkit;
+
 pub struct Driver {
     store: StoreImpl,
 }
