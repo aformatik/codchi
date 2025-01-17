@@ -328,7 +328,7 @@ tail -f "{log_file}"
                     "XAUTHORITY",
                     &format!("{}@", consts::user::DEFAULT_NAME),
                     "/bin/bash",
-                    "-c",
+                    "-lc",
                     &cmd.join(" "),
                 ],
             )

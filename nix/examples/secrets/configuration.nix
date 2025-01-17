@@ -1,8 +1,10 @@
 {
 
-  codchi.welcome.extraText = ''
-    This is some extra text which is shown on shell login.
+  codchi.initScript = ''
+    echo This is some extra text which is shown on machine init.
     echo Please run this special command to get started.
+
+    echo My secret: CODCHI_TEST=$CODCHI_TEST
   '';
 
   codchi.secrets.env.TEST.description = ''
