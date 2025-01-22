@@ -169,7 +169,7 @@ pub fn set_sparse(name: &str) -> Result<()> {
                 inquire::Confirm::new(&format!(
                     "Codchi needs to stop WSL in order to set \
 WSL distribution '{name}' to sparse mode. WARNING: This will stop all WSL distributions \
-including all running programs. Is this OK?",
+including all running programs. Is this OK? [y/n]",
                 ))
                 .with_help_message("You can also do this manually at a later time.")
                 .prompt()

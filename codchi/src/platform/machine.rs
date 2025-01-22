@@ -3,7 +3,7 @@ use super::{
 };
 use crate::{
     cli::CODCHI_DRIVER_MODULE,
-    config::{EnvSecret, FlakeLocation, MachineConfig},
+    config::{ConfigResult, EnvSecret, FlakeLocation, MachineConfig},
     consts::{self, host, ToPath},
     logging::{hide_progress, log_progress, set_progress_status, with_suspended_progress},
     platform::{self, CommandExt, Driver, Store},
@@ -37,6 +37,9 @@ pub trait MachineDriver: Sized {
 
     /// Export file system of a machine to a tar WITHOUT starting the store or the machine.
     fn tar(&self, target_file: &std::path::Path) -> Result<()>;
+
+    /// Duplicate the container backing this machine
+    fn duplicate_container(&self, target: &Machine) -> Result<()>;
 }
 
 #[derive(Debug, Clone)]
@@ -359,7 +362,7 @@ git add flake.*
     pub fn delete(self, im_really_sure: bool) -> Result<()> {
         let name = &self.config.name;
         if !im_really_sure
-            && !inquire::Confirm::new(&format!("Delete '{name}'?",))
+            && !inquire::Confirm::new(&format!("Delete '{name}'? [y/n]",))
                 .with_help_message(&format!(
                     "This will remove all files associated with '{name}'"
                 ))
@@ -497,6 +500,39 @@ git add flake.*
             self.start()?;
         }
         self.create_exec_cmd(&["codchi-init"]).wait_inherit()?;
+
+        Ok(())
+    }
+
+    /// Duplicate this machine
+    pub fn duplicate(&self, target_name: &str) -> Result<()> {
+        match MachineConfig::find(target_name)? {
+            ConfigResult::Exists => bail!("Code machine '{target_name}' already exists."),
+            ConfigResult::SimilarExists(other) => {
+                bail!("A machine with a similar name ({other}) already exists.")
+            }
+            ConfigResult::None => {}
+        }
+
+
+        let (lock, _) = MachineConfig::open(target_name, true)?;
+        let mut new_cfg = self.config.clone();
+        new_cfg.name = target_name.to_string();
+        new_cfg.write(lock)?;
+
+        let mut new_machine = Machine {
+            config: new_cfg,
+            config_status: ConfigStatus::NotInstalled,
+            platform_status: PlatformStatus::NotInstalled,
+        };
+        self.duplicate_container(&new_machine)?;
+        new_machine.write_flake()?;
+        new_machine.build(true)?;
+
+        log::info!(
+            "Successfully duplicated machine '{}' to '{target_name}'",
+            self.config.name
+        );
 
         Ok(())
     }

@@ -372,6 +372,18 @@ codchi exec <MACHINE_NAME> -- PROGRAM [ARGS...]
     },
 
     #[clap(
+        about = "Duplicate a code machine.",
+        aliases = &["dup"],
+    )]
+    Duplicate {
+        /// Name of the code machine to duplicate
+        source_name: String,
+
+        /// Name of the new code machine
+        target_name: String,
+    },
+
+    #[clap(
         group(ArgGroup::new("exclusive").args(&["all", "machines"])),
         about = "Perform garbage collection of old nix store paths.",
         long_about = r#"

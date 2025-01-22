@@ -2,6 +2,7 @@ use self::wsl::wsl_command;
 use super::{
     Driver, LinuxCommandTarget, LinuxUser, Machine, MachineDriver, NixDriver, PlatformStatus, Store,
 };
+use crate::progress_scope;
 use crate::util::{LinuxPath, PathExt, ResultExt, UtilExt};
 use crate::{
     cli::DEBUG,
@@ -16,8 +17,10 @@ use crate::{
 };
 use anyhow::{Context, Result};
 pub use host::*;
+use inquire::InquireError;
 use itertools::Itertools;
 use log::Level;
+use std::io::{self, IsTerminal};
 use std::{
     collections::HashMap,
     env,
@@ -171,7 +174,6 @@ pub fn store_debug_shell() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[cfg(target_os = "windows")]
 pub fn store_recover() -> anyhow::Result<()> {
     use wsl::extract_from_msix;
 
@@ -425,6 +427,49 @@ tail -f "{log_file}"
             ])
             .wait_ok()?;
 
+        Ok(())
+    }
+
+    fn duplicate_container(&self, target: &Machine) -> Result<()> {
+        let target_name = consts::machine::machine_name(&target.config.name);
+        if Self::read_platform_status(&self.config.name)? == PlatformStatus::Running {
+            if io::stdin().is_terminal()
+                && inquire::Confirm::new(&format!(
+                    "Machine '{}' needs to be stopped in order to have a consistent file system \
+state. Is this OK? [y/n]",
+                    self.config.name
+                ))
+                .prompt()
+                .recover_err(|err| match err {
+                    InquireError::NotTTY => Ok(false),
+                    err => Err(err),
+                })?
+            {
+                self.stop(false)?;
+                thread::sleep(Duration::from_millis(500));
+            } else {
+                anyhow::bail!("Duplicating a running machine might result in inconsistent file system state");
+            }
+        }
+        progress_scope! {
+            set_progress_status("Copying file system...");
+            let src_path = consts::host::DIR_DATA
+                .join_machine(&self.config.name)
+                .join("ext4.vhdx");
+            let target_path = consts::host::DIR_DATA
+                .join_machine(&target.config.name)
+                .get_or_create()?
+                .join("ext4.vhdx");
+            fs::copy(src_path, &target_path).context("Failed copying ext4.vhdx")?;
+            wsl_command()
+                .args([
+                    "--import-in-place",
+                    &target_name,
+                    &target_path.display().to_string(),
+                ])
+                .wait_ok()
+                .context("Failed importing ext4.vhdx inplace...")?;
+        }
         Ok(())
     }
 }

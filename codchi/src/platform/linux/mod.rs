@@ -41,7 +41,6 @@ Please see <https://codchi.dev/introduction/installation#linux> for setup instru
         )?;
         trace!("LXD store container status: {status:#?}");
 
-
         let start = || {
             lxd::container::config_set(
                 consts::CONTAINER_STORE_NAME,
@@ -140,23 +139,9 @@ pub fn store_debug_shell() -> anyhow::Result<()> {
     Ok(())
 }
 
-impl MachineDriver for Machine {
-    fn cmd(&self) -> impl LinuxCommandTarget {
-        LinuxCommandDriver {
-            container_name: consts::machine::machine_name(&self.config.name),
-        }
-    }
-
-    fn read_platform_status(name: &str) -> Result<PlatformStatus> {
-        lxd::container::get_platform_status(&consts::machine::machine_name(name))
-    }
-
-    fn install(&self) -> Result<()> {
-        let lxd_name = machine_name(&self.config.name);
-        let rootfs = env::var("CODCHI_LXD_CONTAINER_MACHINE")
-                .map(PathBuf::from)
-                .context("Failed reading $CODCHI_LXD_CONTAINER_MACHINE from environment. This indicates a broken build.")?;
-        let mounts = vec![
+impl Machine {
+    pub fn get_machine_mounts(&self) -> Vec<LxdDevice> {
+        vec![
             LxdDevice::Disk {
                 source: consts::host::DIR_NIX.join("store"),
                 path: "/nix/store".to_owned(),
@@ -191,8 +176,28 @@ impl MachineDriver for Machine {
                 connect: "unix:@/tmp/.X11-unix/X0".to_owned(),
             },
             LxdDevice::Gpu,
-        ];
-        lxd::container::install(&lxd_name, rootfs, mounts.iter())?;
+        ]
+    }
+}
+
+impl MachineDriver for Machine {
+    fn cmd(&self) -> impl LinuxCommandTarget {
+        LinuxCommandDriver {
+            container_name: consts::machine::machine_name(&self.config.name),
+        }
+    }
+
+    fn read_platform_status(name: &str) -> Result<PlatformStatus> {
+        lxd::container::get_platform_status(&consts::machine::machine_name(name))
+    }
+
+    fn install(&self) -> Result<()> {
+        let lxd_name = machine_name(&self.config.name);
+        let rootfs = env::var("CODCHI_LXD_CONTAINER_MACHINE")
+                .map(PathBuf::from)
+                .context("Failed reading $CODCHI_LXD_CONTAINER_MACHINE from environment. This indicates a broken build.")?;
+
+        lxd::container::install(&lxd_name, rootfs, self.get_machine_mounts().iter())?;
 
         Ok(())
     }
@@ -358,7 +363,8 @@ This is needed in order to {reason}."
             log::debug!("Found {sudo_name} at {sudo:?}");
 
             let message = format!(
-                "Codchi needs to invoke `{}` as root in order to {reason}. Is it okay to use {sudo_name}?",
+                "Codchi needs to invoke `{}` as root in order to {reason}. \
+Is it okay to use {sudo_name}? [y/n]",
                 command.join(" ")
             );
             let user_confirmed = Confirm::new(&message).with_default(true).prompt()?;
@@ -432,6 +438,23 @@ This is needed in order to {reason}."
             })
         })?;
 
+        Ok(())
+    }
+
+    fn duplicate_container(&self, target: &Machine) -> Result<()> {
+        let target_name = consts::machine::machine_name(&target.config.name);
+        lxc_command(&[
+            "copy",
+            &consts::machine::machine_name(&self.config.name),
+            &target_name,
+        ])
+        .wait_ok()
+        .context("Failed copying LXD container")?;
+
+        lxd::container::config_umount_all(&target_name)?;
+        for mount in target.get_machine_mounts() {
+            lxd::container::config_mount(&target_name, &mount)?;
+        }
         Ok(())
     }
 }

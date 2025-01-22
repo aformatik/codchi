@@ -17,7 +17,6 @@ use std::{
     sync::mpsc::channel,
 };
 
-
 /// Internal name of driver module in codchi's NixOS modules
 pub const NIXOS_DRIVER_NAME: &str = platform::NIXOS_DRIVER_NAME;
 
@@ -67,7 +66,7 @@ pub trait Store: Sized {
         {
             if !inquire::Confirm::new(
                 "Currently, garbage collection will delete user-created roots for example when \
-using 'nix build' or direnv. Still procceed?",
+using 'nix build' or direnv. Still procceed? [y/n]",
             )
             .prompt()?
             {
@@ -127,4 +126,3 @@ using 'nix build' or direnv. Still procceed?",
         Ok(host_path)
     }
 }
-

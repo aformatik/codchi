@@ -162,7 +162,7 @@ pub fn set(
             if opts.dont_prompt {
                 log::warn!("Removing {name} '{value}'");
                 Ok(None)
-            } else if inquire::Confirm::new(&format!("Keep {name} '{value}'?")).prompt()? {
+            } else if inquire::Confirm::new(&format!("Keep {name} '{value}'? [y/n]")).prompt()? {
                 Ok(Some(value))
             } else {
                 Ok(None)
@@ -552,7 +552,7 @@ fn inquire_module_url(
             if opts.dont_prompt {
                 log::info!("Using path '{home}/{path}'.");
             } else if !inquire::Confirm::new(&format!(
-                "Using path '{home}/{path}'. Is this correct?"
+                "Using path '{home}/{path}'. Is this correct? [y/n]"
             ))
             .prompt()?
             {

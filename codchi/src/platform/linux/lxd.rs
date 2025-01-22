@@ -172,6 +172,16 @@ pub mod container {
         Gpu,
     }
 
+    pub fn config_umount_all(container_name: &str) -> Result<()> {
+        for dev in lxc_command(&["config", "device", "list", container_name])
+            .output_utf8_ok()?
+            .lines()
+        {
+            lxc_command(&["config", "device", "remove", container_name, dev]).wait_ok()?;
+        }
+        Ok(())
+    }
+
     pub fn config_mount(container_name: &str, device: &LxdDevice) -> Result<()> {
         match device {
             LxdDevice::Disk { source, path } => {

@@ -220,6 +220,10 @@ Thank you kindly!"#
             name,
             i_am_really_sure,
         } => Machine::by_name(name, true)?.delete(*i_am_really_sure)?,
+        Cmd::Duplicate {
+            source_name,
+            target_name,
+        } => Machine::by_name(source_name, true)?.duplicate(target_name)?,
         Cmd::Module(cmd) => match cmd {
             cli::ModuleCmd::List { name } => {
                 let json = cli.json;
