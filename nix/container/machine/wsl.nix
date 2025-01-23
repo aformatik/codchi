@@ -67,7 +67,7 @@ in
         mv "${INIT_ENV_BACKUP}" "${consts.machine.INIT_ENV}"
       else
         echo "This distribution is only meant to be started by codchi.exe!" >&2
-        /mnt/c/WINDOWS/system32/msg.exe '*' "This distribution is only meant to be started by codchi.exe!" >&2
+        # /mnt/c/WINDOWS/system32/msg.exe '*' "This distribution is only meant to be started by codchi.exe!" >&2
         exit 1
       fi
 

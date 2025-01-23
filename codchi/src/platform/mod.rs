@@ -42,7 +42,7 @@ impl Driver {
                 store: Store::init()?,
             })
         });
-        result.expect("Failed initializing Driver.")
+        result.expect("Failed initializing Driver")
     }
 
     pub fn store() -> &'static impl Store {

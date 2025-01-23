@@ -91,7 +91,8 @@ impl Store for StoreImpl {
                         .arg(consts::CONTAINER_STORE_NAME)
                         .wait_ok()
                         .trace_err("Failed stopping incorrectly started store container");
-                    anyhow::bail!("The store container was started incorrectly. Please try again!");
+                    log::warn!("The store container was started incorrectly. Restarting...");
+                    Store::init()
                 }
             }
             PlatformStatus::Stopped => {
