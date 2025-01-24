@@ -187,7 +187,7 @@ where
 
     f(&path).finally(|| {
         let _ = fs::remove_file(&path)
-            .map_err(|err| log::warn!("Failed deleting tmpfile {}: {err}", path.display()));
+            .map_err(|err| log::debug!("Failed deleting tmpfile {}: {err}", path.display()));
     })
 }
 

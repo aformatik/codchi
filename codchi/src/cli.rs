@@ -476,7 +476,7 @@ See the following docs on how to register the completions with your shell:
     #[clap(hide = true)]
     Tray {},
 
-    #[clap(about = "Export the file system of a code machine.")]
+    #[clap(about = "Export the file system of a code machine including NixOS configuration and codchi secrets.")]
     Tar {
         /// Name of the code machine
         name: String,

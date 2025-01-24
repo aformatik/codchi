@@ -17,14 +17,7 @@ use inquire::Confirm;
 use log::*;
 use lxd::lxc_command;
 use std::{
-    collections::HashMap,
-    env,
-    fs::{self, File},
-    io::Write,
-    path::PathBuf,
-    process::Command,
-    sync::mpsc::channel,
-    thread,
+    collections::HashMap, env, fs, path::PathBuf, process::Command, sync::mpsc::channel, thread,
 };
 
 pub const NIX_STORE_PACKAGE: &str = "store-lxd";
@@ -34,7 +27,6 @@ pub struct StoreImpl {}
 
 impl Store for StoreImpl {
     fn start_or_init_container() -> Result<Self> {
-        lxd::init_lxc_command()?;
         let status = lxd::container::get_platform_status(consts::CONTAINER_STORE_NAME).context(
             "Failed to run LXD. It seems like LXD is not installed or set up correctly! \
 Please see <https://codchi.dev/introduction/installation#linux> for setup instructions!",
@@ -232,23 +224,7 @@ impl MachineDriver for Machine {
                 )?;
             }
             with_tmp_file(&format!("codchi-{}-env", self.config.name), |path| {
-                let mut env = self.config.secrets.clone();
-
-                env.insert(
-                    "DEBUG".to_string(),
-                    if *DEBUG { "1" } else { "" }.to_string(),
-                );
-                env.insert("MACHINE_NAME".to_string(), self.config.name.clone());
-
-                let mut env_file = File::options()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(path)?;
-                for (key, value) in env {
-                    writeln!(env_file, r#"export CODCHI_{key}="{value}""#)?;
-                }
-                env_file.sync_all()?;
+                self.write_env_file(&path)?;
                 lxd::container::file_push(
                     &machine_name(&self.config.name),
                     path,
@@ -380,6 +356,24 @@ Is it okay to use {sudo_name}? [y/n]",
 
         with_tmp_file(&format!("codchi-backup-{}", self.config.name), |tmp_dir| {
             fs::create_dir_all(tmp_dir)?;
+
+            let etc_nixos = tmp_dir.join("backup/container/rootfs/etc/nixos");
+            etc_nixos.get_or_create()?;
+            self.write_flake_standalone(etc_nixos.join("flake.nix"))?;
+            fs::copy(
+                consts::host::DIR_CONFIG
+                    .join_machine(&self.config.name)
+                    .join("flake.lock"),
+                etc_nixos.join("flake.lock"),
+            )
+            .trace_err("Failed copying flake.lock")
+            .ignore();
+
+            self.write_env_file(tmp_dir.join(format!(
+                "backup/container/rootfs{}",
+                consts::machine::CODCHI_ENV.0
+            )))?;
+
             let lxc_export = tmp_dir.join("lxc_export.tar").display().to_string();
             let target_file = target_file.display().to_string();
             lxd::container::export(
@@ -387,7 +381,36 @@ Is it okay to use {sudo_name}? [y/n]",
                 &lxc_export,
             )?;
             Command::new("tar")
-                .args(["-C", &tmp_dir.display().to_string(), "-xf", &lxc_export])
+                .args([
+                    "-C",
+                    &tmp_dir.display().to_string(),
+                    "-xf",
+                    &lxc_export,
+                    "--exclude=.files",
+                    "--exclude=bin*",
+                    "--exclude=dev*",
+                    "--exclude=etc*",
+                    "--exclude=lib*",
+                    "--exclude=lib64*",
+                    "--exclude=nix*",
+                    "--exclude=proc*",
+                    "--exclude=run*",
+                    "--exclude=sbin*",
+                    "--exclude=sys*",
+                    "--exclude=tmp*",
+                    "--exclude=var/.updated",
+                    "--exclude=var/cache",
+                    "--exclude=var/db*",
+                    "--exclude=var/empty",
+                    "--exclude=var/lib/nixos*",
+                    "--exclude=var/lib/systemd*",
+                    "--exclude=var/lock",
+                    "--exclude=var/log*",
+                    "--exclude=var/spool*",
+                ])
+                .wait_ok()?;
+            Command::new("chmod")
+                .args(["755", &tmp_dir.display().to_string()])
                 .wait_ok()?;
             with_suspended_progress(|| {
                 command_with_privileges(

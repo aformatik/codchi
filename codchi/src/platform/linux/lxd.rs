@@ -6,25 +6,22 @@ use std::process::Command;
 use std::sync::OnceLock;
 use which::which;
 
-static LXD_COMMAND: OnceLock<&str> = OnceLock::new();
-
-pub fn init_lxc_command() -> Result<()> {
-    LXD_COMMAND.get_or_try_init(|| {
-        if let Ok(_) = which("lxd") {
-            log::trace!("Using LXD as container runtime.");
-            Ok("lxc")
-        } else if let Ok(_) = which("incus") {
-            log::trace!("Using Incus as container runtime.");
-            Ok("incus")
-        } else {
-            bail!("Either LXD or Incus is required to run Codchi.")
-        }
-    })?;
-    Ok(())
-}
-
 pub fn lxc_command(args: &[&str]) -> Command {
-    let mut cmd = Command::new(LXD_COMMAND.get().expect("init_lxc_command was not called"));
+    static LXD_COMMAND: OnceLock<&str> = OnceLock::new();
+    let command = LXD_COMMAND
+        .get_or_try_init(|| {
+            if let Ok(_) = which("lxd") {
+                log::trace!("Using LXD as container runtime.");
+                Ok("lxc")
+            } else if let Ok(_) = which("incus") {
+                log::trace!("Using Incus as container runtime.");
+                Ok("incus")
+            } else {
+                bail!("Either LXD or Incus is required to run Codchi.")
+            }
+        })
+        .unwrap();
+    let mut cmd = Command::new(command);
     cmd.arg("-q");
     cmd.args(args);
     cmd

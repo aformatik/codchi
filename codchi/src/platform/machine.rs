@@ -2,7 +2,7 @@ use super::{
     platform::HostImpl, Host, LinuxCommandBuilder, LinuxCommandTarget, LinuxUser, NixDriver,
 };
 use crate::{
-    cli::CODCHI_DRIVER_MODULE,
+    cli::{CODCHI_DRIVER_MODULE, DEBUG},
     config::{ConfigResult, EnvSecret, FlakeLocation, MachineConfig},
     consts::{self, host, ToPath},
     logging::{hide_progress, log_progress, set_progress_status, with_suspended_progress},
@@ -13,7 +13,14 @@ use crate::{
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use log::Level;
-use std::{collections::HashMap, fs, sync::mpsc::channel, thread};
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    io::Write,
+    path::Path,
+    sync::mpsc::channel,
+    thread,
+};
 
 pub trait MachineDriver: Sized {
     fn cmd(&self) -> impl LinuxCommandTarget;
@@ -144,7 +151,7 @@ fi
                 .map(|(name, url)| {
                     format!(
                         r#"    "{name}".url = "{}";"#,
-                        url.to_nix_url(&self.config.name)
+                        url.to_nix_url(consts::store::DIR_DATA.join_machine(&self.config.name))
                     )
                 })
                 .join("\n");
@@ -202,6 +209,85 @@ fi
             .with_cwd(consts::store::DIR_CONFIG.join_machine(&self.config.name))
             .wait_ok()?;
 
+        Ok(())
+    }
+
+    pub fn write_flake_standalone<P: AsRef<Path>>(&self, target: P) -> Result<()> {
+        let flake = {
+            let codchi_url = consts::CODCHI_FLAKE_URL;
+            let codchi_driver = CODCHI_DRIVER_MODULE;
+            let module_inputs = self
+                .config
+                .modules
+                .iter()
+                .map(|(name, url)| {
+                    format!(
+                        r#"    "{name}".url = "{}";"#,
+                        url.to_nix_url(consts::user::DEFAULT_HOME.clone())
+                    )
+                })
+                .join("\n");
+            let nix_system = consts::NIX_SYSTEM;
+            let nixpkgs = if let Some(name) = &self.config.nixpkgs_from {
+                format!(r#"inputs."{name}".inputs.nixpkgs"#)
+            } else {
+                "inputs.codchi_driver.inputs.nixpkgs".to_string()
+            };
+            let modules = self
+                .config
+                .modules
+                .iter()
+                .map(|(name, url)| {
+                    format!(
+                        r#"        inputs."{name}".{module_name}"#,
+                        module_name = url.flake_attr
+                    )
+                })
+                .join("\n");
+            format!(
+                r#"{{
+  inputs = {{
+    {codchi_driver}.url = "{codchi_url}";
+{module_inputs}
+  }};
+  outputs = inputs: {{
+    nixosConfigurations.nixos = {nixpkgs}.lib.nixosSystem {{
+      system = "{nix_system}";
+      modules = [
+        {{ 
+             _module.args.inputs.nixpkgs = {nixpkgs}; 
+             codchi.driver.name = "none";
+        }}
+        inputs.{codchi_driver}.nixosModules.default
+{modules}
+      ];
+    }};
+  }};
+}}"#
+            )
+        };
+        fs::write(target, flake)?;
+        Ok(())
+    }
+
+    pub fn write_env_file<P: AsRef<Path>>(&self, target: P) -> Result<()> {
+        let mut env = self.config.secrets.clone();
+
+        env.insert(
+            "DEBUG".to_string(),
+            if *DEBUG { "1" } else { "" }.to_string(),
+        );
+        env.insert("MACHINE_NAME".to_string(), self.config.name.clone());
+
+        let mut env_file = File::options()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(target)?;
+        for (key, value) in env {
+            writeln!(env_file, r#"export CODCHI_{key}="{value}""#)?;
+        }
+        env_file.sync_all()?;
         Ok(())
     }
 
@@ -513,7 +599,6 @@ git add flake.*
             }
             ConfigResult::None => {}
         }
-
 
         let (lock, _) = MachineConfig::open(target_name, true)?;
         let mut new_cfg = self.config.clone();
