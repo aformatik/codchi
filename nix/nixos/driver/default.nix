@@ -15,6 +15,7 @@ in
     name = mkOption {
       type = types.enum [ "wsl" "lxd" "none" ];
       internal = true;
+      default = "none";
     };
     iconCommand = mkOption {
       type = types.nullOr types.str;
@@ -37,37 +38,69 @@ in
 
   config = mkMerge [
 
-    # Nix(OS) stuff managed by codchi
+    # works inside codchi & external vms
     {
-      system.build.codchi.container =
-        if (config.codchi.driver.name != "none") then
-          (import ../../container { inherit inputs pkgs lib; }
+      nix = {
+        package =
+          if lib.versionAtLeast config.system.stateVersion "24.11"
+          then pkgs.nix
+          else pkgs.nixFlakes;
+        # Setup nix flakes
+        extraOptions = ''
+          experimental-features = nix-command flakes
+        '';
+        registry.nixpkgs.flake = inputs.nixpkgs;
+        nixPath = [ "nixpkgs=/etc/channels/nixpkgs" ];
+
+        settings = {
+          extra-substituters = [ "https://codchi.cachix.org" ];
+          trusted-public-keys = [ "codchi.cachix.org-1:dVwdzogJgZO2x8kPKW02HNt2dpd/P/z46pY465MkokY=" ];
+        };
+      };
+      environment.etc."channels/nixpkgs".source = inputs.nixpkgs;
+      # source codchi secrets
+      environment.extraInit = /* bash */ ''
+        source /etc/codchi-env
+      '';
+
+      users.mutableUsers = mkForce false;
+      users.users.${consts.machine.USER} = {
+        isNormalUser = mkForce true;
+        createHome = mkForce true;
+        home = mkForce "/home/${consts.machine.USER}";
+        uid = mkForce 1000;
+        extraGroups = [ "wheel" ];
+        initialPassword = consts.machine.USER;
+      };
+      security.sudo.wheelNeedsPassword = mkDefault false;
+    }
+
+    (mkIf (config.codchi.driver.name != "none") {
+      system.build.codchi.container = (import ../../container { inherit inputs pkgs lib; }
+        {
+          config = lib.recursiveUpdate
+            config.codchi.driver.containerCfg
             {
-              config = lib.recursiveUpdate
-                config.codchi.driver.containerCfg
-                {
-                  machine = {
-                    enable = true;
-                    driver.${config.codchi.driver.name}.enable = true;
-                  };
-                };
-            }).config.build.tarball
-        else null;
+              machine = {
+                enable = true;
+                driver.${config.codchi.driver.name}.enable = true;
+              };
+            };
+        }).config.build.tarball;
 
       systemd = {
         services = {
           # Create files required by the driver
-          "create-files" = mkIf (config.codchi.driver.name != "none")
-            {
-              after = [ "network.target" ];
-              wantedBy = [ "multi-user.target" ];
-              serviceConfig.Type = "oneshot";
-              script = /* bash */ ''
-                ( cd / &&
-                  ${lib.getExe config.system.build.codchi.container.passthru.createFiles}
-                )
-              '';
-            };
+          "create-files" = {
+            after = [ "network.target" ];
+            wantedBy = [ "multi-user.target" ];
+            serviceConfig.Type = "oneshot";
+            script = /* bash */ ''
+              ( cd / &&
+                ${lib.getExe config.system.build.codchi.container.passthru.createFiles}
+              )
+            '';
+          };
 
           nix-daemon.enable = mkForce false;
           nix-gc.enable = mkForce false;
@@ -86,69 +119,10 @@ in
       system.disableInstallerTools = mkForce true;
 
       environment.variables.NIX_REMOTE = "daemon";
-      # Setup nix flakes
-      nix = {
-        package =
-          if lib.versionAtLeast config.system.stateVersion "24.11"
-          then pkgs.nix
-          else pkgs.nixFlakes;
-        extraOptions = ''
-          experimental-features = nix-command flakes
-        '';
-        registry.nixpkgs.flake = inputs.nixpkgs;
-        nixPath = [ "nixpkgs=/etc/channels/nixpkgs" ];
 
-        settings = {
-          extra-substituters = [ "https://codchi.cachix.org" ];
-          trusted-public-keys = [ "codchi.cachix.org-1:dVwdzogJgZO2x8kPKW02HNt2dpd/P/z46pY465MkokY=" ];
-        };
-      };
-      environment.etc."channels/nixpkgs".source = inputs.nixpkgs;
-    }
-
-
-    # general codchi machine management
-    {
-      boot.isContainer = true;
-
-      # source codchi secrets
-      environment.extraInit = /* bash */ ''
-        source /etc/codchi-env
-      '';
-
-      # useful for usbip but adds a dependency on various firmwares which are combined over 300 MB big
-      services.udev.enable = mkDefault false;
-
-      networking.firewall.enable = mkDefault false;
-
-      systemd = {
-        # Don't allow emergency mode, because we don't have a console.
-        enableEmergencyMode = false;
-        # systemd-oomd requires cgroup pressure info which WSL doesn't have
-        oomd.enable = false;
-      };
-
-      users.mutableUsers = mkForce false;
-      users.users.${consts.machine.USER} = {
-        isNormalUser = mkForce true;
-        createHome = mkForce true;
-        home = mkForce "/home/${consts.machine.USER}";
-        uid = mkForce 1000;
-        extraGroups = [ "wheel" ];
-        initialPassword = consts.machine.USER;
-      };
-      security.sudo.wheelNeedsPassword = mkDefault false;
-
-      hardware =
-        if lib.versionAtLeast config.system.stateVersion "24.11"
-        then { graphics.enable = lib.mkDefault true; }
-        else { opengl.enable = lib.mkDefault true; };
-      # powerManagement.enable = false;
-
-    }
-
-    # Desktop stuff
-    {
+      #################
+      # desktop stuff #
+      #################
       xdg = mkDefault {
         autostart.enable = true;
         menus.enable = true;
@@ -193,7 +167,28 @@ in
         '';
       };
 
-    }
+      ##################################################
+      # codchi's hardware-configuration.nix equivalent #
+      ##################################################
+      boot.isContainer = true;
+
+      # useful for usbip but adds a dependency on various firmwares which are combined over 300 MB big
+      services.udev.enable = mkDefault false;
+
+      networking.firewall.enable = mkDefault false;
+
+      systemd = {
+        # Don't allow emergency mode, because we don't have a console.
+        enableEmergencyMode = false;
+        # systemd-oomd requires cgroup pressure info which WSL doesn't have
+        oomd.enable = false;
+      };
+
+      hardware =
+        if lib.versionAtLeast config.system.stateVersion "24.11"
+        then { graphics.enable = lib.mkDefault true; }
+        else { opengl.enable = lib.mkDefault true; };
+    })
   ];
 
 }

@@ -2,6 +2,7 @@ use crate::cli::{InputOptions, ModuleAttrPath, ModuleName, NixpkgsLocation, Rela
 use crate::config::git_url::{GitUrl, Scheme};
 use crate::consts;
 use crate::consts::user::DEFAULT_HOME;
+use crate::consts::ToPath;
 use crate::logging::{log_progress, set_progress_status};
 use crate::platform::{nix::NixDriver, *};
 use crate::progress_scope;
@@ -309,7 +310,7 @@ pub fn fetch_modules(
         .unwrap_or_else(|| petname(1, "-").expect("Failed to generate random name"));
 
     let flake_url = inquire_module_url(opts, url, allow_local)?;
-    let nix_url = flake_url.to_nix_url(&machine.name);
+    let nix_url = flake_url.to_nix_url(consts::store::DIR_DATA.join_machine(&machine.name));
 
     let available_modules = progress_scope! {
         set_progress_status("Fetching available modules...");

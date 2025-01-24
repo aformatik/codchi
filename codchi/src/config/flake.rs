@@ -1,6 +1,6 @@
 use super::*;
 use crate::cli::ModuleAttrPath;
-use crate::consts::{store, ToPath};
+use crate::consts::ToPath;
 use crate::util::*;
 use git_url_parse::{GitUrl, Scheme};
 use std::marker::PhantomData;
@@ -44,7 +44,7 @@ fn metadata_to_query(metadata: &[(&str, Option<&String>)]) -> String {
 
 impl<W: Hkd> FlakeUrl<W> {
     /// Serialize to nix readable flake url, ignoring `flake_module` (the part after '#')
-    pub fn to_nix_url(&self, machine_name: &str) -> String {
+    pub fn to_nix_url(&self, local_root: LinuxPath) -> String {
         use FlakeLocation::*;
         use FlakeScheme::*;
 
@@ -75,7 +75,7 @@ impl<W: Hkd> FlakeUrl<W> {
                 }
             }
             Local { path } => {
-                let real_path = store::DIR_DATA.join_machine(machine_name).join_str(path).0;
+                let real_path = local_root.join_str(path).0;
                 let query = metadata_to_query(&[
                     ("commit", self.commit.as_ref()),
                     ("ref", self.r#ref.as_ref()),
@@ -302,6 +302,7 @@ pub enum FlakeScheme {
 
 #[cfg(test)]
 mod tests {
+    use crate::consts;
     use super::*;
 
     fn local() -> FlakeUrl<Required> {
@@ -357,15 +358,15 @@ mod tests {
     #[test]
     fn to_nix_url() {
         assert_eq!(
-            local().to_nix_url("machine_name"),
+            local().to_nix_url(consts::store::DIR_DATA.join_machine("machine_name")),
             "git+file:///data/machine/machine_name/docs/codchi?"
         );
         assert_eq!(
-            remote_gh().to_nix_url(""),
+            remote_gh().to_nix_url(LinuxPath("".to_string())),
             "github:aformatik/codchi?host=github.com"
         );
         assert_eq!(
-            remote_custom().to_nix_url(""),
+            remote_custom().to_nix_url(LinuxPath("".to_string())),
             "git+https://my:token@foo.bar/aformatik/codchi.git?commit=jakfkl2&ref=my-branch&host=foo.bar"
         );
     }

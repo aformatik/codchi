@@ -3,7 +3,7 @@ use super::{
     Driver, LinuxCommandTarget, LinuxUser, Machine, MachineDriver, NixDriver, PlatformStatus, Store,
 };
 use crate::progress_scope;
-use crate::util::{LinuxPath, PathExt, ResultExt, UtilExt};
+use crate::util::{with_tmp_file, LinuxPath, PathExt, ResultExt, UtilExt};
 use crate::{
     cli::DEBUG,
     config::CodchiConfig,
@@ -20,12 +20,10 @@ pub use host::*;
 use inquire::InquireError;
 use itertools::Itertools;
 use log::Level;
-use std::io::{self, IsTerminal};
 use std::{
     collections::HashMap,
-    env,
-    fs::{self, OpenOptions},
-    io::Write,
+    env, fs,
+    io::{self, IsTerminal},
     path::PathBuf,
     sync::mpsc::channel,
     thread,
@@ -279,16 +277,7 @@ impl MachineDriver for Machine {
             }
 
             if let Err(err) = (|| {
-                let mut env_file = OpenOptions::new()
-                    .truncate(true)
-                    .write(true)
-                    .create(true)
-                    .open(env_path)?;
-
-                for (key, value) in &env {
-                    writeln!(env_file, r#"export CODCHI_{key}="{value}""#)?;
-                }
-                env_file.sync_all()?;
+                self.write_env_file(&env_path)?;
 
                 if self.platform_status == PlatformStatus::Running {
                     self.cmd()
@@ -394,36 +383,99 @@ tail -f "{log_file}"
         } else {
             env::current_dir()?.join(target_file)
         };
-        let wsl_path = wsl_command()
-            .args([
+        let wsl_cmd = || {
+            let mut cmd = wsl_command();
+            cmd.args([
                 "-d",
                 &consts::machine::machine_name(&self.config.name),
                 "--system",
                 "--user",
                 "root",
-            ])
+            ]);
+            cmd
+        };
+
+        let upper = "/mnt/wslg/overlay/upper";
+        let work = "/mnt/wslg/overlay/work";
+        let merged = "/mnt/wslg/overlay/merged";
+        wsl_cmd()
+            .args(["mkdir", "-p", upper, work, merged])
+            .wait_ok()?;
+        wsl_cmd()
             .args([
-                "wslpath",
-                "-u",
-                &target_absolute.display().to_string().replace("\\", "/"),
+                "mount",
+                "-t",
+                "overlay",
+                "overlay",
+                "-o",
+                &format!("lowerdir=/mnt/wslg/distro,upperdir={upper},workdir={work}"),
+                merged,
             ])
-            .output_utf8_ok()
-            .map(|path| path.trim().to_owned())
-            .with_context(|| format!("Failed to run 'wslpath' with path {target_absolute:?}."))?;
-        wsl_command()
-            .args([
-                "-d",
-                &consts::machine::machine_name(&self.config.name),
-                "--system",
-                "--user",
-                "root",
-            ])
+            .wait_ok()?;
+        // cant --exclude and --include with busybox tar, so we manually unwanted files (only in
+        // the overlayfs)
+        wsl_cmd()
+            .args(["rm", "-r", &format!("{merged}/etc")])
+            .wait_ok()?;
+
+        with_tmp_file(&format!("codchi-backup-{}", self.config.name), |tmp_dir| {
+            fs::create_dir_all(tmp_dir)?;
+
+            let etc_dir = tmp_dir.join("etc");
+            let etc_nixos_dir = etc_dir.join("nixos");
+            etc_nixos_dir.get_or_create()?;
+
+            self.write_flake_standalone(etc_nixos_dir.join("flake.nix"))?;
+            fs::copy(
+                consts::host::DIR_CONFIG
+                    .join_machine(&self.config.name)
+                    .join("flake.lock"),
+                etc_nixos_dir.join("flake.lock"),
+            )
+            .trace_err("Failed copying flake.lock")
+            .ignore();
+
+            self.write_env_file(etc_dir.join("codchi-env"))?;
+
+            let tmp_in_wsl = win_path_to_wsl(&tmp_dir)?;
+
+            wsl_cmd()
+                .args(["cp", "-r", &format!("{}/*", tmp_in_wsl.0), merged])
+                .wait_ok()?;
+
+            Ok(())
+        })?;
+
+        let wsl_path = win_path_to_wsl(&target_absolute)?;
+        wsl_cmd()
             .args([
                 "/mnt/wslg/distro/bin/tar",
                 "-C",
-                "/mnt/wslg/distro",
+                merged,
+                "--exclude=./.files",
+                "--exclude=./bin*",
+                "--exclude=./dev*",
+                // "--exclude=etc*",
+                "--exclude=./init",
+                "--exclude=./lib*",
+                "--exclude=./lib64*",
+                "--exclude=./nix*",
+                "--exclude=./proc*",
+                "--exclude=./run*",
+                "--exclude=./sbin*",
+                "--exclude=./sys*",
+                "--exclude=./tmp*",
+                "--exclude=./var/.updated",
+                "--exclude=./var/cache",
+                "--exclude=./var/db*",
+                "--exclude=./var/empty",
+                "--exclude=./var/lib/nixos*",
+                "--exclude=./var/lib/systemd*",
+                "--exclude=./var/lock",
+                "--exclude=./var/log*",
+                "--exclude=./var/spool*",
                 "-cf",
-                &wsl_path,
+                &wsl_path.0,
                 ".",
             ])
             .wait_ok()?;
@@ -449,7 +501,9 @@ state. Is this OK? [y/n]",
                 self.stop(false)?;
                 thread::sleep(Duration::from_millis(500));
             } else {
-                anyhow::bail!("Duplicating a running machine might result in inconsistent file system state");
+                anyhow::bail!(
+                    "Duplicating a running machine might result in inconsistent file system state"
+                );
             }
         }
         progress_scope! {
