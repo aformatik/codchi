@@ -8,8 +8,8 @@ use crate::{
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use known_folders::{get_known_folder_path, KnownFolder};
-use mslnk::ShellLink;
-use std::{env, fs, os::windows::process::CommandExt, process::Command};
+use mslnk::{FileAttributeFlags, LinkFlags, MSLinkError, ShellLink};
+use std::{env, fs, os::windows::process::CommandExt, path::Path, process::Command};
 use sysinfo::System;
 use windows::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW};
 
@@ -30,11 +30,46 @@ impl Host for HostImpl {
             .join(machine_name)
             .cleanup_and_get()?;
 
-        let codchi_exe = env::current_exe()?;
+        let codchi_exe = get_known_folder_path(KnownFolder::LocalAppData)
+            .expect("FOLDERID_LocalAppData missing")
+            .join("Microsoft")
+            .join("WindowsApps")
+            .join("codchi.exe");
         let codchiw_exe = codchi_exe
             .parent()
             .with_context(|| format!("Missing parent of {codchi_exe:?}"))?
             .join("codchiw.exe");
+
+        fn shell_link_new<P: AsRef<Path>>(target: P) -> Result<ShellLink, MSLinkError> {
+            let meta = fs::metadata(&target)?;
+            let working_dir_path = target
+                .as_ref()
+                .parent()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_owned();
+            let mut sl = ShellLink::default();
+
+            let mut flags = LinkFlags::IS_UNICODE;
+            sl.header_mut().set_link_flags(flags);
+            if meta.is_dir() {
+                sl.header_mut()
+                    .set_file_attributes(FileAttributeFlags::FILE_ATTRIBUTE_DIRECTORY);
+            } else {
+                flags |= LinkFlags::HAS_WORKING_DIR
+                    | LinkFlags::HAS_RELATIVE_PATH
+                    | LinkFlags::HAS_LINK_TARGET_ID_LIST;
+                sl.header_mut().set_link_flags(flags);
+                sl.set_relative_path(Some(format!("./{}", target.as_ref().to_str().unwrap())));
+                sl.set_working_dir(Some(working_dir_path));
+                sl.header_mut().set_file_size(meta.len() as u32);
+                // set link_target_idlist
+                sl.linktarget_mut().unwrap().set_linktarget(&target);
+            }
+
+            Ok(sl)
+        }
 
         for DesktopEntry {
             app_name,
@@ -44,7 +79,7 @@ impl Host for HostImpl {
             is_terminal,
         } in apps
         {
-            let mut lnk = ShellLink::new(if *is_terminal {
+            let mut lnk = shell_link_new(if *is_terminal {
                 codchi_exe.clone()
             } else {
                 codchiw_exe.clone()
