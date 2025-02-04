@@ -1,13 +1,12 @@
-use super::{
-    platform::HostImpl, Host, LinuxCommandBuilder, LinuxCommandTarget, LinuxUser, NixDriver,
-};
+use super::{platform::HostImpl, Host, LinuxCommandBuilder, LinuxCommandTarget, LinuxUser};
 use crate::{
     cli::{CODCHI_DRIVER_MODULE, DEBUG},
-    config::{ConfigResult, EnvSecret, FlakeLocation, MachineConfig},
+    config::{ConfigResult, FlakeLocation, MachineConfig},
     consts::{self, host, ToPath},
-    logging::{hide_progress, log_progress, set_progress_status, with_suspended_progress},
+    logging::{hide_progress, log_progress, set_progress_status},
     platform::{self, CommandExt, Driver, Store},
     progress_scope,
+    secrets::MachineSecrets,
     util::{PathExt, ResultExt, UtilExt},
 };
 use anyhow::{bail, Context, Result};
@@ -365,12 +364,10 @@ git add flake.*
                 self.cmd().run("pkill", &["sleep"]).wait_ok()
             );
         }
-        let secrets: HashMap<String, EnvSecret> = Driver::store().cmd().eval(
-            consts::store::DIR_CONFIG.join_machine(&self.config.name),
-            "nixosConfigurations.default.config.codchi.secrets.env",
-        )?;
 
         set_progress_status("Evaluating secrets...");
+        let secrets = self.eval_env_secrets()?;
+
         let (lock, mut cfg) = MachineConfig::open_existing(&self.config.name, true)?;
         let old_secrets = &cfg.secrets;
         let mut all_secrets = HashMap::new();
@@ -381,17 +378,7 @@ git add flake.*
                     all_secrets.insert(secret.name.clone(), existing.clone());
                 }
                 None => {
-                    let value = with_suspended_progress(|| {
-                        inquire::Password::new(&format!(
-                            "Please enter secret '{}' (Toggle input mask with <Ctrl+R>):",
-                            secret.name
-                        ))
-                        .without_confirmation()
-                        .with_display_mode(inquire::PasswordDisplayMode::Masked)
-                        .with_help_message(secret.description.trim())
-                        .with_display_toggle_enabled()
-                        .prompt()
-                    })?;
+                    let value = secret.prompt_value()?;
                     all_secrets.insert(secret.name.clone(), value);
                 }
             }

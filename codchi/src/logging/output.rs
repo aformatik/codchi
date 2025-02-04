@@ -1,10 +1,12 @@
 use std::{fmt::Display, io::stdout};
 
-use crate::config::{MachineModules, MachineStatus, Mod, ModLsOutput, StatusOutput};
+use crate::platform::{ConfigStatus, Machine};
+use crate::{
+    config::{MachineModules, MachineStatus, Mod, ModLsOutput, StatusOutput},
+    secrets::EnvSecret,
+};
 use itertools::Itertools;
 use serde::Serialize;
-
-use crate::platform::{ConfigStatus, Machine};
 
 pub trait CodchiOutput<A: Serialize> {
     fn to_output(&self) -> A;
@@ -88,6 +90,33 @@ impl CodchiOutput<ModLsOutput> for MachineModules {
                 Cell::new(&m.flake_module),
             ]);
         }
+        table
+    }
+}
+
+impl CodchiOutput<Vec<EnvSecret>> for Vec<EnvSecret> {
+    fn to_output(&self) -> Vec<EnvSecret> {
+        self.clone()
+    }
+
+    fn human_output(out: Vec<EnvSecret>) -> impl Display {
+        use comfy_table::*;
+
+        let mut table = Table::new();
+        table.load_preset(presets::UTF8_FULL).set_header(vec![
+            Cell::new("Name"),
+            Cell::new("Description"),
+            Cell::new("Value"),
+        ]);
+
+        for secret in out {
+            table.add_row(vec![
+                Cell::new(&secret.name),
+                Cell::new(&secret.description.trim()),
+                Cell::new(&secret.value.unwrap_or_default()),
+            ]);
+        }
+
         table
     }
 }

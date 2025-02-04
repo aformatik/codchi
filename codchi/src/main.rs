@@ -9,11 +9,14 @@ use crate::{
 use clap::{CommandFactory, Parser};
 use config::{git_url::GitUrl, CodchiConfig, MachineConfig};
 use console::style;
+use itertools::Itertools;
 use log::Level;
-use logging::{set_progress_status, CodchiOutput};
-use platform::{store_debug_shell, ConfigStatus, Host, MachineDriver};
+use logging::{hide_progress, set_progress_status, CodchiOutput};
+use platform::{store_debug_shell, ConfigStatus, Host, MachineDriver, PlatformStatus};
+use secrets::MachineSecrets;
 use std::{
     env,
+    io::IsTerminal,
     panic::{self, PanicInfo},
     process::exit,
     sync::{mpsc::channel, OnceLock},
@@ -28,6 +31,7 @@ pub mod consts;
 pub mod logging;
 pub mod module;
 pub mod platform;
+pub mod secrets;
 pub mod tray;
 pub mod util;
 
@@ -151,6 +155,7 @@ Thank you kindly!"#
     // all other commands
     match &cli.command.unwrap_or(Cmd::Status {}) {
         Cmd::Status {} => Machine::list(true)?.print(cli.json),
+
         Cmd::Init {
             machine_name,
             url,
@@ -177,6 +182,7 @@ Thank you kindly!"#
             })()
             .inspect_err(|_| interrupt_machine_creation(machine_name))?;
         }
+
         Cmd::Clone {
             machine_name,
             dir,
@@ -211,24 +217,95 @@ Thank you kindly!"#
                 "Machine '{machine_name}' is ready! Use `codchi exec {machine_name}` to start it."
             );
         }
+
         Cmd::Rebuild { no_update, name } => {
             Machine::by_name(name, true)?.build(*no_update)?;
             log::info!("Machine {name} rebuilt successfully!");
         }
+
         Cmd::Exec { name, cmd } => Machine::by_name(name, true)?.exec(cmd)?,
+
         Cmd::Delete {
             name,
             i_am_really_sure,
         } => Machine::by_name(name, true)?.delete(*i_am_really_sure)?,
+
         Cmd::Duplicate {
             source_name,
             target_name,
         } => Machine::by_name(source_name, true)?.duplicate(target_name)?,
+
+        Cmd::Secrets(cmd) => match cmd {
+            cli::SecretsCmd::List { name } => {
+                let secrets = progress_scope! {
+                    set_progress_status("Evaluating secrets...");
+                    Machine::by_name(name, true)?.eval_env_secrets()
+                }?;
+                secrets.into_values().collect_vec().print(cli.json);
+            }
+            cli::SecretsCmd::Get {
+                machine_name,
+                secret_name,
+            } => {
+                let (_, cfg) = MachineConfig::open_existing(machine_name, false)?;
+                match cfg.secrets.get(secret_name) {
+                    Some(value) => {
+                        println!("{value}");
+                    }
+                    None => {
+                        anyhow::bail!(
+                            "Machine '{machine_name}' has no secret named '{secret_name}'."
+                        );
+                    }
+                }
+            }
+            cli::SecretsCmd::Set {
+                machine_name,
+                secret_name,
+            } => {
+                set_progress_status("Evaluating secrets...");
+                let machine = Machine::by_name(machine_name, true)?;
+                let secrets = machine.eval_env_secrets()?;
+                hide_progress();
+                match secrets.get(secret_name) {
+                    Some(secret) => {
+                        let (lock, mut cfg) = MachineConfig::open_existing(machine_name, true)?;
+                        let value = secret.prompt_value()?;
+                        cfg.secrets.insert(secret_name.clone(), value);
+                        cfg.write(lock)?;
+                    }
+                    None => {
+                        anyhow::bail!(
+                            "Machine '{machine_name}' has no secret named '{secret_name}'."
+                        );
+                    }
+                }
+                if machine.platform_status == PlatformStatus::Running {
+                    if std::io::stdin().is_terminal()
+                        && inquire::Confirm::new(&format!(
+                        "Machine '{machine_name}' needs to be restarted in order to apply the new \
+secret. Is this OK? [y/n]",
+                    ))
+                        .prompt()
+                        .recover_err(|err| match err {
+                            inquire::InquireError::NotTTY => Ok(false),
+                            err => Err(err),
+                        })?
+                    {
+                        set_progress_status("Stopping machine '{machine_name}'...");
+                        machine.stop(false)?;
+                    } else {
+                        log::warn!("The changed secret will not be applied until the machine is restarted.");
+                    }
+                }
+                log::info!("Success!");
+            }
+        },
+
         Cmd::Module(cmd) => match cmd {
             cli::ModuleCmd::List { name } => {
-                let json = cli.json;
                 let (_, cfg) = MachineConfig::open_existing(name, false)?;
-                cfg.modules.print(json);
+                cfg.modules.print(cli.json);
             }
             cli::ModuleCmd::Add {
                 machine_name,
@@ -270,14 +347,19 @@ Thank you kindly!"#
                 alert_dirty(module::delete(name, module_name)?)
             }
         },
+
         Cmd::GC {
             delete_old,
             all,
             machines,
         } => Driver::store().gc(delete_old.map(|x| x.unwrap_or_default()), *all, machines)?,
+
         Cmd::Tray {} => tray::run()?,
+
         Cmd::Completion { .. } => unreachable!(),
+
         Cmd::Tar { .. } => unreachable!(),
+
         Cmd::Store(_) => unreachable!(),
     }
     if CodchiConfig::get().tray.autostart {

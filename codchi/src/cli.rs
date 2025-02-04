@@ -1,4 +1,5 @@
 pub use self::module::*;
+pub use self::secrets::*;
 
 use clap::builder::*;
 use clap::*;
@@ -227,6 +228,20 @@ cargo build
         #[arg(requires = "url")]
         module_paths: Vec<ModuleAttrPath>,
     },
+
+    #[command(subcommand)]
+    #[clap(
+        about = "Manage secrets of code machines.",
+        long_about = r#"
+Sometimes there is the need for user-specific variables and / or secrets, which should not be
+included inside the .nix files inside a git repository, but they're still needed for the
+development environment. An example is a GitHub / GitLab token which is used to automatically
+setup mail and username for Git's config.
+
+See <https://codchi.dev/config/secrets> for more information.
+"#
+    )]
+    Secrets(SecretsCmd),
 
     #[command(subcommand)]
     #[clap(
@@ -476,7 +491,9 @@ See the following docs on how to register the completions with your shell:
     #[clap(hide = true)]
     Tray {},
 
-    #[clap(about = "Export the file system of a code machine including NixOS configuration and codchi secrets.")]
+    #[clap(
+        about = "Export the file system of a code machine including NixOS configuration and codchi secrets."
+    )]
     Tar {
         /// Name of the code machine
         name: String,
@@ -488,6 +505,39 @@ See the following docs on how to register the completions with your shell:
     #[command(subcommand)]
     #[clap(about = "Utilities for interacting with the `codchistore` container.")]
     Store(StoreCmd),
+}
+
+mod secrets {
+    use super::*;
+
+    #[derive(Debug, Subcommand, Clone)]
+    pub enum SecretsCmd {
+        /// Lists secrets of a code machine
+        #[clap(aliases = &["ls"])]
+        List {
+            /// Name of the code machine
+            name: String,
+        },
+
+        /// Get the current value of a secret.
+        Get {
+            /// Name of the code machine
+            machine_name: String,
+
+            /// Name of the secret
+            secret_name: String,
+        },
+
+        /// Change the value of an existing secret. The machine needs to be restarted after
+        /// modifying secrets.
+        Set {
+            /// Name of the code machine
+            machine_name: String,
+
+            /// Name of the secret
+            secret_name: String,
+        },
+    }
 }
 
 mod module {
