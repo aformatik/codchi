@@ -4,15 +4,17 @@
 
 use crate::{
     cli::{Cli, Cmd, CLI_ARGS},
-    platform::{Driver, Machine, Store},
+    consts::ToPath,
+    platform::{Driver, Machine, NixDriver, Store},
 };
 use clap::{CommandFactory, Parser};
-use config::{git_url::GitUrl, CodchiConfig, MachineConfig};
+use config::{git_url::GitUrl, CodchiConfig, EnvSecret, MachineConfig};
 use console::style;
 use log::Level;
 use logging::{set_progress_status, CodchiOutput};
 use platform::{store_debug_shell, ConfigStatus, Host, MachineDriver};
 use std::{
+    collections::HashMap,
     env,
     panic::{self, PanicInfo},
     process::exit,
@@ -224,6 +226,55 @@ Thank you kindly!"#
             source_name,
             target_name,
         } => Machine::by_name(source_name, true)?.duplicate(target_name)?,
+        Cmd::Secrets(cmd) => match cmd {
+            cli::SecretsCmd::List { name } => {
+                let json = cli.json;
+                let secrets: HashMap<String, EnvSecret> = Driver::store().cmd().eval(
+                    consts::store::DIR_CONFIG.join_machine(name),
+                    "nixosConfigurations.default.config.codchi.secrets.env",
+                )?;
+                let secrets = secrets.values().cloned().collect::<Vec<EnvSecret>>();
+                secrets.print(json);
+            }
+            cli::SecretsCmd::Get {
+                machine_name,
+                secret_name,
+            } => {
+                let (_, cfg) = MachineConfig::open_existing(machine_name, false)?;
+                match cfg.secrets.get(secret_name) {
+                    Some(value) => {
+                        log::info!("Secret is {}.", value);
+                    }
+                    None => {
+                        log::info!(
+                            "Machine '{machine_name}' doesn't have the secret '{secret_name}'."
+                        );
+                    }
+                }
+            }
+            cli::SecretsCmd::Set {
+                machine_name,
+                secret_name,
+            } => {
+                let secrets: HashMap<String, EnvSecret> = Driver::store().cmd().eval(
+                    consts::store::DIR_CONFIG.join_machine(machine_name),
+                    "nixosConfigurations.default.config.codchi.secrets.env",
+                )?;
+                let (lock, mut cfg) = MachineConfig::open_existing(machine_name, true)?;
+                match secrets.get(secret_name) {
+                    Some(secret) => {
+                        let value = Machine::prompt_secret_value(&secret)?;
+                        cfg.secrets.insert(secret_name.clone(), value);
+                    }
+                    None => {
+                        log::info!(
+                            "Machine '{machine_name}' doesn't have the secret '{secret_name}'."
+                        );
+                    }
+                }
+                cfg.write(lock)?;
+            }
+        },
         Cmd::Module(cmd) => match cmd {
             cli::ModuleCmd::List { name } => {
                 let json = cli.json;

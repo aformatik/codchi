@@ -381,17 +381,7 @@ git add flake.*
                     all_secrets.insert(secret.name.clone(), existing.clone());
                 }
                 None => {
-                    let value = with_suspended_progress(|| {
-                        inquire::Password::new(&format!(
-                            "Please enter secret '{}' (Toggle input mask with <Ctrl+R>):",
-                            secret.name
-                        ))
-                        .without_confirmation()
-                        .with_display_mode(inquire::PasswordDisplayMode::Masked)
-                        .with_help_message(secret.description.trim())
-                        .with_display_toggle_enabled()
-                        .prompt()
-                    })?;
+                    let value = Self::prompt_secret_value(&secret)?;
                     all_secrets.insert(secret.name.clone(), value);
                 }
             }
@@ -443,6 +433,21 @@ git add flake.*
         hide_progress();
 
         Ok(())
+    }
+
+    pub fn prompt_secret_value(secret: &EnvSecret) -> Result<String> {
+        let value = with_suspended_progress(|| {
+            inquire::Password::new(&format!(
+                "Please enter secret '{}' (Toggle input mask with <Ctrl+R>):",
+                secret.name
+            ))
+            .without_confirmation()
+            .with_display_mode(inquire::PasswordDisplayMode::Masked)
+            .with_help_message(secret.description.trim())
+            .with_display_toggle_enabled()
+            .prompt()
+        })?;
+        Ok(value)
     }
 
     pub fn delete(self, im_really_sure: bool) -> Result<()> {

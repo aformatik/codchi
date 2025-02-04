@@ -130,7 +130,7 @@ impl MachineConfig {
 
 pub type CodchiModule = FlakeUrl<Required>;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EnvSecret {
     pub name: String,
     pub description: String,

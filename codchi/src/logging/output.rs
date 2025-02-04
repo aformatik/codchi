@@ -1,6 +1,6 @@
 use std::{fmt::Display, io::stdout};
 
-use crate::config::{MachineModules, MachineStatus, Mod, ModLsOutput, StatusOutput};
+use crate::config::{EnvSecret, MachineModules, MachineStatus, Mod, ModLsOutput, StatusOutput};
 use itertools::Itertools;
 use serde::Serialize;
 
@@ -88,6 +88,35 @@ impl CodchiOutput<ModLsOutput> for MachineModules {
                 Cell::new(&m.flake_module),
             ]);
         }
+        table
+    }
+}
+
+impl CodchiOutput<Vec<EnvSecret>> for Vec<EnvSecret> {
+    fn to_output(&self) -> Vec<EnvSecret> {
+        self.iter()
+            .map(|secret| EnvSecret {
+                name: secret.name.clone(),
+                description: secret.description.clone(),
+            })
+            .collect()
+    }
+
+    fn human_output(out: Vec<EnvSecret>) -> impl Display {
+        use comfy_table::*;
+
+        let mut table = Table::new();
+        table
+            .load_preset(presets::UTF8_FULL)
+            .set_header(vec![Cell::new("Name"), Cell::new("Description")]);
+
+        for secret in out.iter() {
+            table.add_row(vec![
+                Cell::new(&secret.name),
+                Cell::new(&secret.description),
+            ]);
+        }
+
         table
     }
 }
