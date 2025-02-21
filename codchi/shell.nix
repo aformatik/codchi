@@ -24,6 +24,9 @@
 , cargo-flamegraph
 , graphviz
 
+, vscode-with-extensions
+, vscodium
+, vscode-extensions
 , ...
 }:
 let
@@ -94,6 +97,16 @@ mkShell (lib.recursiveUpdate
           { inherit system; }).zed-editor
       ];
       runScript = "zed";
+    })
+
+    (vscode-with-extensions.override {
+      vscode = vscodium;
+      vscodeExtensions = with vscode-extensions; [
+        rust-lang.rust-analyzer
+        jnoortheen.nix-ide
+        mkhl.direnv
+        asvetliakov.vscode-neovim
+      ];
     })
 
   ] ++ (codchi.nativeBuildInputs or [ ]);
