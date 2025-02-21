@@ -19,6 +19,10 @@
 , pkg-config
 , gtk3
 , libayatana-appindicator
+, xorg
+, libxkbcommon
+, libGL
+, libGLU
 
 , llvmPackages
 , cargo-xwin
@@ -194,6 +198,9 @@ let
       buildInputs = [
         gtk3
         libayatana-appindicator.out
+        libxkbcommon.out
+        libGL.out
+        libGLU.out
       ];
 
       outputs = [ "out" "docs" ];

@@ -486,10 +486,16 @@ See the following docs on how to register the completions with your shell:
         #[arg(value_enum)]
         shell: clap_complete_command::Shell,
     },
+    
     ///
-    /// Start the codchi tray if not running.
+    /// Start the Codchi tray if not running.
     #[clap(hide = true)]
     Tray {},
+
+    ///
+    /// Start the Codchi GUI.
+    #[clap(hide = true)]
+    GUI {},
 
     #[clap(
         about = "Export the file system of a code machine including NixOS configuration and codchi secrets."

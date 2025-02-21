@@ -52,7 +52,7 @@ tray-icon = { version = "0.19", default-features = false }
 image = { version = "0.25", features = ["png"], default-features = false }
 tao = { version = "0.30", default-features = false }
 fs4 = { version = "0.9", features = ["sync"] }
-git-url-parse = "0.4.5"
+git-url-parse = { git = "https://github.com/tjtelan/git-url-parse-rs" }
 toml_edit = { version = "0.22.22", features = ["serde"] }
 which = "6.0.3"
 notify-rust = "4.11.3"
@@ -61,6 +61,9 @@ human-panic = "2.0.2"
 # termimad = "0.30.0"
 rand = "0.8.5"
 ctrlc = { version = "3.4.5", features = ["termination"] }
+egui = "0.30.0"
+eframe = "0.30.0"
+egui_extras = "0.30.0"
 
 [target.'cfg(unix)'.dependencies]
 indoc = "2.0.5"
@@ -93,7 +96,7 @@ clap_mangen = "0"
 embed-manifest = "1.4.0"
 log = "0.4"
 build-data = "0"
-git-url-parse = "0"
+git-url-parse = { git = "https://github.com/tjtelan/git-url-parse-rs" }
 lazy-regex = "3.3.0"
 duct = "0.13.7"
 

@@ -28,6 +28,7 @@ use util::{ResultExt, UtilExt};
 pub mod cli;
 pub mod config;
 pub mod consts;
+pub mod gui;
 pub mod logging;
 pub mod module;
 pub mod platform;
@@ -355,6 +356,8 @@ secret. Is this OK? [y/n]",
         } => Driver::store().gc(delete_old.map(|x| x.unwrap_or_default()), *all, machines)?,
 
         Cmd::Tray {} => tray::run()?,
+
+        Cmd::GUI {} => gui::run()?,
 
         Cmd::Completion { .. } => unreachable!(),
 
