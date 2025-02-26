@@ -19,7 +19,6 @@
 , pkg-config
 , gtk3
 , libayatana-appindicator
-, xorg
 , libxkbcommon
 , libGL
 , libGLU
@@ -48,7 +47,7 @@ let
     ];
   };
   # rustOrig = rust-bin.stable.latest.default.override rustConfig;
-  rustOrig = rust-bin.selectLatestNightlyWith (toolchain: toolchain.default.override rustConfig);
+  rustOrig =rust-bin.selectLatestNightlyWith (toolchain: toolchain.default.override rustConfig);
   rustPlatformOrig = makeRustPlatform { cargo = rustOrig; rustc = rustOrig; };
   xwin = rustPlatformOrig.buildRustPackage rec {
     name = "xwin";
@@ -121,8 +120,7 @@ let
           EOF
           chmod +x $out/bin/cargo
         '')
-        //
-        { inherit (rustOrig) meta; };
+        // { inherit (rustOrig) meta targetPlatforms badTargetPlatforms; };
         rustPlatform = makeRustPlatform { cargo = passthru.rust; rustc = passthru.rust; };
 
         setupXWin = topDir: /* bash */ ''

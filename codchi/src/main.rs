@@ -17,7 +17,7 @@ use secrets::MachineSecrets;
 use std::{
     env,
     io::IsTerminal,
-    panic::{self, PanicInfo},
+    panic::{self, PanicHookInfo},
     process::exit,
     sync::{mpsc::channel, OnceLock},
     thread,
@@ -37,7 +37,7 @@ pub mod tray;
 pub mod util;
 
 fn main() -> anyhow::Result<()> {
-    panic::set_hook(Box::new(move |info: &PanicInfo<'_>| {
+    panic::set_hook(Box::new(move |info: &PanicHookInfo<'_>| {
         let meta = human_panic::Metadata::new(
             env!("CARGO_PKG_NAME"),
             format!(
@@ -405,7 +405,7 @@ fn alert_dirty(machine: Machine) {
     }
 }
 
-fn get_panic_cause(panic_info: &PanicInfo) -> String {
+fn get_panic_cause(panic_info: &PanicHookInfo) -> String {
     #[cfg(feature = "nightly")]
     let message = panic_info.message().map(|m| format!("{}", m));
 
