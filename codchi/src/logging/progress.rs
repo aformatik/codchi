@@ -74,13 +74,13 @@ impl Progress {
         self.status_bar.set_message(msg);
     }
 
-    pub fn with_status<M>(self, msg: M) -> Self
-    where
-        M: Into<Cow<'static, str>>,
-    {
-        self.status_bar.set_message(msg);
-        self
-    }
+    // pub fn with_status<M>(self, msg: M) -> Self
+    // where
+    //     M: Into<Cow<'static, str>>,
+    // {
+    //     self.status_bar.set_message(msg);
+    //     self
+    // }
 
     pub fn log(&mut self, fallback_target: &str, fallback_level: Level, msg: &str) {
         let result = nix::parse_line(msg);

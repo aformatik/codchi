@@ -20,7 +20,7 @@ pub static DEBUG: LazyLock<bool> = LazyLock::new(|| {
     CLI_ARGS
         .get()
         .and_then(|cli| cli.verbose.log_level())
-        .or(<DefaultLogLevel as LogLevel>::default())
+        .or(<DefaultLogLevel as LogLevel>::default_filter().into())
         .unwrap()
         >= Level::Debug
 });
@@ -486,7 +486,7 @@ See the following docs on how to register the completions with your shell:
         #[arg(value_enum)]
         shell: clap_complete_command::Shell,
     },
-    
+
     ///
     /// Start the Codchi tray if not running.
     #[clap(hide = true)]
