@@ -113,7 +113,8 @@ in
       binPackages = with pkgs.pkgsStatic; [
         busybox
         bashInteractive
-        nix
+        inputs.nix.packages.${pkgs.system}.nix-everything-static
+
         pkgs.codchi-utils # ndd
 
         (pkgs.writeShellScriptBinStatic "run" /* bash */ ''
