@@ -12,7 +12,7 @@
       url = "github:oxalica/rust-overlay";
       flake = false; # prevent fetching transitive inputs TODO
     };
-    nix.url = "github:NixOS/nix";
+    nix.url = "github:NixOS/nix/2.26.2";
     # nixvim = {
     #   url = "github:nix-community/nixvim";
     # inputs.nixpkgs.follows = "nixpkgs";
