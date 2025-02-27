@@ -203,8 +203,8 @@ in
           nix $NIX_VERBOSITY profile wipe-history
         else
           logE "Updating store..."
-          nix flake update $NIX_VERBOSITY "${consts.store.DIR_CONFIG_STORE}"
-          ndd $NIX_VERBOSITY profile upgrade --profile "${consts.store.PROFILE_STORE}" '.*'
+          nix flake update $NIX_VERBOSITY --flake "${consts.store.DIR_CONFIG_STORE}"
+          ndd $NIX_VERBOSITY profile upgrade --profile "${consts.store.PROFILE_STORE}" --all
         fi
 
         # kill $NIX_DAEMON_PID
