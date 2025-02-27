@@ -6,6 +6,7 @@ on:
     #   - "v*.*.*"
     branches:
       - "master"
+  pull_request:
 
 permissions:
   contents: read

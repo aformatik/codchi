@@ -82,10 +82,16 @@ in
           flakes = [{
             exact = true;
             from = { type = "indirect"; id = "nixpkgs"; };
-            to = { type = "path"; path = inputs.nixpkgs.outPath; }
-              // lib.filterAttrs
-              (n: _: n == "lastModified" || n == "rev" || n == "revCount" || n == "narHash")
-              inputs.nixpkgs;
+            # to = { type = "path"; path = inputs.nixpkgs.outPath; }
+            #   // lib.filterAttrs
+            #   (n: _: n == "lastModified" || n == "rev" || n == "revCount" || n == "narHash")
+            #   inputs.nixpkgs;
+            to = {
+              type = "github";
+              owner = "NixOS";
+              repo = "nixpkgs";
+              inherit (inputs.nixpkgs) rev;
+            };
           }];
         });
         # nix runs as root and needs to access user repositories
