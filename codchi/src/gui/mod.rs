@@ -2,7 +2,7 @@ mod machine_creation;
 mod machine_inspection;
 
 use crate::{
-    config::{CodchiConfig, ConfigMut},
+    config::CodchiConfig,
     platform::{Machine, PlatformStatus},
 };
 use egui::*;
@@ -169,16 +169,20 @@ impl Gui {
                                 ui.close_menu();
                             }
                             ui.separator();
-                            if ui.button("Recover store").clicked() {
-                                self.status_text = Some(String::from("Recovering Codchi store..."));
-                                let sender_clone = self.sender.clone();
-                                thread::spawn(move || {
-                                    let _ = crate::platform::platform::store_recover();
-                                    sender_clone.send(ChannelDataType::StoreRecovered).unwrap();
-                                });
-                                ui.close_menu();
+                            #[cfg(target_os = "windows")]
+                            {
+                                if ui.button("Recover store").clicked() {
+                                    self.status_text =
+                                        Some(String::from("Recovering Codchi store..."));
+                                    let sender_clone = self.sender.clone();
+                                    thread::spawn(move || {
+                                        let _ = crate::platform::platform::store_recover();
+                                        sender_clone.send(ChannelDataType::StoreRecovered).unwrap();
+                                    });
+                                    ui.close_menu();
+                                }
+                                ui.separator();
                             }
-                            ui.separator();
                             ui.add(create_advanced_checkbox(
                                 "codchi_tray_checkbox",
                                 CodchiConfig::get().tray.autostart,
