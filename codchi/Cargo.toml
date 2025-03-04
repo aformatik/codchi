@@ -49,7 +49,7 @@ sysinfo = "0.33.1"
 thiserror = "2.0"
 throttle = "0.1.0"
 tray-icon = { version = "0.20", default-features = false }
-image = { version = "0.25", features = ["png"], default-features = false }
+image = { version = "0.25", features = ["png", "ico"], default-features = false }
 tao = { version = "0.32", default-features = false }
 fs4 = { version = "0.13", features = ["sync"] }
 git-url-parse = { git = "https://github.com/tjtelan/git-url-parse-rs" }

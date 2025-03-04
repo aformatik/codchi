@@ -3,6 +3,8 @@ use crate::gui::MainPanelType;
 use crate::platform::Machine;
 
 pub struct MachineCreationMainPanel {
+    status_text: Option<String>,
+
     machine_form: MachineForm,
     next_panel_type: Option<MainPanelType>,
 }
@@ -14,6 +16,8 @@ struct MachineForm {
 impl Default for MachineCreationMainPanel {
     fn default() -> Self {
         MachineCreationMainPanel {
+            status_text: None,
+
             machine_form: MachineForm::default(),
             next_panel_type: None,
         }
@@ -27,13 +31,21 @@ impl MainPanel for MachineCreationMainPanel {
         }
     }
 
-    fn modal_update(&mut self, ctx: &egui::Context) {}
+    fn modal_update(&mut self, _ctx: &egui::Context) {}
 
     fn next_panel(&mut self) -> Option<MainPanelType> {
         self.next_panel_type.take()
     }
 
-    fn pass_machine(&mut self, machine: Machine) {}
+    fn pass_machine(&mut self, _machine: Machine) {}
+
+    fn get_status_text(&self) -> &Option<String> {
+        &self.status_text
+    }
+
+    fn renew(&mut self) {
+        self.machine_form = MachineForm::default();
+    }
 }
 
 impl Default for MachineForm {
