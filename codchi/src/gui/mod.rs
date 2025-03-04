@@ -71,7 +71,7 @@ struct Gui {
     sender: Sender<ChannelDataType>,
     receiver: Receiver<ChannelDataType>,
 
-    show_tray: bool,
+    tray_autostart: bool,
 }
 
 #[derive(Clone)]
@@ -127,7 +127,7 @@ impl Gui {
             sender,
             receiver,
 
-            show_tray: false,
+            tray_autostart: CodchiConfig::get().tray.autostart,
         }
     }
 
@@ -171,6 +171,20 @@ impl Gui {
                             ui.separator();
                             if ui.button("Recover store").clicked() {
                                 let _ = crate::platform::platform::store_recover();
+                                ui.close_menu();
+                            }
+                            ui.separator();
+                            let tray_button = Button::new(if self.tray_autostart {
+                                "Hide tray icon"
+                            } else {
+                                "Show tray icon"
+                            });
+                            if ui.add(tray_button).clicked() {
+                                self.tray_autostart = !self.tray_autostart;
+                                let mut doc =
+                                    CodchiConfig::open_mut().expect("Failed to open config");
+                                doc.tray_autostart(!self.tray_autostart);
+                                doc.write().expect("Failed to write config");
                                 ui.close_menu();
                             }
                         });

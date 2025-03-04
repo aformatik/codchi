@@ -11,8 +11,6 @@ use std::{
     thread,
 };
 
-use super::create_modal;
-
 pub struct MachineInspectionMainPanel {
     status_text: Option<String>,
 
