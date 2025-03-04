@@ -2,7 +2,7 @@ mod machine_creation;
 mod machine_inspection;
 
 use crate::{
-    config::CodchiConfig,
+    config::{CodchiConfig, ConfigMut},
     platform::{Machine, PlatformStatus},
 };
 use egui::*;
@@ -70,8 +70,6 @@ struct Gui {
     pending_msgs: usize,
     sender: Sender<ChannelDataType>,
     receiver: Receiver<ChannelDataType>,
-
-    tray_autostart: bool,
 }
 
 #[derive(Clone)]
@@ -130,8 +128,6 @@ impl Gui {
             pending_msgs: 0,
             sender,
             receiver,
-
-            tray_autostart: CodchiConfig::get().tray.autostart,
         }
     }
 
@@ -183,18 +179,54 @@ impl Gui {
                                 ui.close_menu();
                             }
                             ui.separator();
-                            let tray_button = Button::new(if self.tray_autostart {
-                                "Hide tray icon"
-                            } else {
-                                "Show tray icon"
-                            });
-                            if ui.add(tray_button).clicked() {
-                                self.tray_autostart = !self.tray_autostart;
-                                let mut doc =
-                                    CodchiConfig::open_mut().expect("Failed to open config");
-                                doc.tray_autostart(!self.tray_autostart);
-                                doc.write().expect("Failed to write config");
-                                ui.close_menu();
+                            ui.add(create_advanced_checkbox(
+                                "codchi_tray_checkbox",
+                                CodchiConfig::get().tray.autostart,
+                                |checked| {
+                                    let mut doc =
+                                        CodchiConfig::open_mut().expect("Failed to open config");
+                                    doc.tray_autostart(checked);
+                                    doc.write().expect("Failed to write config");
+                                },
+                                "Show tray icon",
+                            ));
+                            #[cfg(target_os = "windows")]
+                            {
+                                ui.menu_button("VcXsrv", |ui| {
+                                    ui.add(create_advanced_checkbox(
+                                        "vcxsrv_enable_checkbox",
+                                        CodchiConfig::get().vcxsrv.enable,
+                                        |checked| {
+                                            let mut doc = CodchiConfig::open_mut()
+                                                .expect("Failed to open config");
+                                            doc.vcxsrv_enable(checked);
+                                            doc.write().expect("Failed to write config");
+                                        },
+                                        "Enable",
+                                    ));
+                                    ui.add(create_advanced_checkbox(
+                                        "vcxsrv_tray_checkbox",
+                                        CodchiConfig::get().vcxsrv.tray,
+                                        |checked| {
+                                            let mut doc = CodchiConfig::open_mut()
+                                                .expect("Failed to open config");
+                                            doc.vcxsrv_tray(checked);
+                                            doc.write().expect("Failed to write config");
+                                        },
+                                        "Show tray icon",
+                                    ));
+                                });
+                                ui.add(create_advanced_checkbox(
+                                    "wsl_vpnkit_enable_checkbox",
+                                    CodchiConfig::get().enable_wsl_vpnkit,
+                                    |checked| {
+                                        let mut doc = CodchiConfig::open_mut()
+                                            .expect("Failed to open config");
+                                        doc.enable_wsl_vpnkit(checked);
+                                        doc.write().expect("Failed to write config");
+                                    },
+                                    "Enable wsl-vpnkit",
+                                ));
                             }
                         });
                     });
@@ -385,6 +417,35 @@ pub fn create_password_field_ui(ui: &mut Ui, password: &str) -> Response {
     ui.data_mut(|d| d.insert_temp(state_id, show_plaintext));
 
     result.response
+}
+
+pub fn create_advanced_checkbox<'a>(
+    id: &'a str,
+    initial: bool,
+    set: fn(enabled: bool),
+    text: &'a str,
+) -> impl Widget + 'a {
+    move |ui: &mut Ui| create_advanced_checkbox_ui(ui, id, initial, set, text)
+}
+
+pub fn create_advanced_checkbox_ui(
+    ui: &mut Ui,
+    id: &str,
+    initial: bool,
+    write_closure: impl FnOnce(bool),
+    text: &str,
+) -> Response {
+    let state_id = ui.id().with(id);
+    let mut checked = ui.data_mut(|d| d.get_temp::<bool>(state_id).unwrap_or(initial));
+
+    let result = ui.checkbox(&mut checked, text);
+
+    if result.clicked() {
+        write_closure(checked);
+    }
+    ui.data_mut(|d| d.insert_temp(state_id, checked));
+
+    result
 }
 
 fn get_visuals() -> Visuals {
