@@ -83,6 +83,7 @@ pub enum MainPanelType {
 
 enum ChannelDataType {
     Machines(Vec<Machine>),
+    StoreRecovered,
 }
 
 impl eframe::App for Gui {
@@ -97,6 +98,9 @@ impl eframe::App for Gui {
                 match data_type {
                     ChannelDataType::Machines(machines) => {
                         self.machines = machines;
+                    }
+                    ChannelDataType::StoreRecovered => {
+                        self.status_text = Some(String::from(""));
                     }
                 }
             }
@@ -170,7 +174,12 @@ impl Gui {
                             }
                             ui.separator();
                             if ui.button("Recover store").clicked() {
-                                let _ = crate::platform::platform::store_recover();
+                                self.status_text = Some(String::from("Recovering Codchi store..."));
+                                let sender_clone = self.sender.clone();
+                                thread::spawn(move || {
+                                    let _ = crate::platform::platform::store_recover();
+                                    sender_clone.send(ChannelDataType::StoreRecovered).unwrap();
+                                });
                                 ui.close_menu();
                             }
                             ui.separator();
