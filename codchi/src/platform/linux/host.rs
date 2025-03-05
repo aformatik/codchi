@@ -165,4 +165,16 @@ impl Host for HostImpl {
         }
         bail!("Could not find a terminal.");
     }
+
+    fn execute(machine_name: &str, desktop_entry: &DesktopEntry) -> Result<()> {
+        let exe = env::current_exe()?.to_string_lossy().to_string();
+        let mut cmd = Command::new(&exe);
+        cmd.args(["exec", machine_name]);
+        for arg in desktop_entry.exec.split(" ") {
+            cmd.arg(arg);
+        }
+        cmd.spawn()?;
+
+        Ok(())
+    }
 }

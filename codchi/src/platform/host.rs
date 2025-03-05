@@ -25,6 +25,12 @@ pub trait Host: Sized {
     fn delete_shortcuts(name: &str) -> Result<()>;
 
     fn write_machine_shortcuts(machine: &Machine) -> Result<()> {
+        let desktop_entries = Self::list_desktop_entries(machine)?;
+        Self::write_shortcuts(&machine.config.name, desktop_entries.iter())?;
+        Ok(())
+    }
+
+    fn list_desktop_entries(machine: &Machine) -> Result<Vec<DesktopEntry>> {
         let nix_path = Driver::store().cmd().realpath(
             &consts::store::DIR_CONFIG
                 .join_machine(&machine.config.name)
@@ -92,8 +98,7 @@ pub trait Host: Sized {
             });
         }
 
-        Self::write_shortcuts(&machine.config.name, desktop_entries.iter())?;
-        Ok(())
+        Ok(desktop_entries)
     }
 
     fn open_terminal(&self, cmd: &[&str]) -> Result<()>;
@@ -109,7 +114,6 @@ pub trait Host: Sized {
                 p.exe().is_some_and(|p| p == exe) && p.cmd().get(1).is_some_and(|arg| arg == "tray")
             })
         {
-            
             log::trace!("Kill running: {kill_running}. Process: {:?}", p.cmd());
             if kill_running {
                 log::debug!("Killing running tray");
@@ -150,6 +154,8 @@ pub trait Host: Sized {
     fn post_delete(_machine_name: &str) -> Result<()> {
         Ok(())
     }
+
+    fn execute(machine_name: &str, desktop_entry: &DesktopEntry) -> Result<()>;
 }
 
 #[derive(Clone, Debug)]

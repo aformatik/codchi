@@ -11,7 +11,9 @@ use known_folders::{get_known_folder_path, KnownFolder};
 use mslnk::{FileAttributeFlags, LinkFlags, MSLinkError, ShellLink};
 use std::{env, fs, os::windows::process::CommandExt, path::Path, process::Command};
 use sysinfo::System;
-use windows::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW};
+use windows::Win32::System::Threading::{
+    CREATE_NEW_CONSOLE, CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW,
+};
 
 pub struct HostImpl;
 impl HostImpl {}
@@ -271,6 +273,31 @@ impl Host for HostImpl {
             .join(APP_NAME)
             .join(format!("{machine_name}.json"))
             .remove();
+
+        Ok(())
+    }
+
+    fn execute(machine_name: &str, desktop_entry: &DesktopEntry) -> Result<()> {
+        let codchi_exe = get_known_folder_path(KnownFolder::LocalAppData)
+            .expect("FOLDERID_LocalAppData missing")
+            .join("Microsoft")
+            .join("WindowsApps")
+            .join("codchi.exe");
+        let exe = if desktop_entry.is_terminal {
+            codchi_exe
+        } else {
+            codchi_exe
+                .parent()
+                .with_context(|| format!("Missing parent of {codchi_exe:?}"))?
+                .join("codchiw.exe")
+        };
+
+        let mut cmd = Command::new(&exe);
+        cmd.args(["exec", machine_name]);
+        for arg in desktop_entry.exec.split(" ") {
+            cmd.arg(arg);
+        }
+        cmd.creation_flags(CREATE_NEW_CONSOLE.0).spawn()?;
 
         Ok(())
     }

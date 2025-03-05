@@ -6,7 +6,7 @@ mod store;
 #[allow(clippy::module_inception)]
 #[cfg_attr(target_os = "linux", path = "linux/mod.rs")]
 #[cfg_attr(target_os = "windows", path = "windows/mod.rs")]
-mod platform;
+pub mod platform;
 
 pub use self::cmd::*;
 pub use self::host::*;

@@ -368,13 +368,36 @@ tail -f "{log_file}"
     }
 
     fn create_exec_cmd(&self, cmd: &[&str]) -> super::LinuxCommandBuilder {
-        let cmd = match cmd.split_first() {
-            Some((cmd, args)) => self.cmd().run(cmd, args),
-            None => self.cmd().run("bash", &["-l"]),
+        // let cmd = match cmd.split_first() {
+        //     Some((cmd, args)) => self.cmd().run(cmd, args),
+        //     None => self.cmd().run("bash", &["-l"]),
+        // };
+        let cmd = if cmd.is_empty() {
+            self.cmd().raw(
+                "/run/current-system/sw/bin/machinectl",
+                &[
+                    &["shell", "-q", &format!("{}@", consts::user::DEFAULT_NAME)],
+                    cmd,
+                ]
+                .concat(),
+            )
+        } else {
+            self.cmd().raw(
+                "/run/current-system/sw/bin/machinectl",
+                &[
+                    "shell",
+                    "-q",
+                    &format!("{}@", consts::user::DEFAULT_NAME),
+                    "/bin/bash",
+                    "-lc",
+                    &cmd.join(" "),
+                ],
+            )
         };
 
-        cmd.with_cwd(consts::user::DEFAULT_HOME.clone())
-            .with_user(LinuxUser::Default)
+        // cmd.with_cwd(consts::user::DEFAULT_HOME.clone())
+        //     .with_user(LinuxUser::Default)
+        cmd.with_user(LinuxUser::Root)
     }
 
     fn tar(&self, target_file: &std::path::Path) -> Result<()> {

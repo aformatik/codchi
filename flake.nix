@@ -7,11 +7,12 @@
   };
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       flake = false; # prevent fetching transitive inputs TODO
     };
+    nix.url = "github:NixOS/nix/2.26.2";
     # nixvim = {
     #   url = "github:nix-community/nixvim";
     # inputs.nixpkgs.follows = "nixpkgs";
