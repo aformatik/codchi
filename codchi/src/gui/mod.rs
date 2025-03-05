@@ -89,7 +89,13 @@ impl eframe::App for Gui {
                 match data_type {
                     ChannelDataType::Machine(machine, machine_index) => {
                         self.machines[machine_index] = machine;
-                        self.reloading_machine_index = self.reload_machine();
+                        if machine_index + 1 < self.machines.len() {
+                            self.reloading_machine_index = Some(machine_index + 1);
+                        } else {
+                            self.reloading_machine_index = None;
+                            self.last_reload = Instant::now();
+                        }
+                        self.reload_machine();
                     }
                     ChannelDataType::StoreRecovered => {
                         self.status_text = Some(String::from(""));
@@ -343,7 +349,7 @@ impl Gui {
         }
     }
 
-    fn reload_machine(&mut self) -> Option<usize> {
+    fn reload_machine(&mut self) {
         if let Some(machine_index) = self.reloading_machine_index {
             if let Some(machine) = self.machines.get_mut(machine_index) {
                 self.pending_msgs += 1;
@@ -363,10 +369,6 @@ impl Gui {
                         .expect("machine could not be sent");
                 });
             }
-            Some(machine_index + 1)
-        } else {
-            self.last_reload = Instant::now();
-            None
         }
     }
 }
