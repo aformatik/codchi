@@ -245,12 +245,19 @@ impl Gui {
         TopBottomPanel::bottom("statusbar_panel")
             .resizable(false)
             .show(ctx, |ui| {
+                let mut final_text = None;
                 if let Some(text) = &self.status_text {
-                    ui.label(text);
+                    final_text = Some(text);
                 } else if let Some(text) =
                     self.main_panels[self.current_main_panel_index].get_status_text()
                 {
-                    ui.label(text);
+                    final_text = Some(text);
+                }
+                if let Some(text) = final_text {
+                    ui.horizontal(|ui| {
+                        ui.add(egui::Spinner::new());
+                        ui.label(text);
+                    });
                 }
             });
     }
