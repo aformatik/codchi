@@ -13,6 +13,7 @@ use std::{
     collections::HashMap,
     sync::mpsc::{channel, Receiver, Sender},
     thread,
+    time::Instant,
 };
 
 pub fn run() -> anyhow::Result<()> {
@@ -41,24 +42,6 @@ pub fn run() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn load_textures(ctx: &Context) -> HashMap<String, TextureHandle> {
-    let green_square = ColorImage::new([10, 10], Color32::GREEN);
-    let yellow_square = ColorImage::new([10, 10], Color32::YELLOW);
-    let red_square = ColorImage::new([10, 10], Color32::RED);
-
-    let green_handle = ctx.load_texture("green_texture", green_square, TextureOptions::default());
-    let yellow_handle =
-        ctx.load_texture("yellow_texture", yellow_square, TextureOptions::default());
-    let red_handle = ctx.load_texture("red_texture", red_square, TextureOptions::default());
-
-    let mut textures = HashMap::new();
-    textures.insert("green".to_string(), green_handle);
-    textures.insert("yellow".to_string(), yellow_handle);
-    textures.insert("red".to_string(), red_handle);
-
-    textures
-}
-
 struct Gui {
     main_panels: Vec<Box<dyn MainPanel>>,
     current_main_panel_index: usize,
@@ -70,6 +53,9 @@ struct Gui {
     pending_msgs: usize,
     sender: Sender<ChannelDataType>,
     receiver: Receiver<ChannelDataType>,
+
+    reloading_machine_index: Option<usize>,
+    last_reload: Instant,
 }
 
 #[derive(Clone)]
@@ -80,12 +66,19 @@ pub enum MainPanelType {
 }
 
 enum ChannelDataType {
-    Machines(Vec<Machine>),
+    Machine(Machine, usize),
     StoreRecovered,
 }
 
 impl eframe::App for Gui {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+        if self.reloading_machine_index.is_none() {
+            let now = Instant::now();
+            if now.duration_since(self.last_reload).as_secs() >= 10 {
+                self.reloading_machine_index = Some(0);
+                self.reload_machine();
+            }
+        }
         if self.pending_msgs != 0 {
             let received_answer: Option<ChannelDataType> = self.receiver.try_recv().ok();
             if let Some(data_type) = received_answer {
@@ -94,8 +87,9 @@ impl eframe::App for Gui {
                     self.status_text = None;
                 }
                 match data_type {
-                    ChannelDataType::Machines(machines) => {
-                        self.machines = machines;
+                    ChannelDataType::Machine(machine, machine_index) => {
+                        self.machines[machine_index] = machine;
+                        self.reloading_machine_index = self.reload_machine();
                     }
                     ChannelDataType::StoreRecovered => {
                         self.status_text = Some(String::from(""));
@@ -128,6 +122,9 @@ impl Gui {
             pending_msgs: 0,
             sender,
             receiver,
+
+            reloading_machine_index: None,
+            last_reload: Instant::now(),
         }
     }
 
@@ -266,44 +263,34 @@ impl Gui {
                         self.current_main_panel_index =
                             Self::get_main_panel_index(MainPanelType::MachineCreation);
                     }
-                    let reload_button = Button::new(RichText::new("Refresh").heading());
-                    let reload_button_handle =
-                        ui.add_sized([ui.available_width(), 0.0], reload_button);
-                    if reload_button_handle.clicked() {
-                        self.pending_msgs += 1;
-                        self.status_text = Some(String::from(format!("Reloading machines...")));
-                        self.machines = Machine::list(false).expect("Machines could not be reset");
-                        self.main_panels
-                            [Self::get_main_panel_index(MainPanelType::MachineInspection)]
-                        .renew();
-
-                        let machines_sender = self.sender.clone();
-                        thread::spawn(move || {
-                            let machines =
-                                Machine::list(true).expect("Machines could not be listed");
-
-                            machines_sender
-                                .send(ChannelDataType::Machines(machines))
-                                .expect("modules could not be sent");
-                        });
-                    }
                     ui.separator();
 
                     ui.horizontal_top(|ui| {
                         ui.separator();
                         ui.with_layout(Layout::top_down_justified(Align::LEFT), |ui| {
-                            for machine in &self.machines {
-                                let icon = match machine.platform_status {
-                                    PlatformStatus::NotInstalled => None,
-                                    PlatformStatus::Stopped => {
-                                        let texture = self.textures.get("red").unwrap();
+                            for i in 0..self.machines.len() {
+                                let machine = &self.machines[i];
+                                let icon =
+                                    if self.reloading_machine_index.is_some_and(|index| index == i)
+                                    {
+                                        let texture = &self.textures["gray"];
                                         Some(Image::from_texture(texture))
-                                    }
-                                    PlatformStatus::Running => {
-                                        let texture = self.textures.get("green").unwrap();
-                                        Some(Image::from_texture(texture))
-                                    }
-                                };
+                                    } else {
+                                        match machine.platform_status {
+                                            PlatformStatus::NotInstalled => {
+                                                let texture = &self.textures["yellow"];
+                                                Some(Image::from_texture(texture))
+                                            }
+                                            PlatformStatus::Stopped => {
+                                                let texture = &self.textures["red"];
+                                                Some(Image::from_texture(texture))
+                                            }
+                                            PlatformStatus::Running => {
+                                                let texture = &self.textures["green"];
+                                                Some(Image::from_texture(texture))
+                                            }
+                                        }
+                                    };
                                 let button_text =
                                     RichText::strong(format!("{}", machine.config.name).into());
                                 let machine_button = Button::opt_image_and_text(
@@ -353,6 +340,33 @@ impl Gui {
             MainPanelType::MachineInspection => 0,
             MainPanelType::MachineCreation => 1,
             MainPanelType::BugReport => 2,
+        }
+    }
+
+    fn reload_machine(&mut self) -> Option<usize> {
+        if let Some(machine_index) = self.reloading_machine_index {
+            if let Some(machine) = self.machines.get_mut(machine_index) {
+                self.pending_msgs += 1;
+                self.status_text = Some(String::from(format!(
+                    "Updating status for machine '{}'",
+                    machine.config.name
+                )));
+
+                let machine_config = machine.config.clone();
+                let machine_sender = self.sender.clone();
+                thread::spawn(move || {
+                    let machine =
+                        Machine::read(machine_config, true).expect("Machine could not be read");
+
+                    machine_sender
+                        .send(ChannelDataType::Machine(machine, machine_index))
+                        .expect("machine could not be sent");
+                });
+            }
+            Some(machine_index + 1)
+        } else {
+            self.last_reload = Instant::now();
+            None
         }
     }
 }
@@ -452,9 +466,33 @@ pub fn create_advanced_checkbox_ui(
     result
 }
 
+fn load_textures(ctx: &Context) -> HashMap<String, TextureHandle> {
+    let green_square = ColorImage::new([10, 10], Color32::GREEN);
+    let yellow_square = ColorImage::new([10, 10], Color32::YELLOW);
+    let red_square = ColorImage::new([10, 10], Color32::RED);
+    let gray_square = ColorImage::new(
+        [10, 10],
+        get_visuals().widgets.noninteractive.fg_stroke.color,
+    );
+
+    let green_handle = ctx.load_texture("green_texture", green_square, TextureOptions::default());
+    let yellow_handle =
+        ctx.load_texture("yellow_texture", yellow_square, TextureOptions::default());
+    let red_handle = ctx.load_texture("red_texture", red_square, TextureOptions::default());
+    let gray_handle = ctx.load_texture("gray_texture", gray_square, TextureOptions::default());
+
+    let mut textures = HashMap::new();
+    textures.insert("green".to_string(), green_handle);
+    textures.insert("yellow".to_string(), yellow_handle);
+    textures.insert("red".to_string(), red_handle);
+    textures.insert("gray".to_string(), gray_handle);
+
+    textures
+}
+
 fn get_visuals() -> Visuals {
     let mut visuals = Visuals::dark();
     visuals.widgets.active.fg_stroke.color = Color32::WHITE;
-    visuals.override_text_color = Some(Color32::LIGHT_GRAY);
+    visuals.widgets.noninteractive.fg_stroke.color = Color32::LIGHT_GRAY;
     visuals
 }
