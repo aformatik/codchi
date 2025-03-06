@@ -65,7 +65,7 @@ CPU: {cpu_usage}, Network: {network_usage_kbs}, Stdout/err: {stdout_inactivity:?
                 );
             }
 
-            if cpu_usage > 2.0
+            if cpu_usage > 5.0
                 || network_usage_kbs > 1
                 || stdout_inactivity <= max_inactive_duration
             {
