@@ -1,7 +1,7 @@
 use super::{platform::HostImpl, Host, LinuxCommandBuilder, LinuxCommandTarget, LinuxUser};
 use crate::{
     cli::{CODCHI_DRIVER_MODULE, DEBUG},
-    config::{ConfigResult, FlakeLocation, MachineConfig},
+    config::{CodchiConfig, ConfigResult, FlakeLocation, MachineConfig},
     consts::{self, host, ToPath},
     logging::{hide_progress, log_progress, set_progress_status},
     platform::{self, CommandExt, Driver, Store},
@@ -277,6 +277,18 @@ fi
             if *DEBUG { "1" } else { "" }.to_string(),
         );
         env.insert("MACHINE_NAME".to_string(), self.config.name.clone());
+        #[cfg(target_os = "windows")]
+        {
+            env.insert(
+                "ENABLE_NETNS".to_string(),
+                if CodchiConfig::get().enable_wsl_netns {
+                    "1"
+                } else {
+                    ""
+                }
+                .to_string(),
+            );
+        }
 
         let mut env_file = File::options()
             .write(true)
@@ -346,7 +358,7 @@ if [ ! -e system ]; then
   ndd $NIX_VERBOSITY profile install --option warn-dirty false --profile system \
         '.#nixosConfigurations.default.config.system.build.toplevel'
 else
-  ndd $NIX_VERBOSITY profile upgrade --option warn-dirty false --profile system '.*'
+  ndd $NIX_VERBOSITY profile upgrade --option warn-dirty false --profile system --all
 fi
 pwd
 git add flake.*

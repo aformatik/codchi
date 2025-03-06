@@ -51,6 +51,11 @@ in
       ''
         set -euo pipefail
 
+        # allows ip netns exec in WSL
+        exec_systemd() {
+          exec "$@"
+        }
+
         # Use config.system.binPackages and PATH from host
         export LANG="C.UTF-8" HOME=/root PATH="/bin:$PATH"
         ${cfg.init.hostSetup}
@@ -81,7 +86,7 @@ in
         # TODO ?? Reset the logging file descriptors.
 
         echo "starting systemd..."
-        exec /run/current-system/systemd/lib/systemd/systemd "--log-target=kmsg" "$@"
+        exec_systemd /run/current-system/systemd/lib/systemd/systemd "--log-target=kmsg" "$@"
       '';
   };
 

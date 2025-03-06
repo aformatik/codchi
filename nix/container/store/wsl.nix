@@ -89,6 +89,27 @@ in
     runtimePackages = with pkgs; [ daemonize ];
 
     store.init.services = lib.mkForce /* bash */ ''
+      setup_bridge() {
+        echo "Creating codchibr..." >&2
+        BR_ADDR="${consts.store.NETNS_BRIDGE_ADDR}"
+        BR_DEV="codchibr"
+
+        # setup bridge
+        ip link delete "$BR_DEV" &>/dev/null || true
+        ip link add "$BR_DEV" type bridge
+        ip link set "$BR_DEV" up
+        ip addr add "$BR_ADDR/24" dev "$BR_DEV"
+
+        # enable ip forwarding
+        echo 1 > /proc/sys/net/ipv4/ip_forward
+
+        # flush & apply nat rules
+        nix run nixpkgs#iptables -- -t nat -F
+        nix run nixpkgs#iptables -- -t nat -A POSTROUTING -s "$BR_ADDR/24" ! -o "$BR_DEV" -j MASQUERADE
+      }
+
+      setup_bridge || echo "Failed to setup codchibr. Network namespaces will be disabled." >&2
+    
       daemonize $(which nix) daemon
     '';
   };

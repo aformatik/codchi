@@ -20,6 +20,11 @@ pub struct CodchiConfig {
     #[serde(default)]
     pub enable_wsl_vpnkit: bool,
 
+    /// Isolate the network of each code machine
+    #[cfg(target_os = "windows")]
+    #[serde(default = "def_true")]
+    pub enable_wsl_netns: bool,
+
     // $XDG_DATA_HOME/codchi by default
     pub data_dir: Option<String>,
 }
@@ -102,6 +107,11 @@ impl ConfigMut {
     #[cfg(target_os = "windows")]
     pub fn enable_wsl_vpnkit(&mut self, enable: bool) {
         self.doc["enable_wsl_vpnkit"] = value(enable);
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn enable_wsl_netns(&mut self, enable: bool) {
+        self.doc["enable_wsl_netns"] = value(enable);
     }
 
     #[cfg(target_os = "windows")]

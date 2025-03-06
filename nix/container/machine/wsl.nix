@@ -58,6 +58,9 @@ in
       systemctl is-system-running | grep -E "running|degraded"
     '';
 
+    # for netns
+    binPackages = with pkgs.pkgsStatic; [ iproute2 fping ];
+
     machine.init.hostSetup = /* bash */ ''
       [ -d /etc ] || mkdir /etc
 
@@ -86,6 +89,73 @@ in
       fi
 
       exec 1> >(tee -i "${INIT_LOG}" >&2) 2>&1
+
+      setup_namespace() {
+        echo "Searching for unused IP..." >&2
+        BR_ADDR="${consts.store.NETNS_BRIDGE_ADDR}"
+        VPEER_ADDR="$(fping -c 1 -i 1 -r 0 -u -t 100 -g "${consts.store.NETNS_SUBNET_BASE}.0/24" 2>/dev/null |
+          grep "timed out" |
+          grep -v "$BR_ADDR" |
+          head -n1 |
+          cut -d' ' -f1)"
+
+        if [ -n "$VPEER_ADDR" ]; then
+          BR_DEV="codchibr"
+
+          NS="cns$(echo "$VPEER_ADDR" | cut -d'.' -f4)"
+          VETH="veth$NS"
+          VPEER="vpeer$NS"
+
+          echo "Using IP $VPEER_ADDR for namespace $NS" >&2
+
+          if [ ! -d /var/run/netns ]; then
+            mkdir -p /var/run
+            mount -t tmpfs -o size=10m tmpfs /var/run
+            mkdir /var/run/netns || true
+          fi
+
+          # setup namespace
+          ip netns del "$NS" &>/dev/null || true
+          ip netns add "$NS"
+
+          # setup veth link
+          ip link add "$VETH" type veth peer name "$VPEER"
+          ip link set "$VETH" up
+
+          # assign veth pairs to bridge
+          ip link set "$VETH" master "$BR_DEV"
+
+          # add peers to ns
+          ip link set "$VPEER" netns "$NS"
+
+          # setup loopback interface
+          ip netns exec "$NS" ip link set lo up
+
+          # setup peer ns interface
+          ip netns exec "$NS" ip link set "$VPEER" up
+
+          # assign ip address to ns interfaces
+          ip netns exec "$NS" ip addr add "$VPEER_ADDR/24" dev "$VPEER"
+
+          # add default routes for ns
+          ip netns exec "$NS" ip route add default via "$BR_ADDR"
+
+          exec_systemd() {
+            exec ip netns exec "$NS" "$@"
+          }
+        else
+          echo "Couldn't find IP. Disabling network namespace" >&2
+          return 1
+        fi
+      }
+
+      if [ -n "''${CODCHI_ENABLE_NETNS:-}" ]; then
+        echo "Enabling network namespaces for this machine" >&2
+        setup_namespace || echo "Failed creating namespace. Continuing without network isolation..." >&2
+      else
+        env >&2
+        echo "NOT enabling network namespaces for this machine" >&2
+      fi
 
       mkMnt() {
         src="$1"
