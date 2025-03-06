@@ -72,6 +72,8 @@ in
         # user & groups required for minimal linux + `nix daemon`
         "/etc/group" = ./etc/group;
         "/etc/passwd" = ./etc/passwd;
+        "/etc/protocols" = "${pkgs.iana-etc}/etc/protocols";
+        "/etc/services" = "${pkgs.iana-etc}/etc/services";
         # required for dns / other information lookup systems (mainly glibc)
         "/etc/nsswitch.conf" = ./etc/nsswitch.conf;
         # nix settings
