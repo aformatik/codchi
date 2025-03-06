@@ -137,12 +137,6 @@ impl MainPanel for MachineInspectionMainPanel {
                 ));
                 ui.with_layout(Layout::right_to_left(Align::BOTTOM), |ui| {
                     ui.menu_button("Actions", |ui| {
-                        if ui.button("Reload").clicked() {
-                            self.machine_data_map.remove(&self.current_machine);
-                            self.pass_machine(
-                                Machine::by_name(&self.current_machine, true).ok().unwrap(),
-                            );
-                        }
                         if ui.button("Rebuild").clicked() {
                             self.show_rebuild_spec_modal = true;
                         }
@@ -162,6 +156,14 @@ impl MainPanel for MachineInspectionMainPanel {
                             self.show_delete_confirmation_modal = true;
                         }
                     });
+                    let reload_image = Image::new(include_image!("../../assets/reload.png"));
+                    let reload_button = Button::image(reload_image);
+                    if ui.add(reload_button).clicked() {
+                        self.machine_data_map.remove(&self.current_machine);
+                        self.pass_machine(
+                            Machine::by_name(&self.current_machine, true).ok().unwrap(),
+                        );
+                    }
                 });
             });
             let machine_data = &self.machine_data_map[&self.current_machine];
