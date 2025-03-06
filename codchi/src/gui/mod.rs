@@ -2,7 +2,7 @@ mod machine_creation;
 mod machine_inspection;
 
 use crate::{
-    config::CodchiConfig,
+    config::{CodchiConfig, MachineConfig},
     platform::{Machine, PlatformStatus},
 };
 use egui::*;
@@ -45,6 +45,7 @@ pub fn run() -> anyhow::Result<()> {
 struct Gui {
     main_panels: Vec<Box<dyn MainPanel>>,
     current_main_panel_index: usize,
+    machine_configs: Vec<MachineConfig>,
     machines: Vec<Machine>,
     textures: HashMap<String, TextureHandle>,
 
@@ -76,6 +77,8 @@ impl eframe::App for Gui {
             let now = Instant::now();
             if now.duration_since(self.last_reload).as_secs() >= 10 {
                 self.reloading_machine_index = Some(0);
+                self.machine_configs =
+                    MachineConfig::list().expect("Machine-configs could not be listed");
                 self.reload_machine();
             }
         }
@@ -88,10 +91,22 @@ impl eframe::App for Gui {
                 }
                 match data_type {
                     ChannelDataType::Machine(machine, machine_index) => {
-                        self.machines[machine_index] = machine;
-                        if machine_index + 1 < self.machines.len() {
-                            self.reloading_machine_index = Some(machine_index + 1);
+                        // reload happens for MachineConfig::list(), which can diverge from Machine::list()
+                        if machine_index < self.machines.len()
+                            && self.machines[machine_index].config.name == machine.config.name
+                        {
+                            self.machines[machine_index] = machine;
                         } else {
+                            self.machines.insert(machine_index, machine);
+                        }
+                        let next_machine_index = machine_index + 1;
+                        if next_machine_index < self.machine_configs.len() {
+                            self.reloading_machine_index = Some(next_machine_index);
+                        } else {
+                            // remove remaining machines that were not listed by MachineConfig::list()
+                            while self.machines.get(next_machine_index).is_some() {
+                                self.machines.remove(next_machine_index);
+                            }
                             self.reloading_machine_index = None;
                             self.last_reload = Instant::now();
                         }
@@ -120,6 +135,7 @@ impl Gui {
                 Box::new(MachineCreationMainPanel::default()),
             ],
             current_main_panel_index: 0,
+            machine_configs: MachineConfig::list().expect("Machine-configs could not be listed"),
             machines: Machine::list(true).expect("Machines could not be listed"),
             textures,
 
@@ -358,20 +374,20 @@ impl Gui {
 
     fn reload_machine(&mut self) {
         if let Some(machine_index) = self.reloading_machine_index {
-            if let Some(machine) = self.machines.get_mut(machine_index) {
+            if let Some(machine_config) = self.machine_configs.get_mut(machine_index) {
                 self.pending_msgs += 1;
                 self.status_text = Some(String::from(format!(
                     "Updating status for machine '{}'",
-                    machine.config.name
+                    machine_config.name
                 )));
 
-                let machine_config = machine.config.clone();
-                let machine_sender = self.sender.clone();
+                let machine_config_clone = machine_config.clone();
+                let machine_sender_clone = self.sender.clone();
                 thread::spawn(move || {
-                    let machine =
-                        Machine::read(machine_config, true).expect("Machine could not be read");
+                    let machine = Machine::read(machine_config_clone, true)
+                        .expect("Machine could not be read");
 
-                    machine_sender
+                    machine_sender_clone
                         .send(ChannelDataType::Machine(machine, machine_index))
                         .expect("machine could not be sent");
                 });
@@ -415,7 +431,7 @@ pub fn create_modal<R>(
     }
 }
 
-pub fn create_password_field(password: &String) -> impl Widget + '_ {
+pub fn create_password_field(password: &str) -> impl Widget + '_ {
     move |ui: &mut Ui| create_password_field_ui(ui, password)
 }
 
@@ -449,10 +465,10 @@ pub fn create_password_field_ui(ui: &mut Ui, password: &str) -> Response {
 pub fn create_advanced_checkbox<'a>(
     id: &'a str,
     initial: bool,
-    set: fn(enabled: bool),
+    write_closure: impl FnOnce(bool) + 'a,
     text: &'a str,
 ) -> impl Widget + 'a {
-    move |ui: &mut Ui| create_advanced_checkbox_ui(ui, id, initial, set, text)
+    move |ui: &mut Ui| create_advanced_checkbox_ui(ui, id, initial, write_closure, text)
 }
 
 pub fn create_advanced_checkbox_ui(
