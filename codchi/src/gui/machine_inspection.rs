@@ -206,6 +206,13 @@ impl MainPanel for MachineInspectionMainPanel {
                             HostImpl::execute(&machine_data.machine.config.name, &desktop_entry);
                     }
                 }
+                if ui.button("Shell").clicked() {
+                    let _ = crate::platform::Driver::host().open_terminal(&[
+                        &std::env::current_exe().unwrap().display().to_string(),
+                        "exec",
+                        &machine_data.machine.config.name,
+                    ]);
+                }
             } else {
                 ui.horizontal(|ui| {
                     ui.add_space(20.0);
