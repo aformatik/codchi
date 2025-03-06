@@ -249,13 +249,19 @@ impl MachineDriver for Machine {
 
     fn start(&self) -> Result<()> {
         {
+            let cfg = CodchiConfig::get();
             let mut env = self.config.secrets.clone();
 
+            // TODO consolidate with Machine::write_env_file
             env.insert(
                 "DEBUG".to_string(),
                 if *DEBUG { "1" } else { "" }.to_string(),
             );
             env.insert("MACHINE_NAME".to_string(), self.config.name.clone());
+            env.insert(
+                "ENABLE_NETNS".to_string(),
+                if cfg.enable_wsl_netns { "1" } else { "" }.to_string(),
+            );
 
             // machine must run to write env file into it...
             let env_path = machine::CODCHI_ENV_TMP.to_host_path(&machine_name(&self.config.name));
@@ -564,6 +570,7 @@ impl LinuxCommandTarget for LinuxCommandDriver {
         cwd: &Option<LinuxPath>,
         _env: &HashMap<String, String>,
     ) -> std::process::Command {
+        let cfg = CodchiConfig::get();
         let mut cmd = wsl_command();
         cmd.args(["-d", &self.instance_name]);
         cmd.args(["--cd", &cwd.clone().map(|p| p.0).unwrap_or("/".to_string())]);
@@ -585,7 +592,7 @@ impl LinuxCommandTarget for LinuxCommandDriver {
         wslenv.push(
             "CODCHI_DEBUG:CODCHI_MACHINE_NAME:CODCHI_IS_STORE:WSL_CODCHI_DIR_CONFIG/up:WSL_CODCHI_DIR_DATA/up",
         );
-        if CodchiConfig::get().vcxsrv.enable {
+        if cfg.vcxsrv.enable {
             cmd.env("CODCHI_WSL_USE_VCXSRV", "1");
             wslenv.push(":CODCHI_WSL_USE_VCXSRV");
         }

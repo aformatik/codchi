@@ -1,7 +1,7 @@
 { consts, ... }: {
 
   _module.args.consts = {
-    store = {
+    store = rec {
       DIR_CONFIG = "/config";
       DIR_CONFIG_STORE = "${consts.store.DIR_CONFIG}/store";
       PROFILE_STORE = "${consts.store.DIR_CONFIG_STORE}/profile";
@@ -17,11 +17,15 @@
       # WSL tricks
       DIR_MACHINE_DATA = "/machine-data";
       DIR_MACHINE_DATA_MACHINE = "${consts.store.DIR_MACHINE_DATA}/machine/$CODCHI_MACHINE_NAME";
+
+      NETNS_SUBNET_BASE = "10.6.3";
+      NETNS_BRIDGE_ADDR = "${NETNS_SUBNET_BASE}.1";
     };
     machine = {
       USER = "codchi";
       INIT_ENV = "/etc/codchi-env";
     };
+    
   };
 
 

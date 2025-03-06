@@ -214,6 +214,11 @@ pub fn run() -> Result<()> {
                 ],
             });
             settings.push(mk_checkbox(
+                "Isolate the network of each code machine (requires restarting machines)",
+                |config| config.enable_wsl_netns,
+                |cfg, enabled| cfg.enable_wsl_vpnkit(enabled),
+            ));
+            settings.push(mk_checkbox(
                 "Enable wsl-vpnkit",
                 |config| config.enable_wsl_vpnkit,
                 |cfg, enabled| {
