@@ -2,8 +2,10 @@ use crate::gui::MainPanel;
 use crate::gui::MainPanelType;
 use crate::platform::Machine;
 
+use super::StatusEntries;
+
 pub struct MachineCreationMainPanel {
-    status_text: Option<String>,
+    status_text: StatusEntries,
 
     machine_form: MachineForm,
     next_panel_type: Option<MainPanelType>,
@@ -16,7 +18,7 @@ struct MachineForm {
 impl Default for MachineCreationMainPanel {
     fn default() -> Self {
         MachineCreationMainPanel {
-            status_text: None,
+            status_text: StatusEntries::new(),
 
             machine_form: MachineForm::default(),
             next_panel_type: None,
@@ -39,7 +41,7 @@ impl MainPanel for MachineCreationMainPanel {
 
     fn pass_machine(&mut self, _machine: Machine) {}
 
-    fn get_status_text(&self) -> &Option<String> {
+    fn get_status_text(&self) -> &StatusEntries {
         &self.status_text
     }
 

@@ -12,16 +12,17 @@ use std::{
     thread,
 };
 
+use super::StatusEntries;
+
 pub struct MachineInspectionMainPanel {
-    status_text: Option<String>,
+    status_text: StatusEntries,
 
     machine_data_map: HashMap<String, MachineData>,
     current_machine: String,
     next_panel_type: Option<MainPanelType>,
 
-    pending_msgs: usize,
-    sender: Sender<(String, ChannelDataType)>,
-    receiver: Receiver<(String, ChannelDataType)>,
+    sender: Sender<(usize, String, ChannelDataType)>,
+    receiver: Receiver<(usize, String, ChannelDataType)>,
 
     show_rebuild_spec_modal: bool,
     show_duplicate_spec_modal: bool,
@@ -62,13 +63,12 @@ impl Default for MachineInspectionMainPanel {
     fn default() -> Self {
         let (sender, receiver) = channel();
         MachineInspectionMainPanel {
-            status_text: None,
+            status_text: StatusEntries::new(),
 
             machine_data_map: HashMap::new(),
             current_machine: String::from(""),
             next_panel_type: None,
 
-            pending_msgs: 0,
             sender,
             receiver,
 
@@ -84,48 +84,42 @@ impl Default for MachineInspectionMainPanel {
 
 impl MainPanel for MachineInspectionMainPanel {
     fn update(&mut self, ui: &mut Ui) {
-        if self.pending_msgs != 0 {
-            let received_answer: Option<(String, ChannelDataType)> = self.receiver.try_recv().ok();
-            if let Some((machine_name, data_type)) = received_answer {
-                self.pending_msgs -= 1;
-                if self.pending_msgs == 0 {
-                    self.status_text = None;
+        let received_answer = self.receiver.try_recv().ok();
+        if let Some((index, machine_name, data_type)) = received_answer {
+            if self.status_text.decrease(index) {
+                self.machine_data_map
+                    .entry(machine_name.clone())
+                    .and_modify(|machine_data| {
+                        machine_data.initialized = true;
+                    });
+                // attempt to load currently inspecting machine
+                if !self.current_machine.is_empty() {
+                    self.pass_machine(Machine::by_name(&self.current_machine, true).ok().unwrap());
+                }
+            }
+            match data_type {
+                ChannelDataType::Modules(modules) => {
                     self.machine_data_map
-                        .entry(machine_name.clone())
+                        .entry(machine_name)
                         .and_modify(|machine_data| {
-                            machine_data.initialized = true;
+                            machine_data.modules = Some(modules);
                         });
-                    // attempt to load currently inspecting machine
-                    if !self.current_machine.is_empty() {
-                        self.pass_machine(
-                            Machine::by_name(&self.current_machine, true).ok().unwrap(),
-                        );
-                    }
                 }
-                match data_type {
-                    ChannelDataType::Modules(modules) => {
-                        self.machine_data_map
-                            .entry(machine_name)
-                            .and_modify(|machine_data| {
-                                machine_data.modules = Some(modules);
-                            });
-                    }
-                    ChannelDataType::Secrets(secrets) => {
-                        self.machine_data_map
-                            .entry(machine_name)
-                            .and_modify(|machine_data| {
-                                machine_data.secrets = Some(secrets);
-                            });
-                    }
-                    ChannelDataType::Applications(applications) => {
-                        self.machine_data_map
-                            .entry(machine_name)
-                            .and_modify(|machine_data| {
-                                machine_data.applications = Some(applications);
-                            });
-                    }
-                    ChannelDataType::ClearStatus => {}
+                ChannelDataType::Secrets(secrets) => {
+                    self.machine_data_map
+                        .entry(machine_name)
+                        .and_modify(|machine_data| {
+                            machine_data.secrets = Some(secrets);
+                        });
                 }
+                ChannelDataType::Applications(applications) => {
+                    self.machine_data_map
+                        .entry(machine_name)
+                        .and_modify(|machine_data| {
+                            machine_data.applications = Some(applications);
+                        });
+                }
+                ChannelDataType::ClearStatus => {}
             }
         }
 
@@ -305,19 +299,18 @@ impl MainPanel for MachineInspectionMainPanel {
                 ui.horizontal(|ui| {
                     let rebuild_button = Button::new("Rebuild").fill(Color32::DARK_BLUE);
                     if ui.add(rebuild_button).clicked() {
-                        self.status_text = Some(String::from(format!(
-                            "Building machine '{}'...",
-                            self.current_machine
-                        )));
+                        let index = self.status_text.insert(
+                            1,
+                            String::from(format!("Building machine '{}'...", self.current_machine)),
+                        );
 
-                        self.pending_msgs += 1;
                         let mut machine =
                             self.machine_data_map[&self.current_machine].machine.clone();
                         let sender_clone = self.sender.clone();
                         thread::spawn(move || {
                             let _ = machine.build(!checked);
                             sender_clone
-                                .send((machine.config.name, ChannelDataType::ClearStatus))
+                                .send((index, machine.config.name, ChannelDataType::ClearStatus))
                                 .unwrap();
                         });
                         self.show_rebuild_spec_modal = false;
@@ -344,19 +337,21 @@ impl MainPanel for MachineInspectionMainPanel {
                 ui.horizontal(|ui| {
                     let duplicate_button = Button::new("Duplicate").fill(Color32::DARK_GREEN);
                     if ui.add(duplicate_button).clicked() {
-                        self.status_text = Some(String::from(format!(
-                            "Duplicating machine '{}' as '{}'...",
-                            self.current_machine, new_machine_name
-                        )));
+                        let index = self.status_text.insert(
+                            1,
+                            String::from(format!(
+                                "Duplicating machine '{}' as '{}'...",
+                                self.current_machine, new_machine_name
+                            )),
+                        );
 
-                        self.pending_msgs += 1;
                         let machine = self.machine_data_map[&self.current_machine].machine.clone();
                         let new_machine_name_clone = new_machine_name.clone();
                         let sender_clone = self.sender.clone();
                         thread::spawn(move || {
                             let _ = machine.duplicate(&new_machine_name_clone);
                             sender_clone
-                                .send((machine.config.name, ChannelDataType::ClearStatus))
+                                .send((index, machine.config.name, ChannelDataType::ClearStatus))
                                 .unwrap();
                         });
                         self.show_duplicate_spec_modal = false;
@@ -383,18 +378,20 @@ impl MainPanel for MachineInspectionMainPanel {
                     let tar_button = Button::new("Tar").fill(Color32::DARK_GREEN);
                     if ui.add(tar_button).clicked() {
                         let path = PathBuf::try_from(&tar_path).unwrap();
-                        self.status_text = Some(String::from(format!(
-                            "Exporting files of {} to {path:?}...",
-                            self.current_machine
-                        )));
+                        let index = self.status_text.insert(
+                            1,
+                            String::from(format!(
+                                "Exporting files of {} to {path:?}...",
+                                self.current_machine
+                            )),
+                        );
 
-                        self.pending_msgs += 1;
                         let machine = self.machine_data_map[&self.current_machine].machine.clone();
                         let sender_clone = self.sender.clone();
                         thread::spawn(move || {
                             let _ = machine.tar(&path);
                             sender_clone
-                                .send((machine.config.name, ChannelDataType::ClearStatus))
+                                .send((index, machine.config.name, ChannelDataType::ClearStatus))
                                 .unwrap();
                         });
                         self.show_tar_spec_modal = false;
@@ -415,12 +412,11 @@ impl MainPanel for MachineInspectionMainPanel {
                 ui.horizontal(|ui| {
                     let delete_button = Button::new("Delete").fill(Color32::DARK_RED);
                     if ui.add(delete_button).clicked() {
-                        self.status_text = Some(String::from(format!(
-                            "Deleting machine '{}'...",
-                            self.current_machine
-                        )));
+                        let index = self.status_text.insert(
+                            1,
+                            String::from(format!("Deleting machine '{}'...", self.current_machine)),
+                        );
 
-                        self.pending_msgs += 1;
                         let machine = self
                             .machine_data_map
                             .remove(&self.current_machine)
@@ -432,7 +428,7 @@ impl MainPanel for MachineInspectionMainPanel {
                         thread::spawn(move || {
                             let _ = machine.delete(true);
                             sender_clone
-                                .send((machine_name, ChannelDataType::ClearStatus))
+                                .send((index, machine_name, ChannelDataType::ClearStatus))
                                 .unwrap();
                         });
                         self.show_delete_confirmation_modal = false;
@@ -460,12 +456,11 @@ impl MainPanel for MachineInspectionMainPanel {
                 .insert(machine_name.clone(), machine_data);
         }
 
-        if self.pending_msgs == 0 && !self.machine_data_map[&machine_name].initialized {
-            self.pending_msgs = 3;
-            self.status_text = Some(String::from(format!(
-                "Loading machine {}...",
-                &machine_name
-            )));
+        if !self.machine_data_map[&machine_name].initialized {
+            let index = self.status_text.insert(
+                3,
+                String::from(format!("Loading machine {}...", &machine_name)),
+            );
 
             let applications_sender = self.sender.clone();
             let machine_name_clone = machine_name.clone();
@@ -475,6 +470,7 @@ impl MainPanel for MachineInspectionMainPanel {
 
                 applications_sender
                     .send((
+                        index,
                         machine_name_clone,
                         ChannelDataType::Applications(applications),
                     ))
@@ -487,7 +483,7 @@ impl MainPanel for MachineInspectionMainPanel {
             thread::spawn(move || {
                 let modules = modules_clone.to_output();
                 modules_sender
-                    .send((machine_name_clone, ChannelDataType::Modules(modules)))
+                    .send((index, machine_name_clone, ChannelDataType::Modules(modules)))
                     .expect("modules could not be sent");
             });
 
@@ -501,14 +497,14 @@ impl MainPanel for MachineInspectionMainPanel {
                     .collect_vec()
                     .to_output();
                 secrets_sender
-                    .send((machine_name_clone, ChannelDataType::Secrets(secrets)))
+                    .send((index, machine_name_clone, ChannelDataType::Secrets(secrets)))
                     .expect("modules could not be sent");
             });
         }
         self.current_machine = machine_name;
     }
 
-    fn get_status_text(&self) -> &Option<String> {
+    fn get_status_text(&self) -> &StatusEntries {
         &self.status_text
     }
 

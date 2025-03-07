@@ -49,11 +49,10 @@ struct Gui {
     machines: Vec<Machine>,
     textures: HashMap<String, TextureHandle>,
 
-    status_text: Option<String>,
+    status_text: StatusEntries,
 
-    pending_msgs: usize,
-    sender: Sender<ChannelDataType>,
-    receiver: Receiver<ChannelDataType>,
+    sender: Sender<(usize, ChannelDataType)>,
+    receiver: Receiver<(usize, ChannelDataType)>,
 
     reloading_machine_index: Option<usize>,
     last_reload: Instant,
@@ -82,40 +81,33 @@ impl eframe::App for Gui {
                 self.reload_machine();
             }
         }
-        if self.pending_msgs != 0 {
-            let received_answer: Option<ChannelDataType> = self.receiver.try_recv().ok();
-            if let Some(data_type) = received_answer {
-                self.pending_msgs -= 1;
-                if self.pending_msgs == 0 {
-                    self.status_text = None;
-                }
-                match data_type {
-                    ChannelDataType::Machine(machine, machine_index) => {
-                        // reload happens for MachineConfig::list(), which can diverge from Machine::list()
-                        if machine_index < self.machines.len()
-                            && self.machines[machine_index].config.name == machine.config.name
-                        {
-                            self.machines[machine_index] = machine;
-                        } else {
-                            self.machines.insert(machine_index, machine);
-                        }
-                        let next_machine_index = machine_index + 1;
-                        if next_machine_index < self.machine_configs.len() {
-                            self.reloading_machine_index = Some(next_machine_index);
-                        } else {
-                            // remove remaining machines that were not listed by MachineConfig::list()
-                            while self.machines.get(next_machine_index).is_some() {
-                                self.machines.remove(next_machine_index);
-                            }
-                            self.reloading_machine_index = None;
-                            self.last_reload = Instant::now();
-                        }
-                        self.reload_machine();
+        let received_answer = self.receiver.try_recv().ok();
+        if let Some((status_index, data_type)) = received_answer {
+            self.status_text.decrease(status_index);
+            match data_type {
+                ChannelDataType::Machine(machine, machine_index) => {
+                    // reload happens for MachineConfig::list(), which can diverge from Machine::list()
+                    if machine_index < self.machines.len()
+                        && self.machines[machine_index].config.name == machine.config.name
+                    {
+                        self.machines[machine_index] = machine;
+                    } else {
+                        self.machines.insert(machine_index, machine);
                     }
-                    ChannelDataType::StoreRecovered => {
-                        self.status_text = Some(String::from(""));
+                    let next_machine_index = machine_index + 1;
+                    if next_machine_index < self.machine_configs.len() {
+                        self.reloading_machine_index = Some(next_machine_index);
+                    } else {
+                        // remove remaining machines that were not listed by MachineConfig::list()
+                        while self.machines.get(next_machine_index).is_some() {
+                            self.machines.remove(next_machine_index);
+                        }
+                        self.reloading_machine_index = None;
+                        self.last_reload = Instant::now();
                     }
+                    self.reload_machine();
                 }
+                ChannelDataType::StoreRecovered => {}
             }
         }
 
@@ -139,9 +131,8 @@ impl Gui {
             machines: Machine::list(true).expect("Machines could not be listed"),
             textures,
 
-            status_text: None,
+            status_text: StatusEntries::new(),
 
-            pending_msgs: 0,
             sender,
             receiver,
 
@@ -191,12 +182,15 @@ impl Gui {
                             #[cfg(target_os = "windows")]
                             {
                                 if ui.button("Recover store").clicked() {
-                                    self.status_text =
-                                        Some(String::from("Recovering Codchi store..."));
+                                    let index = self
+                                        .status_text
+                                        .insert(1, String::from("Recovering Codchi store..."));
                                     let sender_clone = self.sender.clone();
                                     thread::spawn(move || {
                                         let _ = crate::platform::platform::store_recover();
-                                        sender_clone.send(ChannelDataType::StoreRecovered).unwrap();
+                                        sender_clone
+                                            .send((index, ChannelDataType::StoreRecovered))
+                                            .unwrap();
                                     });
                                     ui.close_menu();
                                 }
@@ -261,20 +255,34 @@ impl Gui {
         TopBottomPanel::bottom("statusbar_panel")
             .resizable(false)
             .show(ctx, |ui| {
-                let mut final_text = None;
-                if let Some(text) = &self.status_text {
-                    final_text = Some(text);
-                } else if let Some(text) =
-                    self.main_panels[self.current_main_panel_index].get_status_text()
-                {
-                    final_text = Some(text);
-                }
-                if let Some(text) = final_text {
-                    ui.horizontal(|ui| {
-                        ui.add(egui::Spinner::new());
-                        ui.label(text);
-                    });
-                }
+                ui.horizontal(|ui| {
+                    let mut first_status = true;
+                    for status_option in self.status_text.get_status() {
+                        if let Some((_pending_msgs, status)) = status_option {
+                            if first_status {
+                                first_status = false;
+                                ui.add(egui::Spinner::new());
+                            } else {
+                                ui.separator();
+                            }
+                            ui.label(status);
+                        }
+                    }
+                    for status_option in self.main_panels[self.current_main_panel_index]
+                        .get_status_text()
+                        .get_status()
+                    {
+                        if let Some((_pending_msgs, status)) = status_option {
+                            if first_status {
+                                first_status = false;
+                                ui.add(egui::Spinner::new());
+                            } else {
+                                ui.separator();
+                            }
+                            ui.label(status);
+                        }
+                    }
+                });
             });
     }
 
@@ -375,11 +383,13 @@ impl Gui {
     fn reload_machine(&mut self) {
         if let Some(machine_index) = self.reloading_machine_index {
             if let Some(machine_config) = self.machine_configs.get_mut(machine_index) {
-                self.pending_msgs += 1;
-                self.status_text = Some(String::from(format!(
-                    "Updating status for machine '{}'",
-                    machine_config.name
-                )));
+                let index = self.status_text.insert(
+                    1,
+                    String::from(format!(
+                        "Updating status for machine '{}'",
+                        machine_config.name
+                    )),
+                );
 
                 let machine_config_clone = machine_config.clone();
                 let machine_sender_clone = self.sender.clone();
@@ -388,7 +398,7 @@ impl Gui {
                         .expect("Machine could not be read");
 
                     machine_sender_clone
-                        .send(ChannelDataType::Machine(machine, machine_index))
+                        .send((index, ChannelDataType::Machine(machine, machine_index)))
                         .expect("machine could not be sent");
                 });
             }
@@ -405,7 +415,7 @@ pub trait MainPanel: Any {
 
     fn pass_machine(&mut self, machine: Machine);
 
-    fn get_status_text(&self) -> &Option<String>;
+    fn get_status_text(&self) -> &StatusEntries;
 
     fn renew(&mut self);
 }
@@ -537,4 +547,46 @@ fn get_visuals() -> Visuals {
     visuals.widgets.active.fg_stroke.color = Color32::WHITE;
     visuals.widgets.noninteractive.fg_stroke.color = Color32::LIGHT_GRAY;
     visuals
+}
+
+pub struct StatusEntries {
+    status: Vec<Option<(usize, String)>>,
+    empty_entries: Vec<usize>,
+}
+
+impl StatusEntries {
+    fn new() -> Self {
+        Self {
+            status: Vec::new(),
+            empty_entries: Vec::new(),
+        }
+    }
+
+    fn insert(&mut self, pending_msgs: usize, value: String) -> usize {
+        if let Some(index) = self.empty_entries.pop() {
+            self.status[index] = Some((pending_msgs, value));
+            index
+        } else {
+            self.status.push(Some((pending_msgs, value)));
+            self.status.len() - 1
+        }
+    }
+
+    fn decrease(&mut self, index: usize) -> bool {
+        if index < self.status.len() {
+            if let Some((pending_msgs, _value)) = self.status[index].as_mut() {
+                *pending_msgs = *pending_msgs - 1;
+                if *pending_msgs == 0 {
+                    self.status[index] = None;
+                    self.empty_entries.push(index);
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn get_status(&self) -> &Vec<Option<(usize, String)>> {
+        &self.status
+    }
 }
