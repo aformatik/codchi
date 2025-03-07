@@ -262,10 +262,22 @@ impl MainPanel for MachineInspectionMainPanel {
                         ui.end_row();
 
                         for secret in secrets {
-                            let val = secret.value.clone().unwrap();
                             ui.label(format!("{}\t", secret.name));
                             ui.label(format!("{}\t", secret.description));
-                            ui.add(create_password_field(&format!("{}\t", val)));
+                            ui.add(create_password_field(
+                                &secret.name,
+                                |new_password| {
+                                    let (lock, mut cfg) =
+                                        crate::config::MachineConfig::open_existing(
+                                            &self.current_machine,
+                                            true,
+                                        )
+                                        .unwrap();
+                                    cfg.secrets.insert(secret.name.clone(), new_password);
+                                    cfg.write(lock).unwrap();
+                                },
+                                &secret.value.clone().unwrap(),
+                            ));
                             ui.end_row();
                         }
                     });

@@ -431,13 +431,27 @@ pub fn create_modal<R>(
     }
 }
 
-pub fn create_password_field(password: &str) -> impl Widget + '_ {
-    move |ui: &mut Ui| create_password_field_ui(ui, password)
+pub fn create_password_field<'a>(
+    id: &'a str,
+    write_closure: impl FnOnce(String) + 'a,
+    password: &'a str,
+) -> impl Widget + 'a {
+    move |ui: &mut Ui| create_password_field_ui(ui, id, write_closure, password)
 }
 
-pub fn create_password_field_ui(ui: &mut Ui, password: &str) -> Response {
+pub fn create_password_field_ui(
+    ui: &mut Ui,
+    id: &str,
+    write_closure: impl FnOnce(String),
+    password: &str,
+) -> Response {
     let state_id = ui.id().with("show_plaintext");
+    let text_id = ui.id().with(id);
     let mut show_plaintext = ui.data_mut(|d| d.get_temp::<bool>(state_id).unwrap_or(false));
+    let mut text = ui.data_mut(|d| {
+        d.get_temp::<String>(text_id)
+            .unwrap_or(String::from(password))
+    });
 
     let result = ui.horizontal(|ui| {
         let response = ui
@@ -448,16 +462,19 @@ pub fn create_password_field_ui(ui: &mut Ui, password: &str) -> Response {
             show_plaintext = !show_plaintext;
         }
 
-        let mut password = String::from(password);
-
         ui.add_sized(
             [200.0, ui.available_height()],
-            TextEdit::singleline(&mut password)
-                .interactive(false)
-                .password(!show_plaintext),
+            TextEdit::singleline(&mut text).password(!show_plaintext),
         );
+
+        if password != text {
+            if ui.button("Write").clicked() {
+                write_closure(text.clone());
+            }
+        }
     });
     ui.data_mut(|d| d.insert_temp(state_id, show_plaintext));
+    ui.data_mut(|d| d.insert_temp(text_id, text));
 
     result.response
 }
