@@ -15,36 +15,10 @@ use std::{
     thread,
     time::Instant,
 };
-
-pub fn run() -> anyhow::Result<()> {
-    let options = eframe::NativeOptions {
-        viewport: ViewportBuilder::default().with_inner_size((960.0, 540.0)),
-        ..Default::default()
-    };
-    eframe::run_native(
-        "Codchi",
-        options,
-        Box::new(|cc| {
-            // set custom theme
-            cc.egui_ctx.set_visuals(get_visuals());
-
-            // This gives us image support:
-            egui_extras::install_image_loaders(&cc.egui_ctx);
-
-            // Zoom in a bit initially
-            let ppp = cc.egui_ctx.pixels_per_point();
-            cc.egui_ctx.set_pixels_per_point(1.25 * ppp);
-
-            Ok(Box::<Gui>::new(Gui::new(load_textures(&cc.egui_ctx))))
-        }),
-    )
-    .unwrap();
-    Ok(())
-}
+use strum::{EnumIter, IntoEnumIterator};
 
 struct Gui {
-    main_panels: Vec<Box<dyn MainPanel>>,
-    current_main_panel_index: usize,
+    main_panels: MainPanels,
     machine_configs: Vec<MachineConfig>,
     machines: Vec<Machine>,
     textures: HashMap<String, TextureHandle>,
@@ -58,11 +32,15 @@ struct Gui {
     last_reload: Instant,
 }
 
-#[derive(Clone)]
+struct MainPanels {
+    panels: Vec<Box<dyn MainPanel>>,
+    current_panel_index: usize,
+}
+
+#[derive(Clone, EnumIter)]
 pub enum MainPanelType {
     MachineInspection,
     MachineCreation,
-    BugReport,
 }
 
 enum ChannelDataType {
@@ -122,11 +100,7 @@ impl Gui {
     fn new(textures: HashMap<String, TextureHandle>) -> Self {
         let (sender, receiver) = channel();
         Self {
-            main_panels: vec![
-                Box::new(MachineInspectionMainPanel::default()),
-                Box::new(MachineCreationMainPanel::default()),
-            ],
-            current_main_panel_index: 0,
+            main_panels: MainPanels::default(),
             machine_configs: MachineConfig::list().expect("Machine-configs could not be listed"),
             machines: Machine::list(true).expect("Machines could not be listed"),
             textures,
@@ -150,8 +124,7 @@ impl Gui {
                 ui.horizontal_centered(|ui| {
                     let codchi_button = Button::image(include_image!("../../assets/logo.png"));
                     if ui.add(codchi_button).clicked() {
-                        self.current_main_panel_index =
-                            Self::get_main_panel_index(MainPanelType::MachineInspection);
+                        self.main_panels.change(MainPanelType::MachineInspection);
                     }
                     ui.separator();
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -268,10 +241,7 @@ impl Gui {
                             ui.label(status);
                         }
                     }
-                    for status_option in self.main_panels[self.current_main_panel_index]
-                        .get_status_text()
-                        .get_status()
-                    {
+                    for status_option in self.main_panels.get_status_text().get_status() {
                         if let Some((_pending_msgs, status)) = status_option {
                             if first_status {
                                 first_status = false;
@@ -297,8 +267,7 @@ impl Gui {
                     let new_machin_button_handle =
                         ui.add_sized([ui.available_width(), 0.0], new_machine_button);
                     if new_machin_button_handle.clicked() {
-                        self.current_main_panel_index =
-                            Self::get_main_panel_index(MainPanelType::MachineCreation);
+                        self.main_panels.change(MainPanelType::MachineCreation);
                     }
                     ui.separator();
 
@@ -336,12 +305,8 @@ impl Gui {
                                 );
                                 let button_handle = ui.add(machine_button);
                                 if button_handle.clicked() {
-                                    let machine_inspection_panel_index = Self::get_main_panel_index(
-                                        MainPanelType::MachineInspection,
-                                    );
-                                    self.current_main_panel_index = machine_inspection_panel_index;
-                                    self.main_panels[machine_inspection_panel_index]
-                                        .pass_machine(machine.clone());
+                                    self.main_panels.change(MainPanelType::MachineInspection);
+                                    self.main_panels.pass_machine(machine.clone());
                                 }
                             }
                         })
@@ -358,26 +323,14 @@ impl Gui {
                 .show(ui, |ui| {
                     ui.spacing_mut().scroll = style::ScrollStyle::solid();
 
-                    let next_panel_type_option =
-                        self.main_panels[self.current_main_panel_index].next_panel();
-                    if let Some(next_panel_type) = next_panel_type_option {
-                        self.current_main_panel_index = Self::get_main_panel_index(next_panel_type);
+                    if let Some(next_panel_type) = self.main_panels.next_panel() {
+                        self.main_panels.change(next_panel_type);
                     }
 
-                    self.main_panels[self.current_main_panel_index].update(ui);
+                    self.main_panels.update(ui);
+                    self.main_panels.modal_update(ctx);
                 })
         });
-        for main_panel in &mut self.main_panels {
-            main_panel.modal_update(ctx);
-        }
-    }
-
-    fn get_main_panel_index(main_panel_type: MainPanelType) -> usize {
-        match main_panel_type {
-            MainPanelType::MachineInspection => 0,
-            MainPanelType::MachineCreation => 1,
-            MainPanelType::BugReport => 2,
-        }
     }
 
     fn reload_machine(&mut self) {
@@ -403,6 +356,65 @@ impl Gui {
                 });
             }
         }
+    }
+}
+
+impl Default for MainPanels {
+    fn default() -> Self {
+        let mut panels: Vec<Box<dyn MainPanel>> = Vec::new();
+        for main_panel in MainPanelType::iter() {
+            let panel: Box<dyn MainPanel> = match main_panel {
+                MainPanelType::MachineInspection => Box::new(MachineInspectionMainPanel::default()),
+                MainPanelType::MachineCreation => Box::new(MachineCreationMainPanel::default()),
+            };
+            panels.push(panel);
+        }
+        Self {
+            panels,
+            current_panel_index: 0,
+        }
+    }
+}
+
+impl MainPanel for MainPanels {
+    fn update(&mut self, ui: &mut Ui) {
+        self.get_current_main_panel_mut().update(ui);
+    }
+
+    fn modal_update(&mut self, ctx: &Context) {
+        for main_panel in &mut self.panels {
+            main_panel.modal_update(ctx);
+        }
+    }
+
+    fn next_panel(&mut self) -> Option<MainPanelType> {
+        self.get_current_main_panel_mut().next_panel()
+    }
+
+    fn pass_machine(&mut self, machine: Machine) {
+        self.get_current_main_panel_mut().pass_machine(machine);
+    }
+
+    fn get_status_text(&self) -> &StatusEntries {
+        self.get_current_main_panel().get_status_text()
+    }
+
+    fn renew(&mut self) {
+        self.get_current_main_panel_mut().renew();
+    }
+}
+
+impl MainPanels {
+    fn get_current_main_panel(&self) -> &dyn MainPanel {
+        self.panels[self.current_panel_index].as_ref()
+    }
+
+    fn get_current_main_panel_mut(&mut self) -> &mut dyn MainPanel {
+        self.panels[self.current_panel_index].as_mut()
+    }
+
+    fn change(&mut self, new_main_panel: MainPanelType) {
+        self.current_panel_index = new_main_panel as usize;
     }
 }
 
@@ -589,4 +601,30 @@ impl StatusEntries {
     fn get_status(&self) -> &Vec<Option<(usize, String)>> {
         &self.status
     }
+}
+
+pub fn run() -> anyhow::Result<()> {
+    let options = eframe::NativeOptions {
+        viewport: ViewportBuilder::default().with_inner_size((960.0, 540.0)),
+        ..Default::default()
+    };
+    eframe::run_native(
+        "Codchi",
+        options,
+        Box::new(|cc| {
+            // set custom theme
+            cc.egui_ctx.set_visuals(get_visuals());
+
+            // This gives us image support:
+            egui_extras::install_image_loaders(&cc.egui_ctx);
+
+            // Zoom in a bit initially
+            let ppp = cc.egui_ctx.pixels_per_point();
+            cc.egui_ctx.set_pixels_per_point(1.25 * ppp);
+
+            Ok(Box::<Gui>::new(Gui::new(load_textures(&cc.egui_ctx))))
+        }),
+    )
+    .unwrap();
+    Ok(())
 }
