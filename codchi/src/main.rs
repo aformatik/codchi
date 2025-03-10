@@ -90,17 +90,6 @@ Thank you kindly!"#
     // preload config
     let cfg = CodchiConfig::get();
 
-    if !matches!(cli.command, Some(Cmd::Tray {})) && cfg.tray.autostart {
-        thread::spawn(|| {
-            // prevent race condition when initializing codchistore
-            thread::sleep(Duration::from_millis(1000));
-            Driver::host()
-                .start_tray(false)
-                .trace_err("Failed starting codchi's tray")
-                .ignore();
-        });
-    }
-
     // process commands without the store commands
     match &cli.command {
         Some(Cmd::Tar { name, target_file }) => {
@@ -119,7 +108,28 @@ Thank you kindly!"#
                 exit(0);
             }
         },
+        #[cfg(target_os = "windows")]
+        Some(Cmd::Visudo { name, file }) => {
+            Machine::by_name(name, false)?.visudo(&file.to_string())?;
+            exit(0);
+        }
+        #[cfg(target_os = "windows")]
+        Some(Cmd::Recover { name }) => {
+            platform::machine_recover(&name.to_string())?;
+            exit(0);
+        }
         _ => {}
+    }
+
+    if !matches!(cli.command, Some(Cmd::Tray {})) && cfg.tray.autostart {
+        thread::spawn(|| {
+            // prevent race condition when initializing codchistore
+            thread::sleep(Duration::from_millis(1000));
+            Driver::host()
+                .start_tray(false)
+                .trace_err("Failed starting codchi's tray")
+                .ignore();
+        });
     }
 
     CLI_ARGS
@@ -364,6 +374,12 @@ secret. Is this OK? [y/n]",
         Cmd::Tar { .. } => unreachable!(),
 
         Cmd::Store(_) => unreachable!(),
+
+        #[cfg(target_os = "windows")]
+        Cmd::Visudo { .. } => unreachable!(),
+
+        #[cfg(target_os = "windows")]
+        Cmd::Recover { .. } => unreachable!(),
     }
     if CodchiConfig::get().tray.autostart {
         Driver::host()

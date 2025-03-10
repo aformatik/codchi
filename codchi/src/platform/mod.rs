@@ -23,6 +23,8 @@ pub use platform::store_debug_shell;
 
 #[cfg(target_os = "windows")]
 pub use platform::store_recover;
+#[cfg(target_os = "windows")]
+pub use platform::machine_recover;
 
 #[cfg(target_os = "windows")]
 pub use platform::start_wsl_vpnkit;

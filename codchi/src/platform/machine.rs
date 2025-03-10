@@ -46,6 +46,9 @@ pub trait MachineDriver: Sized {
 
     /// Duplicate the container backing this machine
     fn duplicate_container(&self, target: &Machine) -> Result<()>;
+
+    /// Open the file without starting the machine
+    fn visudo(&self, file: &str) -> Result<()>;
 }
 
 #[derive(Debug, Clone)]
