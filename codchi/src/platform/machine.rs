@@ -1,7 +1,7 @@
 use super::{platform::HostImpl, Host, LinuxCommandBuilder, LinuxCommandTarget, LinuxUser};
 use crate::{
     cli::{CODCHI_DRIVER_MODULE, DEBUG},
-    config::{CodchiConfig, ConfigResult, FlakeLocation, MachineConfig},
+    config::{ConfigResult, FlakeLocation, MachineConfig},
     consts::{self, host, ToPath},
     logging::{hide_progress, log_progress, set_progress_status},
     platform::{self, CommandExt, Driver, Store},
@@ -48,6 +48,7 @@ pub trait MachineDriver: Sized {
     fn duplicate_container(&self, target: &Machine) -> Result<()>;
 
     /// Open the file without starting the machine
+    #[cfg(target_os = "windows")]
     fn visudo(&self, file: &str) -> Result<()>;
 }
 
@@ -284,7 +285,7 @@ fi
         {
             env.insert(
                 "ENABLE_NETNS".to_string(),
-                if CodchiConfig::get().enable_wsl_netns {
+                if crate::config::CodchiConfig::get().enable_wsl_netns {
                     "1"
                 } else {
                     ""

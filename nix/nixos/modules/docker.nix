@@ -9,14 +9,14 @@ in
     enable = mkOption {
       type = types.bool;
       default = false;
-      description = lib.mdDoc ''
+      description = ''
         Whether to enable the docker daemon. This also adds the codchi user to the docker group and installs docker-compose.
       '';
     };
     enableNvidia = mkOption {
       type = types.bool;
       default = false;
-      description = lib.mdDoc ''
+      description = ''
         Whether to install nvidia-container-toolkit to enable GPU usage inside docker containers. 
         This requires setting `codchi.gpu.enable = true` and `nixpkgs.config.allowUnfree = true`.
       '';

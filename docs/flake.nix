@@ -50,7 +50,6 @@
             pkgs.nixosOptionsDoc {
               options = removeAttrs config.options [ "_module" ];
               inherit transformOptions;
-              markdownByDefault = true;
               warningsAreErrors = false;
             };
         in
