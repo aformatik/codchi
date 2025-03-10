@@ -14,7 +14,7 @@ in
       type = with types; listOf package;
       default = [ ];
       example = lib.literalExpression "[ pkgs.pkgsStatic.bashInteractive pkgs.pkgsStatic.busybox ]";
-      description = lib.mdDoc ''
+      description = ''
         The set of packages that are copied to /bin. These must be static
         binaries as they can not rely on an existing /nix/store.
       '';
@@ -23,14 +23,14 @@ in
       type = with types; listOf package;
       default = [ ];
       example = lib.literalExpression "[ pkgs.git pkgs.openssh ]";
-      description = lib.mdDoc ''
+      description = ''
         The set of packages that are installed to the nix store. They must be
         installed manually (e.g. via `nix profile install` / `environment.systemPackages`).
       '';
     };
     files = mkOption {
       type = with types; attrsOf (nullOr path);
-      description = lib.mdDoc ''
+      description = ''
         Set of files that have to be copied to `/`. Deactivate a file by
         setting it to `null`.
       '';
@@ -48,7 +48,7 @@ in
     # from <nixpkgs>/nixos/modules/system/build.nix
     build = lib.mkOption {
       default = { };
-      description = lib.mdDoc ''
+      description = ''
         Attribute set of derivations used to set up the system.
       '';
       type = with lib.types; submoduleWith {
