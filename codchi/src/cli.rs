@@ -511,6 +511,25 @@ See the following docs on how to register the completions with your shell:
     #[command(subcommand)]
     #[clap(about = "Utilities for interacting with the `codchistore` container.")]
     Store(StoreCmd),
+
+    /// Try to recover the file system of a code machine
+    #[clap(hide = true)]
+    #[cfg(target_os = "windows")]
+    Recover {
+        /// Name of the code machine
+        name: String,
+    },
+
+    /// Edit a file of a code machine without starting it.
+    #[clap(hide = true)]
+    #[cfg(target_os = "windows")]
+    Visudo {
+        /// Name of the code machine
+        name: String,
+
+        /// File to edit
+        file: String,
+    },
 }
 
 mod secrets {

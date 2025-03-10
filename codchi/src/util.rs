@@ -42,17 +42,20 @@ impl<A> UtilExt for A {
     fn ignore(self) {}
 }
 
-pub fn try_n_times<E, F>(interval: Duration, n: usize, f: F) -> Result<bool, E>
+pub fn try_n_times<A, E, F>(interval: Duration, n: usize, f: F) -> Result<A, E>
 where
-    F: Fn() -> Result<bool, E>,
+    F: Fn() -> Result<A, E>,
 {
-    for _ in 0..n {
-        if f()? {
-            return Ok(true);
+    let mut i = 1;
+    loop {
+        match f() {
+            Ok(x) => return Ok(x),
+            Err(e) if i == n => return Err(e),
+            _ => {}
         }
+        i = i + 1;
         thread::sleep(interval);
     }
-    Ok(false)
 }
 
 pub fn make_writeable_if_exists<P: AsRef<Path>>(path: P) -> io::Result<()> {

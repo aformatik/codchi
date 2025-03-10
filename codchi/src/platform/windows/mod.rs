@@ -3,7 +3,7 @@ use super::{
     Driver, LinuxCommandTarget, LinuxUser, Machine, MachineDriver, NixDriver, PlatformStatus, Store,
 };
 use crate::progress_scope;
-use crate::util::{with_tmp_file, LinuxPath, PathExt, ResultExt, UtilExt};
+use crate::util::{try_n_times, with_tmp_file, LinuxPath, PathExt, ResultExt, UtilExt};
 use crate::{
     cli::DEBUG,
     config::CodchiConfig,
@@ -140,28 +140,23 @@ daemonize -e /var/log/wsl-vpnkit -o /var/log/wsl-vpnkit /bin/nix run 'nixpkgs#ws
     Ok(())
 }
 
+pub fn store_recover() -> Result<()> {
+    wsl::recover_instance(
+        consts::files::STORE_ROOTFS_NAME,
+        consts::CONTAINER_STORE_NAME,
+    )
+}
+
+pub fn machine_recover(machine_name: &str) -> Result<()> {
+    wsl::recover_instance(
+        consts::files::MACHINE_ROOTFS_NAME,
+        &machine::machine_name(machine_name),
+    )
+}
+
 pub fn stop_wsl_vpnkit(store: &impl Store) -> Result<()> {
     store.cmd().run("pkill", &["wsl-vpnkit"]).wait_ok()?;
     Ok(())
-}
-
-pub fn win_path_to_wsl(path: &PathBuf) -> anyhow::Result<LinuxPath> {
-    wsl_command()
-        .args([
-            "-d",
-            &consts::CONTAINER_STORE_NAME,
-            "--system",
-            "--user",
-            "root",
-        ])
-        .args([
-            "wslpath",
-            "-u",
-            &path.display().to_string().replace("\\", "/"),
-        ])
-        .output_utf8_ok()
-        .map(|path| LinuxPath(path.trim().to_owned()))
-        .with_context(|| format!("Failed to run 'wslpath' with path {path:?}."))
 }
 
 pub fn store_debug_shell() -> anyhow::Result<()> {
@@ -171,53 +166,6 @@ pub fn store_debug_shell() -> anyhow::Result<()> {
     .run("bash", &[])
     .exec()?;
     Ok(())
-}
-
-pub fn store_recover() -> anyhow::Result<()> {
-    use wsl::extract_from_msix;
-
-    extract_from_msix(files::STORE_ROOTFS_NAME, |store_tar| {
-        let tar_from_wsl = win_path_to_wsl(store_tar)?;
-        extract_from_msix("busybox", |busybox| {
-            let busybox_from_wsl = win_path_to_wsl(busybox)?;
-            wsl_command()
-                .args([
-                    "-d",
-                    &consts::CONTAINER_STORE_NAME,
-                    "--system",
-                    "--user",
-                    "root",
-                ])
-                .args(["mount", "-o", "remount,rw", "/mnt/wslg/distro"])
-                .wait_ok()?;
-            wsl_command()
-                .args([
-                    "-d",
-                    &consts::CONTAINER_STORE_NAME,
-                    "--system",
-                    "--user",
-                    "root",
-                ])
-                .args([
-                    &busybox_from_wsl.0,
-                    "tar",
-                    "-C",
-                    "/mnt/wslg/distro",
-                    "-xzf",
-                    &tar_from_wsl.0,
-                ])
-                .wait_ok()?;
-
-            let _ = wsl::wsl_command()
-                .arg("--terminate")
-                .arg(consts::CONTAINER_STORE_NAME)
-                .wait_ok()
-                .trace_err("Failed stopping store container");
-
-            log::info!("Restored file system of `codchistore`.");
-            Ok(())
-        })
-    })
 }
 
 impl MachineDriver for Machine {
@@ -345,9 +293,23 @@ tail -f "{log_file}"
         });
 
         // Machine is started by issuing a command
-        self.cmd()
-            .script(r#"systemctl is-system-running | grep -E "running|degraded""#.to_string())
-            .retry_until_ok();
+        if let Err(e) = try_n_times(Duration::from_millis(500), 20, || {
+            self.cmd()
+                .script(r#"systemctl is-system-running | grep -E "running|degraded""#.to_string())
+                .wait_ok()
+        }) {
+            log::error!("{}", e);
+            log::error!("Failed starting machine. Trying to recover...");
+            machine_recover(&self.config.name)?;
+            try_n_times(Duration::from_millis(500), 20, || {
+                self.cmd()
+                    .script(
+                        r#"systemctl is-system-running | grep -E "running|degraded""#.to_string(),
+                    )
+                    .wait_ok()
+            })
+            .with_context(|| format!("Failed starting WSL instance..."))?;
+        }
 
         cancel_tx
             .send(())
@@ -416,7 +378,7 @@ tail -f "{log_file}"
             let mut cmd = wsl_command();
             cmd.args([
                 "-d",
-                &consts::machine::machine_name(&self.config.name),
+                &machine::machine_name(&self.config.name),
                 "--system",
                 "--user",
                 "root",
@@ -466,7 +428,7 @@ tail -f "{log_file}"
 
             self.write_env_file(etc_dir.join("codchi-env"))?;
 
-            let tmp_in_wsl = win_path_to_wsl(&tmp_dir)?;
+            let tmp_in_wsl = wsl::win_path_to_wsl(&tmp_dir)?;
 
             wsl_cmd()
                 .args(["cp", "-r", &format!("{}/*", tmp_in_wsl.0), merged])
@@ -475,7 +437,7 @@ tail -f "{log_file}"
             Ok(())
         })?;
 
-        let wsl_path = win_path_to_wsl(&target_absolute)?;
+        let wsl_path = wsl::win_path_to_wsl(&target_absolute)?;
         wsl_cmd()
             .args([
                 "/mnt/wslg/distro/bin/tar",
@@ -513,7 +475,7 @@ tail -f "{log_file}"
     }
 
     fn duplicate_container(&self, target: &Machine) -> Result<()> {
-        let target_name = consts::machine::machine_name(&target.config.name);
+        let target_name = machine::machine_name(&target.config.name);
         if Self::read_platform_status(&self.config.name)? == PlatformStatus::Running {
             if io::stdin().is_terminal()
                 && inquire::Confirm::new(&format!(
@@ -554,6 +516,33 @@ state. Is this OK? [y/n]",
                 .wait_ok()
                 .context("Failed importing ext4.vhdx inplace...")?;
         }
+        Ok(())
+    }
+
+    fn visudo(&self, file: &str) -> Result<()> {
+        wsl_command()
+            .args([
+                "-d",
+                &machine::machine_name(&self.config.name),
+                "--system",
+                "--user",
+                "root",
+            ])
+            .args(["mount", "-o", "remount,rw", "/mnt/wslg/distro"])
+            .wait_ok()?;
+        wsl_command()
+            .args([
+                "-d",
+                &machine::machine_name(&self.config.name),
+                "--cd",
+                "/mnt/wslg/distro",
+                "--system",
+                "--user",
+                "root",
+            ])
+            .args(["./bin/vi", &format!("./{file}")])
+            .wait_inherit()?;
+
         Ok(())
     }
 }

@@ -109,9 +109,8 @@ in
           echo "Using IP $VPEER_ADDR for namespace $NS" >&2
 
           if [ ! -d /var/run/netns ]; then
-            mkdir -p /var/run
-            mount -t tmpfs -o size=10m tmpfs /var/run
-            mkdir /var/run/netns || true
+            mkdir -p /var/run/netns
+            mount -t tmpfs -o size=10m tmpfs /var/run/netns
           fi
 
           # setup namespace

@@ -93,6 +93,7 @@ in
           unset WAYLAND_DISPLAY
           export GDK_BACKEND=x11
         else
+          export DISPLAY=:0
           export GDK_BACKEND=wayland
         fi
       '';

@@ -207,3 +207,69 @@ impl LinuxPath {
             .join(self.0.clone())
     }
 }
+
+pub fn win_path_to_wsl(path: &PathBuf) -> anyhow::Result<LinuxPath> {
+    wsl_command()
+        .args([
+            "-d",
+            &consts::CONTAINER_STORE_NAME,
+            "--system",
+            "--user",
+            "root",
+        ])
+        .args([
+            "wslpath",
+            "-u",
+            &path.display().to_string().replace("\\", "/"),
+        ])
+        .output_utf8_ok()
+        .map(|path| LinuxPath(path.trim().to_owned()))
+        .with_context(|| format!("Failed to run 'wslpath' with path {path:?}."))
+}
+
+
+pub fn recover_instance(rootfs: &str, instance_name: &str) -> anyhow::Result<()> {
+    extract_from_msix(rootfs, |rootfs_tar| {
+        let tar_from_wsl = win_path_to_wsl(rootfs_tar)?;
+        extract_from_msix("busybox", |busybox| {
+            let busybox_from_wsl = win_path_to_wsl(busybox)?;
+            wsl_command()
+                .args([
+                    "-d",
+                    instance_name,
+                    "--system",
+                    "--user",
+                    "root",
+                ])
+                .args(["mount", "-o", "remount,rw", "/mnt/wslg/distro"])
+                .wait_ok()?;
+            wsl_command()
+                .args([
+                    "-d",
+                    instance_name,
+                    "--system",
+                    "--user",
+                    "root",
+                ])
+                .args([
+                    &busybox_from_wsl.0,
+                    "tar",
+                    "-C",
+                    "/mnt/wslg/distro",
+                    "-xzf",
+                    &tar_from_wsl.0,
+                ])
+                .wait_ok()?;
+
+            let _ = wsl_command()
+                .arg("--terminate")
+                .arg(instance_name)
+                .wait_ok()
+                .trace_err("Failed stopping WSL instance");
+
+            log::info!("Restored file system of `{instance_name}`.");
+            Ok(())
+        })
+    })
+}
+
