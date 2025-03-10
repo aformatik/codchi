@@ -123,8 +123,9 @@ impl Gui {
             .show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
                     let codchi_button = Button::image(include_image!("../../assets/logo.png"));
-                    if ui.add(codchi_button).clicked() {
+                    if ui.add(codchi_button).on_hover_text("Home").clicked() {
                         self.main_panels.change(MainPanelType::MachineInspection);
+                        self.main_panels.renew();
                     }
                     ui.separator();
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -133,11 +134,15 @@ impl Gui {
                             Button::image(include_image!("../../assets/github_logo.png"));
                         let bug_report_button =
                             Button::image(include_image!("../../assets/bug_icon.png"));
-                        if ui.add(github_button).clicked() {
+                        if ui.add(github_button).on_hover_text("Github").clicked() {
                             ui.ctx()
                                 .open_url(OpenUrl::new_tab("https://github.com/aformatik/codchi/"));
                         }
-                        if ui.add(bug_report_button).clicked() {
+                        if ui
+                            .add(bug_report_button)
+                            .on_hover_text("Bug-Report")
+                            .clicked()
+                        {
                             ui.ctx().open_url(OpenUrl::new_tab(
                                 "https://github.com/aformatik/codchi/issues",
                             ));
@@ -218,7 +223,9 @@ impl Gui {
                                     "Enable wsl-vpnkit",
                                 ));
                             }
-                        });
+                        })
+                        .response
+                        .on_hover_text("Setting");
                     });
                 });
             });

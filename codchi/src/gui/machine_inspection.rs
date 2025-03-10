@@ -150,9 +150,8 @@ impl MainPanel for MachineInspectionMainPanel {
                             self.show_delete_confirmation_modal = true;
                         }
                     });
-                    let reload_image = Image::new(include_image!("../../assets/reload.png"));
-                    let reload_button = Button::image(reload_image);
-                    if ui.add(reload_button).clicked() {
+                    let reload_button = Button::new("\u{21BA}");
+                    if ui.add(reload_button).on_hover_text("Reload").clicked() {
                         self.machine_data_map.remove(&self.current_machine);
                         self.pass_machine(
                             Machine::by_name(&self.current_machine, true).ok().unwrap(),
@@ -509,7 +508,6 @@ impl MainPanel for MachineInspectionMainPanel {
     }
 
     fn renew(&mut self) {
-        self.machine_data_map.clear();
         self.current_machine = String::from("");
     }
 }
