@@ -7,8 +7,8 @@ use egui::*;
 use itertools::Itertools;
 use std::path::PathBuf;
 use std::{
-    collections::HashMap,
-    sync::mpsc::{channel, Receiver, Sender},
+    collections::{HashMap, VecDeque},
+    sync::{Arc, Mutex},
     thread,
 };
 
@@ -21,8 +21,7 @@ pub struct MachineInspectionMainPanel {
     current_machine: String,
     next_panel_type: Option<MainPanelType>,
 
-    sender: Sender<(usize, String, ChannelDataType)>,
-    receiver: Receiver<(usize, String, ChannelDataType)>,
+    answer_queue: Arc<Mutex<VecDeque<(usize, String, ChannelDataType)>>>,
 
     show_rebuild_spec_modal: bool,
     show_duplicate_spec_modal: bool,
@@ -61,7 +60,6 @@ impl MachineData {
 
 impl Default for MachineInspectionMainPanel {
     fn default() -> Self {
-        let (sender, receiver) = channel();
         MachineInspectionMainPanel {
             status_text: StatusEntries::new(),
 
@@ -69,8 +67,7 @@ impl Default for MachineInspectionMainPanel {
             current_machine: String::from(""),
             next_panel_type: None,
 
-            sender,
-            receiver,
+            answer_queue: Arc::new(Mutex::new(VecDeque::new())),
 
             show_rebuild_spec_modal: false,
             show_duplicate_spec_modal: false,
@@ -84,7 +81,7 @@ impl Default for MachineInspectionMainPanel {
 
 impl MainPanel for MachineInspectionMainPanel {
     fn update(&mut self, ui: &mut Ui) {
-        let received_answer = self.receiver.try_recv().ok();
+        let received_answer = self.answer_queue.try_lock().unwrap().pop_front();
         if let Some((index, machine_name, data_type)) = received_answer {
             if self.status_text.decrease(index) {
                 self.machine_data_map
@@ -305,12 +302,14 @@ impl MainPanel for MachineInspectionMainPanel {
 
                         let mut machine =
                             self.machine_data_map[&self.current_machine].machine.clone();
-                        let sender_clone = self.sender.clone();
+                        let answer_queue_clone = self.answer_queue.clone();
                         thread::spawn(move || {
                             let _ = machine.build(!checked);
-                            sender_clone
-                                .send((index, machine.config.name, ChannelDataType::ClearStatus))
-                                .unwrap();
+                            answer_queue_clone.lock().unwrap().push_back((
+                                index,
+                                machine.config.name,
+                                ChannelDataType::ClearStatus,
+                            ));
                         });
                         self.show_rebuild_spec_modal = false;
                     }
@@ -346,12 +345,15 @@ impl MainPanel for MachineInspectionMainPanel {
 
                         let machine = self.machine_data_map[&self.current_machine].machine.clone();
                         let new_machine_name_clone = new_machine_name.clone();
-                        let sender_clone = self.sender.clone();
+                        let answer_queue_clone = self.answer_queue.clone();
                         thread::spawn(move || {
                             let _ = machine.duplicate(&new_machine_name_clone);
-                            sender_clone
-                                .send((index, machine.config.name, ChannelDataType::ClearStatus))
-                                .unwrap();
+
+                            answer_queue_clone.lock().unwrap().push_back((
+                                index,
+                                machine.config.name,
+                                ChannelDataType::ClearStatus,
+                            ));
                         });
                         self.show_duplicate_spec_modal = false;
                     }
@@ -386,12 +388,15 @@ impl MainPanel for MachineInspectionMainPanel {
                         );
 
                         let machine = self.machine_data_map[&self.current_machine].machine.clone();
-                        let sender_clone = self.sender.clone();
+                        let answer_queue_clone = self.answer_queue.clone();
                         thread::spawn(move || {
                             let _ = machine.tar(&path);
-                            sender_clone
-                                .send((index, machine.config.name, ChannelDataType::ClearStatus))
-                                .unwrap();
+
+                            answer_queue_clone.lock().unwrap().push_back((
+                                index,
+                                machine.config.name,
+                                ChannelDataType::ClearStatus,
+                            ));
                         });
                         self.show_tar_spec_modal = false;
                     }
@@ -423,12 +428,15 @@ impl MainPanel for MachineInspectionMainPanel {
                             .machine;
                         let mut machine_name = String::from("");
                         std::mem::swap(&mut self.current_machine, &mut machine_name);
-                        let sender_clone = self.sender.clone();
+                        let answer_queue_clone = self.answer_queue.clone();
                         thread::spawn(move || {
                             let _ = machine.delete(true);
-                            sender_clone
-                                .send((index, machine_name, ChannelDataType::ClearStatus))
-                                .unwrap();
+
+                            answer_queue_clone.lock().unwrap().push_back((
+                                index,
+                                machine_name,
+                                ChannelDataType::ClearStatus,
+                            ));
                         });
                         self.show_delete_confirmation_modal = false;
                     }
@@ -461,32 +469,33 @@ impl MainPanel for MachineInspectionMainPanel {
                 String::from(format!("Loading machine {}...", &machine_name)),
             );
 
-            let applications_sender = self.sender.clone();
+            let answer_queue_clone = self.answer_queue.clone();
             let machine_name_clone = machine_name.clone();
             let machine_clone = machine.clone();
             thread::spawn(move || {
                 let applications = HostImpl::list_desktop_entries(&machine_clone).ok().unwrap();
 
-                applications_sender
-                    .send((
-                        index,
-                        machine_name_clone,
-                        ChannelDataType::Applications(applications),
-                    ))
-                    .expect("modules could not be sent");
+                answer_queue_clone.lock().unwrap().push_back((
+                    index,
+                    machine_name_clone,
+                    ChannelDataType::Applications(applications),
+                ));
             });
 
-            let modules_sender = self.sender.clone();
+            let answer_queue_clone = self.answer_queue.clone();
             let modules_clone = machine.config.modules.clone();
             let machine_name_clone = machine_name.clone();
             thread::spawn(move || {
                 let modules = modules_clone.to_output();
-                modules_sender
-                    .send((index, machine_name_clone, ChannelDataType::Modules(modules)))
-                    .expect("modules could not be sent");
+
+                answer_queue_clone.lock().unwrap().push_back((
+                    index,
+                    machine_name_clone,
+                    ChannelDataType::Modules(modules),
+                ));
             });
 
-            let secrets_sender = self.sender.clone();
+            let answer_queue_clone = self.answer_queue.clone();
             let machine_name_clone = machine_name.clone();
             thread::spawn(move || {
                 let secrets = machine
@@ -495,9 +504,11 @@ impl MainPanel for MachineInspectionMainPanel {
                     .into_values()
                     .collect_vec()
                     .to_output();
-                secrets_sender
-                    .send((index, machine_name_clone, ChannelDataType::Secrets(secrets)))
-                    .expect("modules could not be sent");
+                answer_queue_clone.lock().unwrap().push_back((
+                    index,
+                    machine_name_clone,
+                    ChannelDataType::Secrets(secrets),
+                ));
             });
         }
         self.current_machine = machine_name;

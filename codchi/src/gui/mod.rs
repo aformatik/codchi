@@ -10,8 +10,8 @@ use machine_creation::MachineCreationMainPanel;
 use machine_inspection::MachineInspectionMainPanel;
 use std::{
     any::Any,
-    collections::HashMap,
-    sync::mpsc::{channel, Receiver, Sender},
+    collections::{HashMap, VecDeque},
+    sync::{Arc, Mutex},
     thread,
     time::Instant,
 };
@@ -25,8 +25,7 @@ struct Gui {
 
     status_text: StatusEntries,
 
-    sender: Sender<(usize, ChannelDataType)>,
-    receiver: Receiver<(usize, ChannelDataType)>,
+    answer_queue: Arc<Mutex<VecDeque<(usize, ChannelDataType)>>>,
 
     reloading_machine_index: Option<usize>,
     last_reload: Instant,
@@ -59,7 +58,7 @@ impl eframe::App for Gui {
                 self.reload_machine();
             }
         }
-        let received_answer = self.receiver.try_recv().ok();
+        let received_answer = self.answer_queue.try_lock().unwrap().pop_front();
         if let Some((status_index, data_type)) = received_answer {
             self.status_text.decrease(status_index);
             match data_type {
@@ -98,7 +97,6 @@ impl eframe::App for Gui {
 
 impl Gui {
     fn new(textures: HashMap<String, TextureHandle>) -> Self {
-        let (sender, receiver) = channel();
         Self {
             main_panels: MainPanels::default(),
             machine_configs: MachineConfig::list().expect("Machine-configs could not be listed"),
@@ -107,8 +105,7 @@ impl Gui {
 
             status_text: StatusEntries::new(),
 
-            sender,
-            receiver,
+            answer_queue: Arc::new(Mutex::new(VecDeque::new())),
 
             reloading_machine_index: None,
             last_reload: Instant::now(),
@@ -163,12 +160,13 @@ impl Gui {
                                     let index = self
                                         .status_text
                                         .insert(1, String::from("Recovering Codchi store..."));
-                                    let sender_clone = self.sender.clone();
+                                    let answer_queue_clone = self.answer_queue.clone();
                                     thread::spawn(move || {
                                         let _ = crate::platform::platform::store_recover();
-                                        sender_clone
-                                            .send((index, ChannelDataType::StoreRecovered))
-                                            .unwrap();
+                                        answer_queue_clone
+                                            .lock()
+                                            .unwrap()
+                                            .push_back((index, ChannelDataType::StoreRecovered));
                                     });
                                     ui.close_menu();
                                 }
@@ -352,14 +350,15 @@ impl Gui {
                 );
 
                 let machine_config_clone = machine_config.clone();
-                let machine_sender_clone = self.sender.clone();
+                let answer_queue_clone = self.answer_queue.clone();
                 thread::spawn(move || {
                     let machine = Machine::read(machine_config_clone, true)
                         .expect("Machine could not be read");
 
-                    machine_sender_clone
-                        .send((index, ChannelDataType::Machine(machine, machine_index)))
-                        .expect("machine could not be sent");
+                    answer_queue_clone
+                        .lock()
+                        .unwrap()
+                        .push_back((index, ChannelDataType::Machine(machine, machine_index)));
                 });
             }
         }
