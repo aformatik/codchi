@@ -58,7 +58,11 @@ impl eframe::App for Gui {
                 self.reload_machine();
             }
         }
-        let received_answer = self.answer_queue.try_lock().unwrap().pop_front();
+        let received_answer = if let Ok(mut answer_queue) = self.answer_queue.try_lock() {
+            answer_queue.pop_front()
+        } else {
+            None
+        };
         if let Some((status_index, data_type)) = received_answer {
             self.status_text.decrease(status_index);
             match data_type {

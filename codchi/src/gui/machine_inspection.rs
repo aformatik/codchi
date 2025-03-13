@@ -81,7 +81,11 @@ impl Default for MachineInspectionMainPanel {
 
 impl MainPanel for MachineInspectionMainPanel {
     fn update(&mut self, ui: &mut Ui) {
-        let received_answer = self.answer_queue.try_lock().unwrap().pop_front();
+        let received_answer = if let Ok(mut answer_queue) = self.answer_queue.try_lock() {
+            answer_queue.pop_front()
+        } else {
+            None
+        };
         if let Some((index, machine_name, data_type)) = received_answer {
             if self.status_text.decrease(index) {
                 self.machine_data_map
