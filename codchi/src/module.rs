@@ -422,7 +422,7 @@ pub fn fetch_modules(
     Ok((modules, use_nixpkgs))
 }
 
-fn inquire_module_url(
+pub(crate) fn inquire_module_url(
     opts: &InputOptions,
     url: &GitUrl,
     allow_local: bool,
