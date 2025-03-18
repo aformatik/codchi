@@ -29,6 +29,8 @@ struct Gui {
 
     reloading_machine_index: Option<usize>,
     last_reload: Instant,
+
+    url_input_line: String,
 }
 
 struct MainPanels {
@@ -113,6 +115,8 @@ impl Gui {
 
             reloading_machine_index: None,
             last_reload: Instant::now(),
+
+            url_input_line: String::from(""),
         }
     }
 
@@ -228,6 +232,18 @@ impl Gui {
                         })
                         .response
                         .on_hover_text("Setting");
+
+                        let url_input_line = TextEdit::singleline(&mut self.url_input_line);
+                        let url_input_line_handle = ui.add_sized([400.0, 0.0], url_input_line);
+                        if url_input_line_handle.lost_focus()
+                            && url_input_line_handle
+                                .ctx
+                                .input(|i| i.key_pressed(Key::Enter))
+                        {
+                            self.main_panels.change(MainPanelType::MachineCreation);
+                            self.main_panels
+                                .transfer_data(DTO::Text(self.url_input_line.take()));
+                        }
                     });
                 });
             });
@@ -315,7 +331,8 @@ impl Gui {
                                 let button_handle = ui.add(machine_button);
                                 if button_handle.clicked() {
                                     self.main_panels.change(MainPanelType::MachineInspection);
-                                    self.main_panels.pass_machine(machine.clone());
+                                    self.main_panels
+                                        .transfer_data(DTO::Machine(machine.clone()));
                                 }
                             }
                         })
@@ -401,8 +418,8 @@ impl MainPanel for MainPanels {
         self.get_current_main_panel_mut().next_panel()
     }
 
-    fn pass_machine(&mut self, machine: Machine) {
-        self.get_current_main_panel_mut().pass_machine(machine);
+    fn transfer_data(&mut self, dto: DTO) {
+        self.get_current_main_panel_mut().transfer_data(dto);
     }
 
     fn get_status_text(&self) -> &StatusEntries {
@@ -428,18 +445,23 @@ impl MainPanels {
     }
 }
 
-pub trait MainPanel: Any {
+pub trait MainPanel {
     fn update(&mut self, ui: &mut Ui);
 
     fn modal_update(&mut self, ctx: &Context);
 
     fn next_panel(&mut self) -> Option<MainPanelType>;
 
-    fn pass_machine(&mut self, machine: Machine);
+    fn transfer_data(&mut self, dto: DTO);
 
     fn get_status_text(&self) -> &StatusEntries;
 
     fn renew(&mut self);
+}
+
+pub enum DTO {
+    Machine(Machine),
+    Text(String),
 }
 
 pub fn create_modal<R>(

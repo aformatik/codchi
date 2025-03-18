@@ -6,7 +6,7 @@ use egui::*;
 use git_url_parse::{GitUrl, GitUrlParseError};
 use strum::{EnumIter, IntoEnumIterator};
 
-use super::StatusEntries;
+use super::{StatusEntries, DTO};
 use anyhow::Error;
 use std::{
     collections::VecDeque,
@@ -238,7 +238,15 @@ impl MainPanel for MachineCreationMainPanel {
         self.next_panel_type.take()
     }
 
-    fn pass_machine(&mut self, _machine: Machine) {}
+    fn transfer_data(&mut self, dto: DTO) {
+        match dto {
+            DTO::Machine(_) => todo!(),
+            DTO::Text(text) => {
+                self.renew();
+                self.url = text;
+            }
+        }
+    }
 
     fn get_status_text(&self) -> &StatusEntries {
         &self.status_text

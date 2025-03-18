@@ -12,7 +12,7 @@ use std::{
     thread,
 };
 
-use super::StatusEntries;
+use super::{StatusEntries, DTO};
 
 pub struct MachineInspectionMainPanel {
     status_text: StatusEntries,
@@ -97,7 +97,7 @@ impl MainPanel for MachineInspectionMainPanel {
                 if !self.current_machine.is_empty() {
                     let current_machine = Machine::by_name(&self.current_machine, true);
                     if let Ok(machine) = current_machine {
-                        self.pass_machine(machine);
+                        self.transfer_data(DTO::Machine(machine));
                     }
                 }
             }
@@ -159,7 +159,7 @@ impl MainPanel for MachineInspectionMainPanel {
                         self.machine_data_map.remove(&self.current_machine);
                         let machine_res = Machine::by_name(&self.current_machine, true);
                         if let Ok(machine) = machine_res {
-                            self.pass_machine(machine);
+                            self.transfer_data(DTO::Machine(machine));
                         }
                     }
                 });
@@ -470,64 +470,69 @@ impl MainPanel for MachineInspectionMainPanel {
         self.next_panel_type.take()
     }
 
-    fn pass_machine(&mut self, machine: Machine) {
-        let machine_name = machine.config.name.clone();
-        if !self.machine_data_map.contains_key(&machine_name) {
-            let machine_data = MachineData::new(machine.clone());
-            self.machine_data_map
-                .insert(machine_name.clone(), machine_data);
+    fn transfer_data(&mut self, dto: DTO) {
+        match dto {
+            DTO::Machine(machine) => {
+                let machine_name = machine.config.name.clone();
+                if !self.machine_data_map.contains_key(&machine_name) {
+                    let machine_data = MachineData::new(machine.clone());
+                    self.machine_data_map
+                        .insert(machine_name.clone(), machine_data);
+                }
+
+                if !self.machine_data_map[&machine_name].initialized {
+                    let index = self.status_text.insert(
+                        3,
+                        String::from(format!("Loading machine {}...", &machine_name)),
+                    );
+
+                    let answer_queue_clone = self.answer_queue.clone();
+                    let machine_name_clone = machine_name.clone();
+                    let machine_clone = machine.clone();
+                    thread::spawn(move || {
+                        let applications =
+                            HostImpl::list_desktop_entries(&machine_clone).unwrap_or(Vec::new());
+
+                        answer_queue_clone.lock().unwrap().push_back((
+                            index,
+                            machine_name_clone,
+                            ChannelDataType::Applications(applications),
+                        ));
+                    });
+
+                    let answer_queue_clone = self.answer_queue.clone();
+                    let modules_clone = machine.config.modules.clone();
+                    let machine_name_clone = machine_name.clone();
+                    thread::spawn(move || {
+                        let modules = modules_clone.to_output();
+
+                        answer_queue_clone.lock().unwrap().push_back((
+                            index,
+                            machine_name_clone,
+                            ChannelDataType::Modules(modules),
+                        ));
+                    });
+
+                    let answer_queue_clone = self.answer_queue.clone();
+                    let machine_name_clone = machine_name.clone();
+                    thread::spawn(move || {
+                        let secrets = machine
+                            .eval_env_secrets()
+                            .expect("failed to load machine secrets")
+                            .into_values()
+                            .collect_vec()
+                            .to_output();
+                        answer_queue_clone.lock().unwrap().push_back((
+                            index,
+                            machine_name_clone,
+                            ChannelDataType::Secrets(secrets),
+                        ));
+                    });
+                }
+                self.current_machine = machine_name;
+            }
+            DTO::Text(_) => todo!(),
         }
-
-        if !self.machine_data_map[&machine_name].initialized {
-            let index = self.status_text.insert(
-                3,
-                String::from(format!("Loading machine {}...", &machine_name)),
-            );
-
-            let answer_queue_clone = self.answer_queue.clone();
-            let machine_name_clone = machine_name.clone();
-            let machine_clone = machine.clone();
-            thread::spawn(move || {
-                let applications =
-                    HostImpl::list_desktop_entries(&machine_clone).unwrap_or(Vec::new());
-
-                answer_queue_clone.lock().unwrap().push_back((
-                    index,
-                    machine_name_clone,
-                    ChannelDataType::Applications(applications),
-                ));
-            });
-
-            let answer_queue_clone = self.answer_queue.clone();
-            let modules_clone = machine.config.modules.clone();
-            let machine_name_clone = machine_name.clone();
-            thread::spawn(move || {
-                let modules = modules_clone.to_output();
-
-                answer_queue_clone.lock().unwrap().push_back((
-                    index,
-                    machine_name_clone,
-                    ChannelDataType::Modules(modules),
-                ));
-            });
-
-            let answer_queue_clone = self.answer_queue.clone();
-            let machine_name_clone = machine_name.clone();
-            thread::spawn(move || {
-                let secrets = machine
-                    .eval_env_secrets()
-                    .expect("failed to load machine secrets")
-                    .into_values()
-                    .collect_vec()
-                    .to_output();
-                answer_queue_clone.lock().unwrap().push_back((
-                    index,
-                    machine_name_clone,
-                    ChannelDataType::Secrets(secrets),
-                ));
-            });
-        }
-        self.current_machine = machine_name;
     }
 
     fn get_status_text(&self) -> &StatusEntries {
