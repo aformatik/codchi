@@ -332,7 +332,7 @@ impl MainPanel for MachineInspectionMainPanel {
                 ui.data_mut(|d| d.insert_temp(state_id, checked));
             });
             if modal.should_close() {
-                self.show_delete_confirmation_modal = false;
+                self.show_rebuild_spec_modal = false;
             }
         }
         if self.show_duplicate_spec_modal {
@@ -376,7 +376,7 @@ impl MainPanel for MachineInspectionMainPanel {
                 ui.data_mut(|d| d.insert_temp(state_id, new_machine_name));
             });
             if modal.should_close() {
-                self.show_delete_confirmation_modal = false;
+                self.show_duplicate_spec_modal = false;
             }
         }
         if self.show_tar_spec_modal {
@@ -420,7 +420,7 @@ impl MainPanel for MachineInspectionMainPanel {
                 ui.data_mut(|d| d.insert_temp(state_id, tar_path));
             });
             if modal.should_close() {
-                self.show_delete_confirmation_modal = false;
+                self.show_tar_spec_modal = false;
             }
         }
         if self.show_delete_confirmation_modal {
