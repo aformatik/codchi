@@ -95,7 +95,10 @@ impl MainPanel for MachineInspectionMainPanel {
                     });
                 // attempt to load currently inspecting machine
                 if !self.current_machine.is_empty() {
-                    self.pass_machine(Machine::by_name(&self.current_machine, true).ok().unwrap());
+                    let current_machine = Machine::by_name(&self.current_machine, true);
+                    if let Ok(machine) = current_machine {
+                        self.pass_machine(machine);
+                    }
                 }
             }
             match data_type {
@@ -154,9 +157,10 @@ impl MainPanel for MachineInspectionMainPanel {
                     let reload_button = Button::new("\u{21BA}");
                     if ui.add(reload_button).on_hover_text("Reload").clicked() {
                         self.machine_data_map.remove(&self.current_machine);
-                        self.pass_machine(
-                            Machine::by_name(&self.current_machine, true).ok().unwrap(),
-                        );
+                        let machine_res = Machine::by_name(&self.current_machine, true);
+                        if let Ok(machine) = machine_res {
+                            self.pass_machine(machine);
+                        }
                     }
                 });
             });
@@ -270,7 +274,11 @@ impl MainPanel for MachineInspectionMainPanel {
                                     cfg.secrets.insert(secret.name.clone(), new_password);
                                     cfg.write(lock).unwrap();
                                 },
-                                &secret.value.clone().unwrap(),
+                                &if secret.value.is_some() {
+                                    secret.value.clone().unwrap()
+                                } else {
+                                    String::from("")
+                                },
                             ));
                             ui.end_row();
                         }
@@ -382,6 +390,7 @@ impl MainPanel for MachineInspectionMainPanel {
                 ui.horizontal(|ui| {
                     let tar_button = Button::new("Tar").fill(Color32::DARK_GREEN);
                     if ui.add(tar_button).clicked() {
+                        // TODO
                         let path = PathBuf::try_from(&tar_path).unwrap();
                         let index = self.status_text.insert(
                             1,
@@ -420,28 +429,30 @@ impl MainPanel for MachineInspectionMainPanel {
                 ui.horizontal(|ui| {
                     let delete_button = Button::new("Delete").fill(Color32::DARK_RED);
                     if ui.add(delete_button).clicked() {
-                        let index = self.status_text.insert(
-                            1,
-                            String::from(format!("Deleting machine '{}'...", self.current_machine)),
-                        );
+                        let deleted_machine_data =
+                            self.machine_data_map.remove(&self.current_machine);
+                        if let Some(machine_data) = deleted_machine_data {
+                            let index = self.status_text.insert(
+                                1,
+                                String::from(format!(
+                                    "Deleting machine '{}'...",
+                                    self.current_machine
+                                )),
+                            );
 
-                        let machine = self
-                            .machine_data_map
-                            .remove(&self.current_machine)
-                            .unwrap()
-                            .machine;
-                        let mut machine_name = String::from("");
-                        std::mem::swap(&mut self.current_machine, &mut machine_name);
-                        let answer_queue_clone = self.answer_queue.clone();
-                        thread::spawn(move || {
-                            let _ = machine.delete(true);
+                            let mut machine_name = String::from("");
+                            std::mem::swap(&mut self.current_machine, &mut machine_name);
+                            let answer_queue_clone = self.answer_queue.clone();
+                            thread::spawn(move || {
+                                let _ = machine_data.machine.delete(true);
 
-                            answer_queue_clone.lock().unwrap().push_back((
-                                index,
-                                machine_name,
-                                ChannelDataType::ClearStatus,
-                            ));
-                        });
+                                answer_queue_clone.lock().unwrap().push_back((
+                                    index,
+                                    machine_name,
+                                    ChannelDataType::ClearStatus,
+                                ));
+                            });
+                        }
                         self.show_delete_confirmation_modal = false;
                     }
                     if ui.button("Cancel").clicked() {
@@ -477,7 +488,8 @@ impl MainPanel for MachineInspectionMainPanel {
             let machine_name_clone = machine_name.clone();
             let machine_clone = machine.clone();
             thread::spawn(move || {
-                let applications = HostImpl::list_desktop_entries(&machine_clone).ok().unwrap();
+                let applications =
+                    HostImpl::list_desktop_entries(&machine_clone).unwrap_or(Vec::new());
 
                 answer_queue_clone.lock().unwrap().push_back((
                     index,
