@@ -615,7 +615,7 @@ impl StatusEntries {
 
 pub fn run() -> anyhow::Result<()> {
     let options = eframe::NativeOptions {
-        viewport: ViewportBuilder::default().with_inner_size((960.0, 540.0)),
+        viewport: ViewportBuilder::default().with_inner_size((1600.0, 900.0)),
         ..Default::default()
     };
     eframe::run_native(
