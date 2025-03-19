@@ -45,10 +45,10 @@ enum CreationStep {
     SpecifyModules,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 struct MachineForm {
     name: String,
-    git_url: GitUrl,
+    git_url: Option<GitUrl>,
     options: InputOptions,
     do_clone: bool,
     module_paths: Option<ModulePaths>,
@@ -118,7 +118,7 @@ impl MainPanel for MachineCreationMainPanel {
                 ChannelDataType::Access(url, auth, accessible) => {
                     if accessible && self.url == url && self.get_auth() == auth {
                         if let Ok(git_url) = Self::get_git_url(&url, &auth) {
-                            self.machine_form.git_url = git_url.clone();
+                            self.machine_form.git_url = Some(git_url.clone());
                             self.machine_form.options.auth = auth.clone();
 
                             // load branches for repo
@@ -156,14 +156,14 @@ impl MainPanel for MachineCreationMainPanel {
                 }
                 ChannelDataType::Branches(git_url, branches) => {
                     if branches.is_ok() {
-                        if git_url == self.machine_form.git_url {
+                        if Some(git_url) == self.machine_form.git_url {
                             self.branches = branches.ok();
                         }
                     }
                 }
                 ChannelDataType::Tags(git_url, tags) => {
                     if tags.is_ok() {
-                        if git_url == self.machine_form.git_url {
+                        if Some(git_url) == self.machine_form.git_url {
                             self.tags = tags.ok();
                         }
                     }
@@ -308,6 +308,16 @@ impl MachineCreationMainPanel {
                     }
                 }
                 ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
+                    if self.creation_step == CreationStep::SpecifyGenerics {
+                        if self.url.is_empty() && !self.machine_form.name.is_empty() {
+                            let text = RichText::from("Create").strong();
+                            let create_empty_machine_button =
+                                Button::new(text).fill(Color32::DARK_GREEN);
+                            if ui.add(create_empty_machine_button).clicked() {
+                                self.create_machine(true);
+                            }
+                        }
+                    }
                     if let Some(next_step) = self.creation_step.next() {
                         if self.is_step_reachable(&next_step) {
                             let next_button = Button::new(RichText::from("Next").strong());
@@ -321,7 +331,7 @@ impl MachineCreationMainPanel {
                         let text = RichText::from("Finish").strong();
                         let finish_button = Button::new(text).fill(Color32::DARK_GREEN);
                         if ui.add(finish_button).clicked() {
-                            self.create_machine();
+                            self.create_machine(false);
                         }
                     }
                 })
@@ -329,7 +339,7 @@ impl MachineCreationMainPanel {
         });
     }
 
-    fn create_machine(&mut self) {
+    fn create_machine(&mut self, empty: bool) {
         let index = self.status_text.insert(
             1,
             String::from(format!(
@@ -338,20 +348,32 @@ impl MachineCreationMainPanel {
             )),
         );
 
-        let machine_form = self.machine_form.clone();
+        let machine_form = if empty {
+            let mut mf = MachineForm::default();
+            mf.name = self.machine_form.name.clone();
+            mf
+        } else {
+            self.machine_form.clone()
+        };
         let answer_queue_clone = self.answer_queue.clone();
         thread::spawn(move || {
-            let machine = crate::module::init(
-                &machine_form.name,
-                Some(machine_form.git_url.clone()),
-                &machine_form.options,
+            let selected_module_paths = if empty {
+                &Vec::new()
+            } else {
                 &machine_form
                     .module_paths
                     .as_ref()
                     .unwrap()
-                    .selected_module_paths,
+                    .selected_module_paths
+            };
+            dbg!(&machine_form);
+            let machine = crate::module::init(
+                &machine_form.name,
+                machine_form.git_url.clone(),
+                &machine_form.options,
+                &selected_module_paths,
             );
-            let answer = if let Ok(new_machine) = dbg!(machine) {
+            let answer = if let Ok(new_machine) = machine {
                 ChannelDataType::NewMachine(machine_form, new_machine)
             } else {
                 ChannelDataType::ClearStatus
@@ -422,7 +444,7 @@ impl MachineCreationMainPanel {
                         commit,
                     };
                     thread::spawn(move || {
-                        let modules_result = Self::load_modules(&git_url_clone, &opts);
+                        let modules_result = Self::load_modules(&git_url_clone.unwrap(), &opts);
                         answer_queue_clone
                             .lock()
                             .unwrap()
@@ -689,28 +711,6 @@ impl CreationStep {
             CreationStep::SpecifyGenerics => None,
             CreationStep::SpecifyRepository => Some(CreationStep::SpecifyGenerics),
             CreationStep::SpecifyModules => Some(CreationStep::SpecifyRepository),
-        }
-    }
-}
-
-impl Default for MachineForm {
-    fn default() -> Self {
-        let options = InputOptions {
-            dont_prompt: true,
-            no_build: false,
-            use_nixpkgs: None,
-            auth: None,
-            branch: None,
-            tag: None,
-            commit: None,
-        };
-        MachineForm {
-            name: String::from(""),
-            git_url: GitUrl::default(),
-            options,
-            do_clone: false,
-            module_paths: None,
-            dont_run_init: false,
         }
     }
 }
