@@ -9,7 +9,6 @@ use egui::*;
 use machine_creation::MachineCreationMainPanel;
 use machine_inspection::MachineInspectionMainPanel;
 use std::{
-    any::Any,
     collections::{HashMap, VecDeque},
     sync::{Arc, Mutex},
     thread,
@@ -69,14 +68,15 @@ impl eframe::App for Gui {
             self.status_text.decrease(status_index);
             match data_type {
                 ChannelDataType::Machine(machine, machine_index) => {
-                    // reload happens for MachineConfig::list(), which can diverge from Machine::list()
                     if machine_index < self.machines.len()
                         && self.machines[machine_index].config.name == machine.config.name
                     {
                         self.machines[machine_index] = machine;
                     } else {
+                        // machine is new
                         self.machines.insert(machine_index, machine);
                     }
+
                     let next_machine_index = machine_index + 1;
                     if next_machine_index < self.machine_configs.len() {
                         self.reloading_machine_index = Some(next_machine_index);
@@ -369,6 +369,13 @@ impl Gui {
                         machine_config.name
                     )),
                 );
+
+                if let Some(machine) = self.machines.get(machine_index + 1)
+                    && machine.config.name == machine_config.name
+                {
+                    // machine at machine_index was deleted
+                    self.machines.remove(machine_index);
+                }
 
                 let machine_config_clone = machine_config.clone();
                 let answer_queue_clone = self.answer_queue.clone();
