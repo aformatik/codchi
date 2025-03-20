@@ -325,7 +325,7 @@ impl MachineCreationMainPanel {
                                 self.creation_step = next_step;
                             }
                         }
-                        self.load_repo(ui);
+                        self.display_load_button(ui);
                     } else {
                         // Last creation step
                         let text = RichText::from("Finish").strong();
@@ -385,7 +385,7 @@ impl MachineCreationMainPanel {
         });
     }
 
-    fn load_repo(&mut self, ui: &mut Ui) {
+    fn display_load_button(&mut self, ui: &mut Ui) {
         match self.creation_step {
             CreationStep::SpecifyGenerics => {
                 if ui.button("Load Repository").clicked() {
@@ -499,16 +499,6 @@ impl MachineCreationMainPanel {
             "Don't build machine",
         );
         ui.checkbox(&mut self.machine_form.dont_run_init, "Skip init Script");
-        if ui
-            .checkbox(&mut self.use_nixpkgs, "Use provided package version")
-            .clicked()
-        {
-            self.machine_form.options.use_nixpkgs = if self.use_nixpkgs {
-                Some(NixpkgsLocation::Remote)
-            } else {
-                Some(NixpkgsLocation::Local)
-            };
-        }
     }
 
     fn specify_repository_panel(&mut self, ui: &mut Ui) {
@@ -553,6 +543,16 @@ impl MachineCreationMainPanel {
         });
         ui.separator();
         ui.checkbox(&mut self.machine_form.do_clone, "Clone Configuration");
+        if ui
+            .checkbox(&mut self.use_nixpkgs, "Use provided package version")
+            .clicked()
+        {
+            self.machine_form.options.use_nixpkgs = if self.use_nixpkgs {
+                Some(NixpkgsLocation::Remote)
+            } else {
+                Some(NixpkgsLocation::Local)
+            };
+        }
     }
 
     fn specify_modules_panel(&mut self, ui: &mut Ui) {
