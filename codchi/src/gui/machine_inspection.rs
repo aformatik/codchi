@@ -1,5 +1,4 @@
 use crate::config::Mod;
-use crate::gui::{create_password_field, MainPanel, MainPanelMsgType, MainPanelType};
 use crate::logging::CodchiOutput;
 use crate::platform::{platform::HostImpl, DesktopEntry, Host, Machine, MachineDriver};
 use crate::secrets::{EnvSecret, MachineSecrets};
@@ -12,7 +11,9 @@ use std::{
     thread,
 };
 
-use super::{StatusEntries, DTO};
+use super::{
+    create_password_field, MainPanel, MainPanelMsgType, MainPanelType, StatusEntries, DTO,
+};
 
 pub struct MachineInspectionMainPanel {
     status_text: StatusEntries,

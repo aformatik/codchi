@@ -1,12 +1,11 @@
 use crate::cli::{InputOptions, ModuleAttrPath, NixpkgsLocation};
-use crate::gui::{MainPanel, MainPanelType};
 use crate::platform::{Machine, NixDriver, Store};
 use crate::util::LinuxPath;
 use egui::*;
 use git_url_parse::{GitUrl, GitUrlParseError};
 use strum::{EnumIter, IntoEnumIterator};
 
-use super::{StatusEntries, DTO};
+use super::{content_or_none, MainPanel, MainPanelType, StatusEntries, DTO};
 use anyhow::Error;
 use std::{
     collections::VecDeque,
@@ -329,13 +328,13 @@ impl MachineCreationMainPanel {
         });
     }
 
-    fn create_machine(&mut self, empty: bool) {
+    fn create_machine(&mut self, without_url: bool) {
         let index = self.status_text.insert(
             1,
             format!("Creating new machine '{}'...", self.machine_form.name),
         );
 
-        let machine_form = if empty {
+        let machine_form = if without_url {
             let mut mf = MachineForm::default();
             mf.name = self.machine_form.name.clone();
             mf
@@ -344,7 +343,7 @@ impl MachineCreationMainPanel {
         };
         let answer_queue_clone = self.answer_queue.clone();
         thread::spawn(move || {
-            let selected_module_paths = if empty {
+            let selected_module_paths = if without_url {
                 &Vec::new()
             } else {
                 &machine_form
@@ -413,9 +412,9 @@ impl MachineCreationMainPanel {
                     };
                     let auth = self.machine_form.options.auth.clone();
                     let (branch, tag, commit) = match self.git_ref {
-                        GitRef::Branch => (Some(self.branch.clone()), None, None),
-                        GitRef::Tag => (None, Some(self.tag.clone()), None),
-                        GitRef::Commit => (None, None, Some(self.commit.clone())),
+                        GitRef::Branch => (content_or_none(&self.branch), None, None),
+                        GitRef::Tag => (None, content_or_none(&self.tag), None),
+                        GitRef::Commit => (None, None, content_or_none(&self.commit)),
                     };
                     let answer_queue_clone = self.answer_queue.clone();
                     let opts = InputOptions {

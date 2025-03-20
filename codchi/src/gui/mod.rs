@@ -89,8 +89,8 @@ impl eframe::App for Gui {
                     }
                     machine_inspection::ChannelDataType::DeletedMachine(machine_name) => {
                         let mut i = 0;
-                        for machine_config in &self.machine_configs {
-                            if machine_config.name == machine_name {
+                        for machine in &self.machines {
+                            if machine.config.name == machine_name {
                                 break;
                             }
                             i += 1;
@@ -723,4 +723,12 @@ pub fn run() -> anyhow::Result<()> {
     )
     .unwrap();
     Ok(())
+}
+
+fn content_or_none(content: &String) -> Option<String> {
+    if content.is_empty() {
+        None
+    } else {
+        Some(content.to_string())
+    }
 }
