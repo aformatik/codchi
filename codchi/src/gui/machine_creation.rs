@@ -122,10 +122,9 @@ impl MainPanel for MachineCreationMainPanel {
                             self.machine_form.options.auth = auth.clone();
 
                             // load branches for repo
-                            let branches_index = self.status_text.insert(
-                                1,
-                                String::from(format!("Loading branches for {}...", &self.url)),
-                            );
+                            let branches_index = self
+                                .status_text
+                                .insert(1, format!("Loading branches for {}...", &self.url));
                             let url_clone = url.clone();
                             let auth_clone = auth.clone();
                             let git_url_clone = git_url.clone();
@@ -139,10 +138,9 @@ impl MainPanel for MachineCreationMainPanel {
                             });
 
                             // load tags for repo
-                            let tags_index = self.status_text.insert(
-                                1,
-                                String::from(format!("Loading tags for {}...", &self.url)),
-                            );
+                            let tags_index = self
+                                .status_text
+                                .insert(1, format!("Loading tags for {}...", &self.url));
                             let answer_queue_clone = self.answer_queue.clone();
                             thread::spawn(move || {
                                 let result = Self::load_tags(&url, &auth);
@@ -179,10 +177,9 @@ impl MainPanel for MachineCreationMainPanel {
                         self.renew();
                     }
                     if !machine_form.options.no_build {
-                        let index = self.status_text.insert(
-                            1,
-                            String::from(format!("Building machine '{}'...", machine.config.name)),
-                        );
+                        let index = self
+                            .status_text
+                            .insert(1, format!("Building machine '{}'...", machine.config.name));
 
                         let answer_queue_clone = self.answer_queue.clone();
                         thread::spawn(move || {
@@ -202,10 +199,7 @@ impl MainPanel for MachineCreationMainPanel {
                     if !dont_run_init {
                         let index = self.status_text.insert(
                             1,
-                            String::from(format!(
-                                "Running Init-Script for '{}'...",
-                                machine.config.name
-                            )),
+                            format!("Running Init-Script for '{}'...", machine.config.name),
                         );
 
                         let answer_queue_clone = self.answer_queue.clone();
@@ -342,10 +336,7 @@ impl MachineCreationMainPanel {
     fn create_machine(&mut self, empty: bool) {
         let index = self.status_text.insert(
             1,
-            String::from(format!(
-                "Creating new machine '{}'...",
-                self.machine_form.name
-            )),
+            format!("Creating new machine '{}'...", self.machine_form.name),
         );
 
         let machine_form = if empty {
@@ -366,7 +357,6 @@ impl MachineCreationMainPanel {
                     .unwrap()
                     .selected_module_paths
             };
-            dbg!(&machine_form);
             let machine = crate::module::init(
                 &machine_form.name,
                 machine_form.git_url.clone(),
@@ -397,10 +387,9 @@ impl MachineCreationMainPanel {
                         self.machine_form.options.tag = None;
                         self.machine_form.options.commit = None;
 
-                        let index = self.status_text.insert(
-                            1,
-                            String::from(format!("Reading repository {}...", &self.url)),
-                        );
+                        let index = self
+                            .status_text
+                            .insert(1, format!("Reading repository {}...", &self.url));
 
                         let url_clone = self.url.clone();
                         let auth_clone = self.get_auth();
@@ -417,10 +406,9 @@ impl MachineCreationMainPanel {
             }
             CreationStep::SpecifyRepository => {
                 if ui.button("Load Modules").clicked() {
-                    let index = self.status_text.insert(
-                        1,
-                        String::from(format!("Loading modules for {}...", &self.url)),
-                    );
+                    let index = self
+                        .status_text
+                        .insert(1, format!("Loading modules for {}...", &self.url));
                     let git_url_clone = self.machine_form.git_url.clone();
                     let use_nixpkgs = if self.use_nixpkgs {
                         Some(NixpkgsLocation::Remote)

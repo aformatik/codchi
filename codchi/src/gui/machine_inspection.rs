@@ -138,10 +138,9 @@ impl MainPanel for MachineInspectionMainPanel {
                 ui.horizontal(|ui| {
                     let rebuild_button = Button::new("Rebuild").fill(Color32::DARK_BLUE);
                     if ui.add(rebuild_button).clicked() {
-                        let index = self.status_text.insert(
-                            1,
-                            String::from(format!("Building machine '{}'...", self.current_machine)),
-                        );
+                        let index = self
+                            .status_text
+                            .insert(1, format!("Building machine '{}'...", self.current_machine));
 
                         let mut machine =
                             self.machine_data_map[&self.current_machine].machine.clone();
@@ -180,10 +179,10 @@ impl MainPanel for MachineInspectionMainPanel {
                     if ui.add(duplicate_button).clicked() {
                         let index = self.status_text.insert(
                             1,
-                            String::from(format!(
+                            format!(
                                 "Duplicating machine '{}' as '{}'...",
                                 self.current_machine, new_machine_name
-                            )),
+                            ),
                         );
 
                         let machine = self.machine_data_map[&self.current_machine].machine.clone();
@@ -233,10 +232,7 @@ impl MainPanel for MachineInspectionMainPanel {
                         let path = PathBuf::try_from(&tar_path).unwrap();
                         let index = self.status_text.insert(
                             1,
-                            String::from(format!(
-                                "Exporting files of {} to {path:?}...",
-                                self.current_machine
-                            )),
+                            format!("Exporting files of {} to {path:?}...", self.current_machine),
                         );
 
                         let machine = self.machine_data_map[&self.current_machine].machine.clone();
@@ -269,17 +265,16 @@ impl MainPanel for MachineInspectionMainPanel {
                     let delete_button = Button::new("Delete").fill(Color32::DARK_RED);
                     if ui.add(delete_button).clicked() {
                         let machine_data = &self.machine_data_map[&self.current_machine];
-                        let index = self.status_text.insert(
-                            1,
-                            String::from(format!("Deleting machine '{}'...", self.current_machine)),
-                        );
+                        let index = self
+                            .status_text
+                            .insert(1, format!("Deleting machine '{}'...", self.current_machine));
 
                         let machine_clone = machine_data.machine.clone();
                         let answer_queue_clone = self.answer_queue.clone();
                         thread::spawn(move || {
                             let machine_name = machine_clone.config.name.clone();
                             let delete_result = machine_clone.delete(true);
-                            let answer = if dbg!(delete_result.is_ok()) {
+                            let answer = if delete_result.is_ok() {
                                 ChannelDataType::DeletedMachine(machine_name.clone())
                             } else {
                                 ChannelDataType::ClearStatus
@@ -319,10 +314,9 @@ impl MainPanel for MachineInspectionMainPanel {
                 }
 
                 if !self.machine_data_map[&machine_name].initialized {
-                    let index = self.status_text.insert(
-                        3,
-                        String::from(format!("Loading machine {}...", &machine_name)),
-                    );
+                    let index = self
+                        .status_text
+                        .insert(3, format!("Loading machine {}...", &machine_name));
 
                     let answer_queue_clone = self.answer_queue.clone();
                     let machine_name_clone = machine_name.clone();
