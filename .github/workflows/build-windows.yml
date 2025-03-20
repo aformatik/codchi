@@ -23,8 +23,6 @@ jobs:
     - run: |
         nix build .#windows -L
         cp result/bin/*.exe .
-        nix build .#codchiw-windows -L
-        cp result/bin/*.exe .
         nix build .#store-wsl.config.build.tarball -L
         cp result store.tar.gz
         nix build .#machine-wsl.config.build.tarball -L

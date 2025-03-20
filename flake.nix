@@ -28,9 +28,8 @@
         overlays = [
           (import rust-overlay)
           (self: _: {
-            codchi = self.callPackage ./codchi { inherit (inputs) self; platform = "linux"; };
-            codchi-windows = self.callPackage ./codchi { inherit (inputs) self; platform = "win"; };
-            codchiw-windows = self.callPackage ./codchiw { inherit (inputs) self; platform = "win"; };
+            codchi = self.callPackage ./crates { inherit (inputs) self; platform = "linux"; };
+            codchi-windows = self.callPackage ./crates { inherit (inputs) self; platform = "win"; };
             codchi-utils = self.callPackage ./utils { };
 
             mkContainer = type: driver: (import ./nix/container
@@ -86,14 +85,13 @@
             inherit (pkgs) store-lxd store-wsl machine-lxd machine-wsl codchi-utils;
             default = pkgs.codchi;
             windows = pkgs.codchi-windows;
-            inherit (pkgs) codchiw-windows;
             inherit (pkgs.pkgsStatic) busybox;
             # editor = pkgs.nixvim.makeNixvim (import ./editor.nix);
           };
 
           devShells.${system} = {
-            default = pkgs.callPackage ./codchi/shell.nix { platform = "linux"; };
-            windows = pkgs.callPackage ./codchi/shell.nix { platform = "win"; codchi = pkgs.codchi-windows; };
+            default = pkgs.callPackage ./crates/shell.nix { platform = "linux"; };
+            windows = pkgs.callPackage ./crates/shell.nix { platform = "win"; codchi = pkgs.codchi-windows; };
           };
 
           checks.${system}.populate-cache =

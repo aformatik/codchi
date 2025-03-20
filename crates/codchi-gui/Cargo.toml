@@ -1,0 +1,89 @@
+[package]
+name = "codchi-gui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+nightly = []
+
+[dependencies]
+shared = { path = "../shared" }
+anyhow = { workspace = true, features = ["backtrace"] }
+log = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_with = { workspace = true }
+strum = { workspace = true, features = ["derive"] }
+directories = { workspace = true }
+itertools = { workspace = true }
+lazy-regex = { workspace = true }
+# base64 = "0.22.1"
+clap = { workspace = true, features = ["derive", "cargo", "string"] }
+clap_complete_command = { workspace = true, features = ["fig", "carapace"] }
+clap-verbosity-flag = { workspace = true }
+comfy-table = { workspace = true }
+console = { workspace = true, features = ["windows-console-colors", "ansi-parsing"] }
+env_logger = { workspace = true }
+freedesktop_entry_parser = { workspace = true }
+indicatif = { workspace = true }
+indicatif-log-bridge = { workspace = true }
+inquire = { workspace = true }
+num_enum = { workspace = true }
+number_prefix = { workspace = true }
+petname = { workspace = true, features = ["default-rng", "default-words"] }
+# rustls-native-certs = "0.8.0"
+sysinfo = { workspace = true }
+thiserror = { workspace = true }
+throttle = { workspace = true }
+tray-icon = { workspace = true }
+image = { workspace = true, features = ["png"] }
+tao = { workspace = true }
+fs4 = { workspace = true, features = ["sync"] }
+git-url-parse = { workspace = true }
+toml_edit = { workspace = true, features = ["serde"] }
+which = { workspace = true }
+notify-rust = { workspace = true }
+human-panic = { workspace = true }
+# clap-help = "1.3.0"
+# termimad = "0.30.0"
+rand = { workspace = true }
+ctrlc = { workspace = true, features = ["termination"] }
+egui = { workspace = true }
+eframe = { workspace = true }
+egui_extras = { workspace = true, features = ["default", "image"] }
+
+[target.'cfg(unix)'.dependencies]
+indoc = "2.0.5"
+nix = { version = "0.29.0", features = ["user", "hostname"] }
+
+[target.'cfg(windows)'.dependencies]
+known-folders = "1.2.0"
+mslnk = "0.1.8"
+version-compare = "0.2"
+windows = { version = "0.60", features = ["Win32_System_Console", "Win32_UI_WindowsAndMessaging", "Win32_System_Diagnostics_Debug", "Win32_Storage_FileSystem", "Win32_Security", "Win32_System_Threading"] }
+wslapi = "0.1.3"
+clap_complete_command = { version = "0.6.1", default-features = false }
+uuid = { version = "1.11.0", features = ["v5"] }
+
+[build-dependencies]
+clap = { workspace = true, features = ["derive", "cargo", "string"] }
+clap-verbosity-flag = { workspace = true }
+clap_complete = { workspace = true }
+clap_complete_command = { workspace = true, features = ["fig", "carapace"] }
+clap_complete_fig = { workspace = true }
+clap_complete_nushell = { workspace = true }
+clap_mangen = { workspace = true }
+embed-manifest = { workspace = true }
+log = { workspace = true }
+build-data = { workspace = true }
+git-url-parse = { workspace = true }
+lazy-regex = { workspace = true }
+duct = { workspace = true }
+
+# [patch.crates-io]
+# clap = { git = "https://github.com/htngr/clap" }
+# # clap_complete = { git = "https://github.com/htngr/clap" }
+# # clap_complete_fig = { git = "https://github.com/htngr/clap" }
+# # clap_complete_nushell = { git = "https://github.com/htngr/clap" }
+# clap_mangen = { git = "https://github.com/htngr/clap" }
