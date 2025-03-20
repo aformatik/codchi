@@ -9,7 +9,9 @@ use egui::*;
 use machine_creation::MachineCreationMainPanel;
 use machine_inspection::MachineInspectionMainPanel;
 use std::{
+    cell::RefCell,
     collections::{HashMap, VecDeque},
+    rc::Rc,
     sync::{Arc, Mutex},
     thread,
     time::Instant,
@@ -25,6 +27,7 @@ struct Gui {
     status_text: StatusEntries,
 
     answer_queue: Arc<Mutex<VecDeque<(usize, ChannelDataType)>>>,
+    main_panels_msg_queue: Rc<RefCell<VecDeque<MainPanelMsgType>>>,
 
     reloading_machine_index: Option<usize>,
     last_reload: Instant,
@@ -48,6 +51,10 @@ enum ChannelDataType {
     StoreRecovered,
 }
 
+pub(crate) enum MainPanelMsgType {
+    MachineInspection(machine_inspection::ChannelDataType),
+}
+
 impl eframe::App for Gui {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         if self.reloading_machine_index.is_none() {
@@ -59,6 +66,44 @@ impl eframe::App for Gui {
                 self.reload_machine();
             }
         }
+        if let Some(main_panel_msg) = self.main_panels_msg_queue.borrow_mut().pop_front() {
+            match main_panel_msg {
+                MainPanelMsgType::MachineInspection(msg) => match msg {
+                    machine_inspection::ChannelDataType::Applications(_) => {}
+                    machine_inspection::ChannelDataType::Modules(_) => {}
+                    machine_inspection::ChannelDataType::Secrets(_) => {}
+                    machine_inspection::ChannelDataType::RebuiltMachine => {}
+                    machine_inspection::ChannelDataType::DuplicatedMachine(new_machine) => {
+                        if let Some(machine) = self.machines.last()
+                            && machine.config.name < new_machine.config.name
+                        {
+                            self.machines.push(new_machine);
+                        } else {
+                            for (i, machine) in self.machines.iter().enumerate() {
+                                if new_machine.config.name < machine.config.name {
+                                    self.machines.insert(i, new_machine);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    machine_inspection::ChannelDataType::DeletedMachine(machine_name) => {
+                        let mut i = 0;
+                        for machine_config in &self.machine_configs {
+                            if machine_config.name == machine_name {
+                                break;
+                            }
+                            i += 1;
+                        }
+                        if i < self.machine_configs.len() {
+                            self.machine_configs.remove(i);
+                        }
+                    }
+                    machine_inspection::ChannelDataType::ClearStatus => {}
+                },
+            }
+        }
+
         let received_answer = if let Ok(mut answer_queue) = self.answer_queue.try_lock() {
             answer_queue.pop_front()
         } else {
@@ -103,8 +148,9 @@ impl eframe::App for Gui {
 
 impl Gui {
     fn new(textures: HashMap<String, TextureHandle>) -> Self {
+        let mut main_panels_msg_queue = Rc::new(RefCell::new(VecDeque::new()));
         Self {
-            main_panels: MainPanels::default(),
+            main_panels: MainPanels::new(&mut main_panels_msg_queue),
             machine_configs: MachineConfig::list().expect("Machine-configs could not be listed"),
             machines: Machine::list(true).expect("Machines could not be listed"),
             textures,
@@ -112,6 +158,7 @@ impl Gui {
             status_text: StatusEntries::new(),
 
             answer_queue: Arc::new(Mutex::new(VecDeque::new())),
+            main_panels_msg_queue,
 
             reloading_machine_index: None,
             last_reload: Instant::now(),
@@ -299,8 +346,7 @@ impl Gui {
                     ui.horizontal_top(|ui| {
                         ui.separator();
                         ui.with_layout(Layout::top_down_justified(Align::LEFT), |ui| {
-                            for i in 0..self.machines.len() {
-                                let machine = &self.machines[i];
+                            for (i, machine) in self.machines.iter().enumerate() {
                                 let icon =
                                     if self.reloading_machine_index.is_some_and(|index| index == i)
                                     {
@@ -322,8 +368,7 @@ impl Gui {
                                             }
                                         }
                                     };
-                                let button_text =
-                                    RichText::strong(format!("{}", machine.config.name).into());
+                                let button_text = RichText::new(&machine.config.name).strong();
                                 let machine_button = Button::opt_image_and_text(
                                     icon,
                                     Some(WidgetText::RichText(button_text)),
@@ -391,14 +436,26 @@ impl Gui {
             }
         }
     }
+
+    fn get_callback(
+        answer_queue: &mut Rc<RefCell<VecDeque<MainPanelMsgType>>>,
+    ) -> Box<dyn Fn(MainPanelMsgType)> {
+        let answer_queue_clone = answer_queue.clone();
+
+        Box::new(move |msg: MainPanelMsgType| {
+            answer_queue_clone.borrow_mut().push_back(msg);
+        })
+    }
 }
 
-impl Default for MainPanels {
-    fn default() -> Self {
+impl MainPanels {
+    fn new(answer_queue: &mut Rc<RefCell<VecDeque<MainPanelMsgType>>>) -> Self {
         let mut panels: Vec<Box<dyn MainPanel>> = Vec::new();
         for main_panel in MainPanelType::iter() {
             let panel: Box<dyn MainPanel> = match main_panel {
-                MainPanelType::MachineInspection => Box::new(MachineInspectionMainPanel::default()),
+                MainPanelType::MachineInspection => Box::new(MachineInspectionMainPanel::new(
+                    Gui::get_callback(answer_queue),
+                )),
                 MainPanelType::MachineCreation => Box::new(MachineCreationMainPanel::default()),
             };
             panels.push(panel);
@@ -644,7 +701,7 @@ impl StatusEntries {
 
 pub fn run() -> anyhow::Result<()> {
     let options = eframe::NativeOptions {
-        viewport: ViewportBuilder::default().with_inner_size((1600.0, 900.0)),
+        viewport: ViewportBuilder::default().with_inner_size((1280.0, 720.0)),
         ..Default::default()
     };
     eframe::run_native(

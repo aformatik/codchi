@@ -1,5 +1,5 @@
 use crate::config::Mod;
-use crate::gui::{create_password_field, MainPanel, MainPanelType};
+use crate::gui::{create_password_field, MainPanel, MainPanelMsgType, MainPanelType};
 use crate::logging::CodchiOutput;
 use crate::platform::{platform::HostImpl, DesktopEntry, Host, Machine, MachineDriver};
 use crate::secrets::{EnvSecret, MachineSecrets};
@@ -22,6 +22,7 @@ pub struct MachineInspectionMainPanel {
     next_panel_type: Option<MainPanelType>,
 
     answer_queue: Arc<Mutex<VecDeque<(usize, String, ChannelDataType)>>>,
+    frame_msg_callback: Box<dyn Fn(MainPanelMsgType)>,
 
     show_rebuild_spec_modal: bool,
     show_duplicate_spec_modal: bool,
@@ -39,10 +40,13 @@ struct MachineData {
     initialized: bool,
 }
 
-enum ChannelDataType {
+pub(crate) enum ChannelDataType {
     Applications(Vec<DesktopEntry>),
     Modules(Vec<Mod>),
     Secrets(Vec<EnvSecret>),
+    RebuiltMachine,
+    DuplicatedMachine(Machine),
+    DeletedMachine(String),
     ClearStatus,
 }
 
@@ -54,27 +58,6 @@ impl MachineData {
             modules: None,
             secrets: None,
             initialized: false,
-        }
-    }
-}
-
-impl Default for MachineInspectionMainPanel {
-    fn default() -> Self {
-        MachineInspectionMainPanel {
-            status_text: StatusEntries::new(),
-
-            machine_data_map: HashMap::new(),
-            current_machine: String::from(""),
-            next_panel_type: None,
-
-            answer_queue: Arc::new(Mutex::new(VecDeque::new())),
-
-            show_rebuild_spec_modal: false,
-            show_duplicate_spec_modal: false,
-            show_tar_spec_modal: false,
-            show_delete_confirmation_modal: false,
-
-            textures: HashMap::new(),
         }
     }
 }
@@ -123,10 +106,304 @@ impl MainPanel for MachineInspectionMainPanel {
                             machine_data.applications = Some(applications);
                         });
                 }
+                ChannelDataType::RebuiltMachine => {
+                    self.reload_machine(Some(&machine_name));
+                }
+                ChannelDataType::DuplicatedMachine(machine) => {
+                    (self.frame_msg_callback)(super::MainPanelMsgType::MachineInspection(
+                        ChannelDataType::DuplicatedMachine(machine),
+                    ));
+                }
+                ChannelDataType::DeletedMachine(machine_name) => {
+                    self.current_machine = String::from("");
+                    self.machine_data_map.remove(&machine_name);
+                    (self.frame_msg_callback)(super::MainPanelMsgType::MachineInspection(
+                        ChannelDataType::DeletedMachine(machine_name),
+                    ));
+                }
                 ChannelDataType::ClearStatus => {}
             }
         }
 
+        self.display_machine(ui);
+    }
+
+    fn modal_update(&mut self, ctx: &Context) {
+        if self.show_rebuild_spec_modal {
+            let modal = Modal::new(Id::new("rebuild_machine_spec_modal")).show(ctx, |ui| {
+                let state_id = ui.id().with("rebuild_machine_spec_modal_checkbox");
+                let mut checked = ui.data_mut(|d| d.get_temp::<bool>(state_id).unwrap_or(true));
+                ui.heading(format!("Rebuild machine '{}'", &self.current_machine));
+                ui.checkbox(&mut checked, "update modules");
+                ui.horizontal(|ui| {
+                    let rebuild_button = Button::new("Rebuild").fill(Color32::DARK_BLUE);
+                    if ui.add(rebuild_button).clicked() {
+                        let index = self.status_text.insert(
+                            1,
+                            String::from(format!("Building machine '{}'...", self.current_machine)),
+                        );
+
+                        let mut machine =
+                            self.machine_data_map[&self.current_machine].machine.clone();
+                        let answer_queue_clone = self.answer_queue.clone();
+                        thread::spawn(move || {
+                            let _ = machine.build(!checked);
+                            answer_queue_clone.lock().unwrap().push_back((
+                                index,
+                                machine.config.name.clone(),
+                                ChannelDataType::RebuiltMachine,
+                            ));
+                        });
+                        self.show_rebuild_spec_modal = false;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        self.show_rebuild_spec_modal = false;
+                    }
+                });
+                ui.data_mut(|d| d.insert_temp(state_id, checked));
+            });
+            if modal.should_close() {
+                self.show_rebuild_spec_modal = false;
+            }
+        }
+        if self.show_duplicate_spec_modal {
+            let modal = Modal::new(Id::new("duplicate_machine_spec_modal")).show(ctx, |ui| {
+                let state_id = ui.id().with("duplicate_machine_spec_modal_name");
+                let mut new_machine_name =
+                    ui.data_mut(|d| d.get_temp::<String>(state_id).unwrap_or(String::from("")));
+                ui.heading(format!("Duplicate machine '{}'", &self.current_machine));
+                let name_editor =
+                    TextEdit::singleline(&mut new_machine_name).hint_text("New Machine Name");
+                ui.add(name_editor);
+                ui.horizontal(|ui| {
+                    let duplicate_button = Button::new("Duplicate").fill(Color32::DARK_GREEN);
+                    if ui.add(duplicate_button).clicked() {
+                        let index = self.status_text.insert(
+                            1,
+                            String::from(format!(
+                                "Duplicating machine '{}' as '{}'...",
+                                self.current_machine, new_machine_name
+                            )),
+                        );
+
+                        let machine = self.machine_data_map[&self.current_machine].machine.clone();
+                        let new_machine_name_clone = new_machine_name.clone();
+                        let answer_queue_clone = self.answer_queue.clone();
+                        thread::spawn(move || {
+                            let _ = machine.duplicate(&new_machine_name_clone);
+                            let duplicated_machine =
+                                Machine::by_name(&new_machine_name_clone, true);
+
+                            let answer = if let Ok(machine) = duplicated_machine {
+                                ChannelDataType::DuplicatedMachine(machine)
+                            } else {
+                                ChannelDataType::ClearStatus
+                            };
+
+                            answer_queue_clone.lock().unwrap().push_back((
+                                index,
+                                machine.config.name,
+                                answer,
+                            ));
+                        });
+                        self.show_duplicate_spec_modal = false;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        self.show_duplicate_spec_modal = false;
+                    }
+                });
+                ui.data_mut(|d| d.insert_temp(state_id, new_machine_name));
+            });
+            if modal.should_close() {
+                self.show_duplicate_spec_modal = false;
+            }
+        }
+        if self.show_tar_spec_modal {
+            let modal = Modal::new(Id::new("tar_machine_spec_modal")).show(ctx, |ui| {
+                let state_id = ui.id().with("tar_machine_spec_modal_path");
+                let mut tar_path =
+                    ui.data_mut(|d| d.get_temp::<String>(state_id).unwrap_or(String::from("")));
+                ui.heading(format!("Export machine '{}'", &self.current_machine));
+                let path_editor = TextEdit::singleline(&mut tar_path).hint_text(".tar Path");
+                ui.add(path_editor);
+                ui.horizontal(|ui| {
+                    let tar_button = Button::new("Tar").fill(Color32::DARK_GREEN);
+                    if ui.add(tar_button).clicked() {
+                        // TODO
+                        let path = PathBuf::try_from(&tar_path).unwrap();
+                        let index = self.status_text.insert(
+                            1,
+                            String::from(format!(
+                                "Exporting files of {} to {path:?}...",
+                                self.current_machine
+                            )),
+                        );
+
+                        let machine = self.machine_data_map[&self.current_machine].machine.clone();
+                        let answer_queue_clone = self.answer_queue.clone();
+                        thread::spawn(move || {
+                            let _ = machine.tar(&path);
+
+                            answer_queue_clone.lock().unwrap().push_back((
+                                index,
+                                machine.config.name,
+                                ChannelDataType::ClearStatus,
+                            ));
+                        });
+                        self.show_tar_spec_modal = false;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        self.show_tar_spec_modal = false;
+                    }
+                });
+                ui.data_mut(|d| d.insert_temp(state_id, tar_path));
+            });
+            if modal.should_close() {
+                self.show_tar_spec_modal = false;
+            }
+        }
+        if self.show_delete_confirmation_modal {
+            let modal = Modal::new(Id::new("delete_machine_confirmation_modal")).show(ctx, |ui| {
+                ui.heading(format!("Delete machine '{}'?", &self.current_machine));
+                ui.horizontal(|ui| {
+                    let delete_button = Button::new("Delete").fill(Color32::DARK_RED);
+                    if ui.add(delete_button).clicked() {
+                        let machine_data = &self.machine_data_map[&self.current_machine];
+                        let index = self.status_text.insert(
+                            1,
+                            String::from(format!("Deleting machine '{}'...", self.current_machine)),
+                        );
+
+                        let machine_clone = machine_data.machine.clone();
+                        let answer_queue_clone = self.answer_queue.clone();
+                        thread::spawn(move || {
+                            let machine_name = machine_clone.config.name.clone();
+                            let delete_result = machine_clone.delete(true);
+                            let answer = if dbg!(delete_result.is_ok()) {
+                                ChannelDataType::DeletedMachine(machine_name.clone())
+                            } else {
+                                ChannelDataType::ClearStatus
+                            };
+
+                            answer_queue_clone.lock().unwrap().push_back((
+                                index,
+                                machine_name,
+                                answer,
+                            ));
+                        });
+                        self.show_delete_confirmation_modal = false;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        self.show_delete_confirmation_modal = false;
+                    }
+                });
+            });
+            if modal.should_close() {
+                self.show_delete_confirmation_modal = false;
+            }
+        }
+    }
+
+    fn next_panel(&mut self) -> Option<MainPanelType> {
+        self.next_panel_type.take()
+    }
+
+    fn transfer_data(&mut self, dto: DTO) {
+        match dto {
+            DTO::Machine(machine) => {
+                let machine_name = machine.config.name.clone();
+                if !self.machine_data_map.contains_key(&machine_name) {
+                    let machine_data = MachineData::new(machine.clone());
+                    self.machine_data_map
+                        .insert(machine_name.clone(), machine_data);
+                }
+
+                if !self.machine_data_map[&machine_name].initialized {
+                    let index = self.status_text.insert(
+                        3,
+                        String::from(format!("Loading machine {}...", &machine_name)),
+                    );
+
+                    let answer_queue_clone = self.answer_queue.clone();
+                    let machine_name_clone = machine_name.clone();
+                    let machine_clone = machine.clone();
+                    thread::spawn(move || {
+                        let applications =
+                            HostImpl::list_desktop_entries(&machine_clone).unwrap_or(Vec::new());
+
+                        answer_queue_clone.lock().unwrap().push_back((
+                            index,
+                            machine_name_clone,
+                            ChannelDataType::Applications(applications),
+                        ));
+                    });
+
+                    let answer_queue_clone = self.answer_queue.clone();
+                    let modules_clone = machine.config.modules.clone();
+                    let machine_name_clone = machine_name.clone();
+                    thread::spawn(move || {
+                        let modules = modules_clone.to_output();
+
+                        answer_queue_clone.lock().unwrap().push_back((
+                            index,
+                            machine_name_clone,
+                            ChannelDataType::Modules(modules),
+                        ));
+                    });
+
+                    let answer_queue_clone = self.answer_queue.clone();
+                    let machine_name_clone = machine_name.clone();
+                    thread::spawn(move || {
+                        let secrets = machine
+                            .eval_env_secrets()
+                            .expect("failed to load machine secrets")
+                            .into_values()
+                            .collect_vec()
+                            .to_output();
+                        answer_queue_clone.lock().unwrap().push_back((
+                            index,
+                            machine_name_clone,
+                            ChannelDataType::Secrets(secrets),
+                        ));
+                    });
+                }
+                self.current_machine = machine_name;
+            }
+            DTO::Text(_) => todo!(),
+        }
+    }
+
+    fn get_status_text(&self) -> &StatusEntries {
+        &self.status_text
+    }
+
+    fn renew(&mut self) {
+        self.current_machine = String::from("");
+    }
+}
+
+impl MachineInspectionMainPanel {
+    pub fn new(callback: Box<dyn Fn(MainPanelMsgType)>) -> Self {
+        Self {
+            status_text: StatusEntries::new(),
+
+            machine_data_map: HashMap::new(),
+            current_machine: String::from(""),
+            next_panel_type: None,
+
+            answer_queue: Arc::new(Mutex::new(VecDeque::new())),
+            frame_msg_callback: callback,
+
+            show_rebuild_spec_modal: false,
+            show_duplicate_spec_modal: false,
+            show_tar_spec_modal: false,
+            show_delete_confirmation_modal: false,
+
+            textures: HashMap::new(),
+        }
+    }
+
+    fn display_machine(&mut self, ui: &mut Ui) {
         if !self.current_machine.is_empty() {
             ui.horizontal(|ui| {
                 let title_text = format!("Machine: {}", &self.current_machine);
@@ -156,11 +433,7 @@ impl MainPanel for MachineInspectionMainPanel {
                     });
                     let reload_button = Button::new("\u{21BA}");
                     if ui.add(reload_button).on_hover_text("Reload").clicked() {
-                        self.machine_data_map.remove(&self.current_machine);
-                        let machine_res = Machine::by_name(&self.current_machine, true);
-                        if let Ok(machine) = machine_res {
-                            self.transfer_data(DTO::Machine(machine));
-                        }
+                        self.reload_machine(None);
                     }
                 });
             });
@@ -297,249 +570,16 @@ impl MainPanel for MachineInspectionMainPanel {
         }
     }
 
-    fn modal_update(&mut self, ctx: &Context) {
-        if self.show_rebuild_spec_modal {
-            let modal = Modal::new(Id::new("rebuild_machine_spec_modal")).show(ctx, |ui| {
-                let state_id = ui.id().with("rebuild_machine_spec_modal_checkbox");
-                let mut checked = ui.data_mut(|d| d.get_temp::<bool>(state_id).unwrap_or(true));
-                ui.heading(format!("Rebuild machine '{}'", &self.current_machine));
-                ui.checkbox(&mut checked, "update modules");
-                ui.horizontal(|ui| {
-                    let rebuild_button = Button::new("Rebuild").fill(Color32::DARK_BLUE);
-                    if ui.add(rebuild_button).clicked() {
-                        let index = self.status_text.insert(
-                            1,
-                            String::from(format!("Building machine '{}'...", self.current_machine)),
-                        );
-
-                        let mut machine =
-                            self.machine_data_map[&self.current_machine].machine.clone();
-                        let answer_queue_clone = self.answer_queue.clone();
-                        thread::spawn(move || {
-                            let _ = machine.build(!checked);
-                            answer_queue_clone.lock().unwrap().push_back((
-                                index,
-                                machine.config.name,
-                                ChannelDataType::ClearStatus,
-                            ));
-                        });
-                        self.show_rebuild_spec_modal = false;
-                    }
-                    if ui.button("Cancel").clicked() {
-                        self.show_rebuild_spec_modal = false;
-                    }
-                });
-                ui.data_mut(|d| d.insert_temp(state_id, checked));
-            });
-            if modal.should_close() {
-                self.show_rebuild_spec_modal = false;
-            }
+    fn reload_machine(&mut self, name_option: Option<&str>) {
+        let machine_name = if let Some(name) = name_option {
+            name
+        } else {
+            &self.current_machine
+        };
+        self.machine_data_map.remove(machine_name);
+        let machine_res = Machine::by_name(machine_name, true);
+        if let Ok(machine) = machine_res {
+            self.transfer_data(DTO::Machine(machine));
         }
-        if self.show_duplicate_spec_modal {
-            let modal = Modal::new(Id::new("duplicate_machine_spec_modal")).show(ctx, |ui| {
-                let state_id = ui.id().with("duplicate_machine_spec_modal_name");
-                let mut new_machine_name =
-                    ui.data_mut(|d| d.get_temp::<String>(state_id).unwrap_or(String::from("")));
-                ui.heading(format!("Duplicate machine '{}'", &self.current_machine));
-                let name_editor =
-                    TextEdit::singleline(&mut new_machine_name).hint_text("New Machine Name");
-                ui.add(name_editor);
-                ui.horizontal(|ui| {
-                    let duplicate_button = Button::new("Duplicate").fill(Color32::DARK_GREEN);
-                    if ui.add(duplicate_button).clicked() {
-                        let index = self.status_text.insert(
-                            1,
-                            String::from(format!(
-                                "Duplicating machine '{}' as '{}'...",
-                                self.current_machine, new_machine_name
-                            )),
-                        );
-
-                        let machine = self.machine_data_map[&self.current_machine].machine.clone();
-                        let new_machine_name_clone = new_machine_name.clone();
-                        let answer_queue_clone = self.answer_queue.clone();
-                        thread::spawn(move || {
-                            let _ = machine.duplicate(&new_machine_name_clone);
-
-                            answer_queue_clone.lock().unwrap().push_back((
-                                index,
-                                machine.config.name,
-                                ChannelDataType::ClearStatus,
-                            ));
-                        });
-                        self.show_duplicate_spec_modal = false;
-                    }
-                    if ui.button("Cancel").clicked() {
-                        self.show_duplicate_spec_modal = false;
-                    }
-                });
-                ui.data_mut(|d| d.insert_temp(state_id, new_machine_name));
-            });
-            if modal.should_close() {
-                self.show_duplicate_spec_modal = false;
-            }
-        }
-        if self.show_tar_spec_modal {
-            let modal = Modal::new(Id::new("tar_machine_spec_modal")).show(ctx, |ui| {
-                let state_id = ui.id().with("tar_machine_spec_modal_path");
-                let mut tar_path =
-                    ui.data_mut(|d| d.get_temp::<String>(state_id).unwrap_or(String::from("")));
-                ui.heading(format!("Export machine '{}'", &self.current_machine));
-                let path_editor = TextEdit::singleline(&mut tar_path).hint_text(".tar Path");
-                ui.add(path_editor);
-                ui.horizontal(|ui| {
-                    let tar_button = Button::new("Tar").fill(Color32::DARK_GREEN);
-                    if ui.add(tar_button).clicked() {
-                        // TODO
-                        let path = PathBuf::try_from(&tar_path).unwrap();
-                        let index = self.status_text.insert(
-                            1,
-                            String::from(format!(
-                                "Exporting files of {} to {path:?}...",
-                                self.current_machine
-                            )),
-                        );
-
-                        let machine = self.machine_data_map[&self.current_machine].machine.clone();
-                        let answer_queue_clone = self.answer_queue.clone();
-                        thread::spawn(move || {
-                            let _ = machine.tar(&path);
-
-                            answer_queue_clone.lock().unwrap().push_back((
-                                index,
-                                machine.config.name,
-                                ChannelDataType::ClearStatus,
-                            ));
-                        });
-                        self.show_tar_spec_modal = false;
-                    }
-                    if ui.button("Cancel").clicked() {
-                        self.show_tar_spec_modal = false;
-                    }
-                });
-                ui.data_mut(|d| d.insert_temp(state_id, tar_path));
-            });
-            if modal.should_close() {
-                self.show_tar_spec_modal = false;
-            }
-        }
-        if self.show_delete_confirmation_modal {
-            let modal = Modal::new(Id::new("delete_machine_confirmation_modal")).show(ctx, |ui| {
-                ui.heading(format!("Delete machine '{}'?", &self.current_machine));
-                ui.horizontal(|ui| {
-                    let delete_button = Button::new("Delete").fill(Color32::DARK_RED);
-                    if ui.add(delete_button).clicked() {
-                        let deleted_machine_data =
-                            self.machine_data_map.remove(&self.current_machine);
-                        if let Some(machine_data) = deleted_machine_data {
-                            let index = self.status_text.insert(
-                                1,
-                                String::from(format!(
-                                    "Deleting machine '{}'...",
-                                    self.current_machine
-                                )),
-                            );
-
-                            let mut machine_name = String::from("");
-                            std::mem::swap(&mut self.current_machine, &mut machine_name);
-                            let answer_queue_clone = self.answer_queue.clone();
-                            thread::spawn(move || {
-                                let _ = machine_data.machine.delete(true);
-
-                                answer_queue_clone.lock().unwrap().push_back((
-                                    index,
-                                    machine_name,
-                                    ChannelDataType::ClearStatus,
-                                ));
-                            });
-                        }
-                        self.show_delete_confirmation_modal = false;
-                    }
-                    if ui.button("Cancel").clicked() {
-                        self.show_delete_confirmation_modal = false;
-                    }
-                });
-            });
-            if modal.should_close() {
-                self.show_delete_confirmation_modal = false;
-            }
-        }
-    }
-
-    fn next_panel(&mut self) -> Option<MainPanelType> {
-        self.next_panel_type.take()
-    }
-
-    fn transfer_data(&mut self, dto: DTO) {
-        match dto {
-            DTO::Machine(machine) => {
-                let machine_name = machine.config.name.clone();
-                if !self.machine_data_map.contains_key(&machine_name) {
-                    let machine_data = MachineData::new(machine.clone());
-                    self.machine_data_map
-                        .insert(machine_name.clone(), machine_data);
-                }
-
-                if !self.machine_data_map[&machine_name].initialized {
-                    let index = self.status_text.insert(
-                        3,
-                        String::from(format!("Loading machine {}...", &machine_name)),
-                    );
-
-                    let answer_queue_clone = self.answer_queue.clone();
-                    let machine_name_clone = machine_name.clone();
-                    let machine_clone = machine.clone();
-                    thread::spawn(move || {
-                        let applications =
-                            HostImpl::list_desktop_entries(&machine_clone).unwrap_or(Vec::new());
-
-                        answer_queue_clone.lock().unwrap().push_back((
-                            index,
-                            machine_name_clone,
-                            ChannelDataType::Applications(applications),
-                        ));
-                    });
-
-                    let answer_queue_clone = self.answer_queue.clone();
-                    let modules_clone = machine.config.modules.clone();
-                    let machine_name_clone = machine_name.clone();
-                    thread::spawn(move || {
-                        let modules = modules_clone.to_output();
-
-                        answer_queue_clone.lock().unwrap().push_back((
-                            index,
-                            machine_name_clone,
-                            ChannelDataType::Modules(modules),
-                        ));
-                    });
-
-                    let answer_queue_clone = self.answer_queue.clone();
-                    let machine_name_clone = machine_name.clone();
-                    thread::spawn(move || {
-                        let secrets = machine
-                            .eval_env_secrets()
-                            .expect("failed to load machine secrets")
-                            .into_values()
-                            .collect_vec()
-                            .to_output();
-                        answer_queue_clone.lock().unwrap().push_back((
-                            index,
-                            machine_name_clone,
-                            ChannelDataType::Secrets(secrets),
-                        ));
-                    });
-                }
-                self.current_machine = machine_name;
-            }
-            DTO::Text(_) => todo!(),
-        }
-    }
-
-    fn get_status_text(&self) -> &StatusEntries {
-        &self.status_text
-    }
-
-    fn renew(&mut self) {
-        self.current_machine = String::from("");
     }
 }
