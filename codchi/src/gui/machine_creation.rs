@@ -121,10 +121,10 @@ impl MainPanel for MachineCreationMainPanel {
                             self.machine_form.git_url = Some(git_url.clone());
                             self.machine_form.options.auth = auth.clone();
 
-                            // load branches for repo
-                            let branches_index = self
+                            let index = self
                                 .status_text
-                                .insert(1, format!("Loading branches for {}...", &self.url));
+                                .insert(2, format!("Loading repository for {}", &self.url));
+
                             let url_clone = url.clone();
                             let auth_clone = auth.clone();
                             let git_url_clone = git_url.clone();
@@ -132,22 +132,18 @@ impl MainPanel for MachineCreationMainPanel {
                             thread::spawn(move || {
                                 let result = Self::load_branches(&url_clone, &auth_clone);
                                 answer_queue_clone.lock().unwrap().push_back((
-                                    branches_index,
+                                    index,
                                     ChannelDataType::Branches(git_url_clone, result),
                                 ));
                             });
 
-                            // load tags for repo
-                            let tags_index = self
-                                .status_text
-                                .insert(1, format!("Loading tags for {}...", &self.url));
                             let answer_queue_clone = self.answer_queue.clone();
                             thread::spawn(move || {
                                 let result = Self::load_tags(&url, &auth);
-                                answer_queue_clone.lock().unwrap().push_back((
-                                    tags_index,
-                                    ChannelDataType::Tags(git_url, result),
-                                ));
+                                answer_queue_clone
+                                    .lock()
+                                    .unwrap()
+                                    .push_back((index, ChannelDataType::Tags(git_url, result)));
                             });
                         }
                     }
