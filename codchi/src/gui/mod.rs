@@ -95,8 +95,8 @@ impl eframe::App for Gui {
                             }
                             i += 1;
                         }
-                        if i < self.machine_configs.len() {
-                            self.machine_configs.remove(i);
+                        if i < self.machines.len() {
+                            self.machines.remove(i);
                         }
                     }
                     machine_inspection::ChannelDataType::ClearStatus => {}
