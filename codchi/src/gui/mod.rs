@@ -297,7 +297,9 @@ impl Gui {
     }
 
     fn status_bar_panel(&self, ctx: &Context) {
+        let height = 25.0;
         TopBottomPanel::bottom("statusbar_panel")
+            .exact_height(height)
             .resizable(false)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
