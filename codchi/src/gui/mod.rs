@@ -188,8 +188,8 @@ impl Gui {
                 ui.horizontal_centered(|ui| {
                     let codchi_button = Button::image(include_image!("../../assets/logo.png"));
                     if ui.add(codchi_button).on_hover_text("Home").clicked() {
-                        self.main_panels.change(MainPanelType::MachineInspection);
                         self.main_panels.renew();
+                        self.main_panels.change(MainPanelType::MachineInspection);
                     }
                     ui.separator();
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
