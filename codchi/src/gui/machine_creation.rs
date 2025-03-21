@@ -35,6 +35,9 @@ pub struct MachineCreationMainPanel {
     branch: String,
     tag: String,
     commit: String,
+
+    repo_error_msg: Option<String>,
+    module_error_msg: Option<String>,
 }
 
 #[derive(PartialEq, Clone, EnumIter)]
@@ -100,6 +103,9 @@ impl Default for MachineCreationMainPanel {
             branch: String::from(""),
             tag: String::from(""),
             commit: String::from(""),
+
+            repo_error_msg: None,
+            module_error_msg: None,
         }
     }
 }
@@ -115,36 +121,41 @@ impl MainPanel for MachineCreationMainPanel {
             self.status_text.decrease(index);
             match data_type {
                 ChannelDataType::Access(url, auth, accessible) => {
-                    if accessible && self.url == url && self.get_auth() == auth {
-                        if let Ok(git_url) = Self::get_git_url(&url, &auth) {
-                            self.machine_form.git_url = Some(git_url.clone());
-                            self.machine_form.options.auth = auth.clone();
+                    if accessible
+                        && self.url == url
+                        && self.get_auth() == auth
+                        && let Ok(git_url) = Self::get_git_url(&url, &auth)
+                    {
+                        self.machine_form.git_url = Some(git_url.clone());
+                        self.machine_form.options.auth = auth.clone();
+                        self.repo_error_msg = None;
 
-                            let index = self
-                                .status_text
-                                .insert(2, format!("Loading repository for {}", &self.url));
+                        let index = self
+                            .status_text
+                            .insert(2, format!("Loading repository for {}", &self.url));
 
-                            let url_clone = url.clone();
-                            let auth_clone = auth.clone();
-                            let git_url_clone = git_url.clone();
-                            let answer_queue_clone = self.answer_queue.clone();
-                            thread::spawn(move || {
-                                let result = Self::load_branches(&url_clone, &auth_clone);
-                                answer_queue_clone.lock().unwrap().push_back((
-                                    index,
-                                    ChannelDataType::Branches(git_url_clone, result),
-                                ));
-                            });
+                        let url_clone = url.clone();
+                        let auth_clone = auth.clone();
+                        let git_url_clone = git_url.clone();
+                        let answer_queue_clone = self.answer_queue.clone();
+                        thread::spawn(move || {
+                            let result = Self::load_branches(&url_clone, &auth_clone);
+                            answer_queue_clone.lock().unwrap().push_back((
+                                index,
+                                ChannelDataType::Branches(git_url_clone, result),
+                            ));
+                        });
 
-                            let answer_queue_clone = self.answer_queue.clone();
-                            thread::spawn(move || {
-                                let result = Self::load_tags(&url, &auth);
-                                answer_queue_clone
-                                    .lock()
-                                    .unwrap()
-                                    .push_back((index, ChannelDataType::Tags(git_url, result)));
-                            });
-                        }
+                        let answer_queue_clone = self.answer_queue.clone();
+                        thread::spawn(move || {
+                            let result = Self::load_tags(&url, &auth);
+                            answer_queue_clone
+                                .lock()
+                                .unwrap()
+                                .push_back((index, ChannelDataType::Tags(git_url, result)));
+                        });
+                    } else {
+                        self.repo_error_msg = Some(String::from("Unable to access Repository"));
                     }
                 }
                 ChannelDataType::Branches(git_url, branches) => {
@@ -165,6 +176,9 @@ impl MainPanel for MachineCreationMainPanel {
                     if let Ok(module_paths) = result {
                         self.machine_form.options = options;
                         self.machine_form.module_paths = Some(ModulePaths::new(module_paths));
+                        self.module_error_msg = None;
+                    } else {
+                        self.module_error_msg = Some(String::from("Unable to load Modules"));
                     }
                 }
                 ChannelDataType::NewMachine(machine_form, mut machine) => {
@@ -250,6 +264,8 @@ impl MainPanel for MachineCreationMainPanel {
         self.use_nixpkgs = false;
         self.branches = None;
         self.tags = None;
+        self.repo_error_msg = None;
+        self.module_error_msg = None;
     }
 }
 
@@ -482,6 +498,11 @@ impl MachineCreationMainPanel {
             "Don't build machine",
         );
         ui.checkbox(&mut self.machine_form.dont_run_init, "Skip init Script");
+
+        if let Some(error_msg) = &self.repo_error_msg {
+            ui.label(String::from(""));
+            ui.label(RichText::new(error_msg).color(Color32::ORANGE));
+        }
     }
 
     fn specify_repository_panel(&mut self, ui: &mut Ui) {
@@ -535,6 +556,10 @@ impl MachineCreationMainPanel {
             } else {
                 Some(NixpkgsLocation::Local)
             };
+        }
+
+        if let Some(error_msg) = &self.module_error_msg {
+            ui.label(RichText::new(error_msg).color(Color32::RED));
         }
     }
 
