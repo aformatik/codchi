@@ -29,6 +29,7 @@ pub struct MachineInspectionMainPanel {
     show_duplicate_spec_modal: bool,
     show_tar_spec_modal: bool,
     show_delete_confirmation_modal: bool,
+    show_stop_confirmation_modal: bool,
 
     textures: HashMap<String, TextureHandle>,
 }
@@ -47,6 +48,7 @@ pub(crate) enum ChannelDataType {
     Secrets(Vec<EnvSecret>),
     RebuiltMachine,
     DuplicatedMachine(Machine),
+    StoppedMachine(String),
     DeletedMachine(String),
     ClearStatus,
 }
@@ -115,6 +117,11 @@ impl MainPanel for MachineInspectionMainPanel {
                         ChannelDataType::DuplicatedMachine(machine),
                     ));
                 }
+                ChannelDataType::StoppedMachine(machine) => {
+                    (self.frame_msg_callback)(super::MainPanelMsgType::MachineInspection(
+                        ChannelDataType::StoppedMachine(machine),
+                    ));
+                }
                 ChannelDataType::DeletedMachine(machine_name) => {
                     self.current_machine = String::from("");
                     self.machine_data_map.remove(&machine_name);
@@ -133,34 +140,41 @@ impl MainPanel for MachineInspectionMainPanel {
         if self.show_rebuild_spec_modal {
             let modal = Modal::new(Id::new("rebuild_machine_spec_modal")).show(ctx, |ui| {
                 let state_id = ui.id().with("rebuild_machine_spec_modal_checkbox");
-                let mut checked = ui.data_mut(|d| d.get_temp::<bool>(state_id).unwrap_or(true));
-                ui.heading(format!("Rebuild machine '{}'", &self.current_machine));
-                ui.checkbox(&mut checked, "update modules");
-                ui.horizontal(|ui| {
-                    let rebuild_button = Button::new("Rebuild").fill(Color32::DARK_BLUE);
-                    if ui.add(rebuild_button).clicked() {
-                        let index = self
-                            .status_text
-                            .insert(1, format!("Building machine '{}'...", self.current_machine));
+                let mut no_update = ui.data_mut(|d| d.get_temp::<bool>(state_id).unwrap_or(true));
 
-                        let mut machine =
-                            self.machine_data_map[&self.current_machine].machine.clone();
-                        let answer_queue_clone = self.answer_queue.clone();
-                        thread::spawn(move || {
-                            let _ = machine.build(!checked);
-                            answer_queue_clone.lock().unwrap().push_back((
-                                index,
-                                machine.config.name.clone(),
-                                ChannelDataType::RebuiltMachine,
-                            ));
-                        });
-                        self.show_rebuild_spec_modal = false;
-                    }
-                    if ui.button("Cancel").clicked() {
-                        self.show_rebuild_spec_modal = false;
-                    }
-                });
-                ui.data_mut(|d| d.insert_temp(state_id, checked));
+                ui.heading(format!("Rebuild machine '{}'", &self.current_machine));
+                ui.checkbox(&mut no_update, "update modules");
+                let (rebuild_button, cancel_button) = Sides::new().show(
+                    ui,
+                    |ui_left| ui_left.add(Button::new("Rebuild").fill(Color32::DARK_GREEN)),
+                    |ui_right| ui_right.button("Cancel"),
+                );
+
+                if rebuild_button.clicked() {
+                    let index = self
+                        .status_text
+                        .insert(1, format!("Building machine '{}'...", self.current_machine));
+
+                    let mut machine = self.machine_data_map[&self.current_machine].machine.clone();
+                    let answer_queue_clone = self.answer_queue.clone();
+                    thread::spawn(move || {
+                        let answer = if machine.build(!no_update).is_ok() {
+                            ChannelDataType::RebuiltMachine
+                        } else {
+                            ChannelDataType::ClearStatus
+                        };
+                        answer_queue_clone.lock().unwrap().push_back((
+                            index,
+                            machine.config.name.clone(),
+                            answer,
+                        ));
+                    });
+                    self.show_rebuild_spec_modal = false;
+                }
+                if cancel_button.clicked() {
+                    self.show_rebuild_spec_modal = false;
+                }
+                ui.data_mut(|d| d.insert_temp(state_id, no_update));
             });
             if modal.should_close() {
                 self.show_rebuild_spec_modal = false;
@@ -171,47 +185,52 @@ impl MainPanel for MachineInspectionMainPanel {
                 let state_id = ui.id().with("duplicate_machine_spec_modal_name");
                 let mut new_machine_name =
                     ui.data_mut(|d| d.get_temp::<String>(state_id).unwrap_or(String::from("")));
+
                 ui.heading(format!("Duplicate machine '{}'", &self.current_machine));
                 let name_editor =
                     TextEdit::singleline(&mut new_machine_name).hint_text("New Machine Name");
                 ui.add(name_editor);
-                ui.horizontal(|ui| {
-                    let duplicate_button = Button::new("Duplicate").fill(Color32::DARK_GREEN);
-                    if ui.add(duplicate_button).clicked() {
-                        let index = self.status_text.insert(
-                            1,
-                            format!(
-                                "Duplicating machine '{}' as '{}'...",
-                                self.current_machine, new_machine_name
-                            ),
-                        );
+                let (duplicate_button, cancel_button) = Sides::new().show(
+                    ui,
+                    |ui_left| ui_left.add(Button::new("Duplicate").fill(Color32::DARK_GREEN)),
+                    |ui_right| ui_right.button("Cancel"),
+                );
 
-                        let machine = self.machine_data_map[&self.current_machine].machine.clone();
-                        let new_machine_name_clone = new_machine_name.clone();
-                        let answer_queue_clone = self.answer_queue.clone();
-                        thread::spawn(move || {
-                            let _ = machine.duplicate(&new_machine_name_clone);
-                            let duplicated_machine =
-                                Machine::by_name(&new_machine_name_clone, true);
+                if duplicate_button.clicked() {
+                    let index = self.status_text.insert(
+                        1,
+                        format!(
+                            "Duplicating machine '{}' as '{}'...",
+                            self.current_machine, new_machine_name
+                        ),
+                    );
 
-                            let answer = if let Ok(machine) = duplicated_machine {
-                                ChannelDataType::DuplicatedMachine(machine)
-                            } else {
-                                ChannelDataType::ClearStatus
-                            };
+                    let machine = self.machine_data_map[&self.current_machine].machine.clone();
+                    let new_machine_name_clone = new_machine_name.clone();
+                    let answer_queue_clone = self.answer_queue.clone();
+                    thread::spawn(move || {
+                        let result = machine.duplicate(&new_machine_name_clone);
+                        let duplicated_machine = Machine::by_name(&new_machine_name_clone, true);
 
-                            answer_queue_clone.lock().unwrap().push_back((
-                                index,
-                                machine.config.name,
-                                answer,
-                            ));
-                        });
-                        self.show_duplicate_spec_modal = false;
-                    }
-                    if ui.button("Cancel").clicked() {
-                        self.show_duplicate_spec_modal = false;
-                    }
-                });
+                        let answer = if result.is_ok()
+                            && let Ok(machine) = duplicated_machine
+                        {
+                            ChannelDataType::DuplicatedMachine(machine)
+                        } else {
+                            ChannelDataType::ClearStatus
+                        };
+
+                        answer_queue_clone.lock().unwrap().push_back((
+                            index,
+                            machine.config.name,
+                            answer,
+                        ));
+                    });
+                    self.show_duplicate_spec_modal = false;
+                }
+                if cancel_button.clicked() {
+                    self.show_duplicate_spec_modal = false;
+                }
                 ui.data_mut(|d| d.insert_temp(state_id, new_machine_name));
             });
             if modal.should_close() {
@@ -226,73 +245,116 @@ impl MainPanel for MachineInspectionMainPanel {
                 ui.heading(format!("Export machine '{}'", &self.current_machine));
                 let path_editor = TextEdit::singleline(&mut tar_path).hint_text(".tar Path");
                 ui.add(path_editor);
-                ui.horizontal(|ui| {
-                    let tar_button = Button::new("Tar").fill(Color32::DARK_GREEN);
-                    if ui.add(tar_button).clicked() {
-                        // TODO
-                        let path = PathBuf::try_from(&tar_path).unwrap();
-                        let index = self.status_text.insert(
-                            1,
-                            format!("Exporting files of {} to {path:?}...", self.current_machine),
-                        );
+                let (export_button, cancel_button) = Sides::new().show(
+                    ui,
+                    |ui_left| ui_left.add(Button::new("Export").fill(Color32::DARK_GREEN)),
+                    |ui_right| ui_right.button("Cancel"),
+                );
 
-                        let machine = self.machine_data_map[&self.current_machine].machine.clone();
-                        let answer_queue_clone = self.answer_queue.clone();
-                        thread::spawn(move || {
-                            let _ = machine.tar(&path);
+                if export_button.clicked() {
+                    let path = PathBuf::try_from(&tar_path).unwrap();
+                    let index = self.status_text.insert(
+                        1,
+                        format!("Exporting files of {} to {path:?}...", self.current_machine),
+                    );
 
-                            answer_queue_clone.lock().unwrap().push_back((
-                                index,
-                                machine.config.name,
-                                ChannelDataType::ClearStatus,
-                            ));
-                        });
-                        self.show_tar_spec_modal = false;
-                    }
-                    if ui.button("Cancel").clicked() {
-                        self.show_tar_spec_modal = false;
-                    }
-                });
+                    let machine = self.machine_data_map[&self.current_machine].machine.clone();
+                    let answer_queue_clone = self.answer_queue.clone();
+                    thread::spawn(move || {
+                        let _ = machine.tar(&path);
+
+                        answer_queue_clone.lock().unwrap().push_back((
+                            index,
+                            machine.config.name,
+                            ChannelDataType::ClearStatus,
+                        ));
+                    });
+                    self.show_tar_spec_modal = false;
+                }
+                if cancel_button.clicked() {
+                    self.show_tar_spec_modal = false;
+                }
                 ui.data_mut(|d| d.insert_temp(state_id, tar_path));
             });
             if modal.should_close() {
                 self.show_tar_spec_modal = false;
             }
         }
+        if self.show_stop_confirmation_modal {
+            let modal = Modal::new(Id::new("stop_machine_confirmation_modal")).show(ctx, |ui| {
+                ui.heading(format!("Stop machine '{}'?", &self.current_machine));
+                let (stop_button, cancel_button) = Sides::new().show(
+                    ui,
+                    |ui_left| ui_left.add(Button::new("Stop").fill(Color32::DARK_RED)),
+                    |ui_right| ui_right.button("Cancel"),
+                );
+
+                if stop_button.clicked() {
+                    let index = self
+                        .status_text
+                        .insert(1, format!("Deleting machine '{}'...", self.current_machine));
+
+                    let machine_clone =
+                        self.machine_data_map[&self.current_machine].machine.clone();
+                    let answer_queue_clone = self.answer_queue.clone();
+                    thread::spawn(move || {
+                        let machine_name = machine_clone.config.name.clone();
+                        let answer = if machine_clone.stop(false).is_ok() {
+                            ChannelDataType::StoppedMachine(machine_name.clone())
+                        } else {
+                            ChannelDataType::ClearStatus
+                        };
+                        answer_queue_clone
+                            .lock()
+                            .unwrap()
+                            .push_back((index, machine_name, answer));
+                    });
+                    self.show_stop_confirmation_modal = false;
+                }
+                if cancel_button.clicked() {
+                    self.show_stop_confirmation_modal = false;
+                }
+            });
+            if modal.should_close() {
+                self.show_stop_confirmation_modal = false;
+            }
+        }
         if self.show_delete_confirmation_modal {
             let modal = Modal::new(Id::new("delete_machine_confirmation_modal")).show(ctx, |ui| {
                 ui.heading(format!("Delete machine '{}'?", &self.current_machine));
-                ui.horizontal(|ui| {
-                    let delete_button = Button::new("Delete").fill(Color32::DARK_RED);
-                    if ui.add(delete_button).clicked() {
-                        let machine_data = &self.machine_data_map[&self.current_machine];
-                        let index = self
-                            .status_text
-                            .insert(1, format!("Deleting machine '{}'...", self.current_machine));
+                let (delete_button, cancel_button) = Sides::new().show(
+                    ui,
+                    |ui_left| ui_left.add(Button::new("Delete").fill(Color32::DARK_RED)),
+                    |ui_right| ui_right.button("Cancel"),
+                );
 
-                        let machine_clone = machine_data.machine.clone();
-                        let answer_queue_clone = self.answer_queue.clone();
-                        thread::spawn(move || {
-                            let machine_name = machine_clone.config.name.clone();
-                            let delete_result = machine_clone.delete(true);
-                            let answer = if delete_result.is_ok() {
-                                ChannelDataType::DeletedMachine(machine_name.clone())
-                            } else {
-                                ChannelDataType::ClearStatus
-                            };
+                if delete_button.clicked() {
+                    let machine_data = &self.machine_data_map[&self.current_machine];
+                    let index = self
+                        .status_text
+                        .insert(1, format!("Deleting machine '{}'...", self.current_machine));
 
-                            answer_queue_clone.lock().unwrap().push_back((
-                                index,
-                                machine_name,
-                                answer,
-                            ));
-                        });
-                        self.show_delete_confirmation_modal = false;
-                    }
-                    if ui.button("Cancel").clicked() {
-                        self.show_delete_confirmation_modal = false;
-                    }
-                });
+                    let machine_clone = machine_data.machine.clone();
+                    let answer_queue_clone = self.answer_queue.clone();
+                    thread::spawn(move || {
+                        let machine_name = machine_clone.config.name.clone();
+                        let delete_result = machine_clone.delete(true);
+                        let answer = if delete_result.is_ok() {
+                            ChannelDataType::DeletedMachine(machine_name.clone())
+                        } else {
+                            ChannelDataType::ClearStatus
+                        };
+
+                        answer_queue_clone
+                            .lock()
+                            .unwrap()
+                            .push_back((index, machine_name, answer));
+                    });
+                    self.show_delete_confirmation_modal = false;
+                }
+                if cancel_button.clicked() {
+                    self.show_delete_confirmation_modal = false;
+                }
             });
             if modal.should_close() {
                 self.show_delete_confirmation_modal = false;
@@ -393,6 +455,7 @@ impl MachineInspectionMainPanel {
             show_duplicate_spec_modal: false,
             show_tar_spec_modal: false,
             show_delete_confirmation_modal: false,
+            show_stop_confirmation_modal: false,
 
             textures: HashMap::new(),
         }
@@ -417,9 +480,7 @@ impl MachineInspectionMainPanel {
                             self.show_tar_spec_modal = true;
                         }
                         if ui.button("Stop").clicked() {
-                            let _ = self.machine_data_map[&self.current_machine]
-                                .machine
-                                .stop(false);
+                            self.show_stop_confirmation_modal = true;
                         }
                         let delete_button = Button::new("Delete").fill(Color32::DARK_RED);
                         if ui.add(delete_button).clicked() {

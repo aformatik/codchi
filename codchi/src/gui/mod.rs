@@ -87,6 +87,18 @@ impl eframe::App for Gui {
                             }
                         }
                     }
+                    machine_inspection::ChannelDataType::StoppedMachine(machine_name) => {
+                        let mut i = 0;
+                        for machine in &self.machines {
+                            if machine.config.name == machine_name {
+                                break;
+                            }
+                            i += 1;
+                        }
+                        if let Some(machine) = self.machines.get_mut(i) {
+                            machine.platform_status = PlatformStatus::Stopped;
+                        }
+                    }
                     machine_inspection::ChannelDataType::DeletedMachine(machine_name) => {
                         let mut i = 0;
                         for machine in &self.machines {
