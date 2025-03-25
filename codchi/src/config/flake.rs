@@ -54,26 +54,28 @@ impl<W: Hkd> FlakeUrl<W> {
                 host,
                 repo,
                 auth,
-            } => {
-                let query = metadata_to_query(&[
-                    ("commit", self.commit.as_ref()),
-                    ("ref", self.r#ref.as_ref()),
-                    ("host", Some(host)),
-                ]);
-                match scheme {
-                    Github | Gitlab | Sourcehut => {
-                        format!("{scheme}:{repo}?{query}")
-                    }
-                    Http | Https | Ssh => {
-                        let auth_host_prefix = if let Some(auth) = &auth {
-                            format!("{auth}@")
-                        } else {
-                            String::new()
-                        };
-                        format!("git+{scheme}://{auth_host_prefix}{host}/{repo}?{query}",)
-                    }
+            } => match scheme {
+                Github | Gitlab | Sourcehut => {
+                    let query = metadata_to_query(&[
+                        ("commit", self.commit.as_ref()),
+                        ("ref", self.r#ref.as_ref()),
+                        ("host", Some(host)),
+                    ]);
+                    format!("{scheme}:{repo}?{query}")
                 }
-            }
+                Http | Https | Ssh => {
+                    let auth_host_prefix = if let Some(auth) = &auth {
+                        format!("{auth}@")
+                    } else {
+                        String::new()
+                    };
+                    let query = metadata_to_query(&[
+                        ("commit", self.commit.as_ref()),
+                        ("ref", self.r#ref.as_ref()),
+                    ]);
+                    format!("git+{scheme}://{auth_host_prefix}{host}/{repo}?{query}",)
+                }
+            },
             Local { path } => {
                 let real_path = local_root.join_str(path).0;
                 let query = metadata_to_query(&[
@@ -302,8 +304,8 @@ pub enum FlakeScheme {
 
 #[cfg(test)]
 mod tests {
-    use crate::consts;
     use super::*;
+    use crate::consts;
 
     fn local() -> FlakeUrl<Required> {
         FlakeUrl {
