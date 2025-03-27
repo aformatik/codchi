@@ -1,4 +1,4 @@
-{ inputs, lib, pkgs, config, consts, ... }:
+{ __codchi-inputs, lib, pkgs, config, consts, ... }:
 let
   inherit (lib) mkOption types mkDefault mkForce mkMerge mkIf;
 in
@@ -49,7 +49,7 @@ in
         extraOptions = ''
           experimental-features = nix-command flakes
         '';
-        registry.nixpkgs.flake = inputs.nixpkgs;
+        registry.nixpkgs.flake = __codchi-inputs.nixpkgs;
         nixPath = [ "nixpkgs=/etc/channels/nixpkgs" ];
 
         settings = {
@@ -57,7 +57,7 @@ in
           trusted-public-keys = [ "codchi.cachix.org-1:dVwdzogJgZO2x8kPKW02HNt2dpd/P/z46pY465MkokY=" ];
         };
       };
-      environment.etc."channels/nixpkgs".source = inputs.nixpkgs;
+      environment.etc."channels/nixpkgs".source = __codchi-inputs.nixpkgs;
       # source codchi secrets
       environment.extraInit = /* bash */ ''
         source /etc/codchi-env
@@ -76,7 +76,11 @@ in
     }
 
     (mkIf (config.codchi.driver.name != "none") {
-      system.build.codchi.container = (import ../../container { inherit inputs pkgs lib; }
+      system.build.codchi.container = (import ../../container
+        {
+          inherit pkgs lib;
+          inputs.nixpkgs = __codchi-inputs.nixpkgs;
+        }
         {
           config = lib.recursiveUpdate
             config.codchi.driver.containerCfg

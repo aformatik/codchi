@@ -50,7 +50,7 @@ rec {
         #   ([{ module = ./nixos; specialArgs.inputs.nixpkgs = nixpkgs; }] ++ modules)
         modules ++ [
           ./nixos
-          { _module.args.inputs = { inherit nixpkgs; }; }
+          { _module.args.__codchi-inputs.nixpkgs = nixpkgs; }
         ]
         ++
         nixpkgs.lib.optional (driver != null) { codchi.driver.${driver}.enable = true; }
