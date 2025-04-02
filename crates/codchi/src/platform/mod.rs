@@ -1,8 +1,8 @@
-mod cmd;
 mod host;
 mod machine;
 mod store;
 
+pub mod cmd;
 #[allow(clippy::module_inception)]
 #[cfg_attr(target_os = "linux", path = "linux/mod.rs")]
 #[cfg_attr(target_os = "windows", path = "windows/mod.rs")]
@@ -15,16 +15,15 @@ pub use self::nix::NixDriver;
 pub use self::store::*;
 
 use self::platform::StoreImpl;
-use anyhow::Result;
 use platform::HostImpl;
 use std::sync::OnceLock;
 
 pub use platform::store_debug_shell;
 
 #[cfg(target_os = "windows")]
-pub use platform::store_recover;
-#[cfg(target_os = "windows")]
 pub use platform::machine_recover;
+#[cfg(target_os = "windows")]
+pub use platform::store_recover;
 
 #[cfg(target_os = "windows")]
 pub use platform::start_wsl_vpnkit;
@@ -39,7 +38,7 @@ pub struct Driver {
 impl Driver {
     fn get() -> &'static Driver {
         static DRIVER: OnceLock<Driver> = OnceLock::new();
-        let result: Result<&'static Driver> = DRIVER.get_or_try_init(|| {
+        let result: anyhow::Result<&'static Driver> = DRIVER.get_or_try_init(|| {
             Ok(Self {
                 store: Store::init()?,
             })

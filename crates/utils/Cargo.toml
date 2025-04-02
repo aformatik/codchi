@@ -1,11 +1,9 @@
 [package]
-name = "codchi-utils"
-version = "0.2.1"
-edition = "2021"
+name = "utils"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 
-[profile.release]
-lto = true
-strip = true
 
 [dependencies]
 # env_logger = "0.11.3"

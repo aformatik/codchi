@@ -28,9 +28,13 @@
         overlays = [
           (import rust-overlay)
           (self: _: {
-            codchi = self.callPackage ./crates { inherit (inputs) self; platform = "linux"; };
-            codchi-windows = self.callPackage ./crates { inherit (inputs) self; platform = "win"; };
-            codchi-utils = self.callPackage ./utils { };
+            buildRustCodchi = targetPlatform: self.callPackage ./build/build-rust-package.nix {
+              inherit targetPlatform;
+              inherit (inputs) self;
+            };
+            codchi = self.callPackage ./crates { targetPlatform = "linux"; };
+            codchi-windows = self.callPackage ./crates { targetPlatform = "windows"; };
+            codchi-utils = self.callPackage ./crates/utils { };
 
             mkContainer = type: driver: (import ./nix/container
               {
@@ -90,8 +94,8 @@
           };
 
           devShells.${system} = {
-            default = pkgs.callPackage ./crates/shell.nix { platform = "linux"; };
-            windows = pkgs.callPackage ./crates/shell.nix { platform = "win"; codchi = pkgs.codchi-windows; };
+            default = pkgs.callPackage ./crates/shell.nix { targetPlatform = "linux"; };
+            windows = pkgs.callPackage ./crates/shell.nix { targetPlatform = "windows"; codchi = pkgs.codchi-windows; };
           };
 
           checks.${system}.populate-cache =

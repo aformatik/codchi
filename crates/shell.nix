@@ -13,7 +13,7 @@
 , gdb
 , gdbgui
 
-, platform # "win" or "linux"
+, targetPlatform # one of ["linux" "windows"]
   # , jetbrains
 
 , cargo-watch
@@ -32,28 +32,34 @@
 }:
 let
 
-  native = {
-    win = {
+  platforms = {
+    windows = {
       inherit (codchi)
         CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER
         CODCHI_WSL_VERSION_MIN
         CODCHI_WSL_VERSION_MAX
         ;
       shellHook = codchi.passthru.setupXWin "$(git rev-parse --show-toplevel)";
+      packages = [
+        (writeShellScriptBin "msvc-fetch-manifest" ''
+          CACHE="$(mktemp -d)"
+          ${codchi.passthru.xwin}/bin/xwin --accept-license --cache-dir "$CACHE" download
+          cat "$CACHE"/dl/manifest*.json
+        '')
+      ];
     };
     linux = {
       inherit (codchi) CODCHI_LXD_CONTAINER_STORE CODCHI_LXD_CONTAINER_MACHINE;
       LD_LIBRARY_PATH = lib.makeLibraryPath codchi.buildInputs;
     };
-  }.${platform};
+  };
+  target = platforms.${targetPlatform};
 
 in
-mkShell (lib.recursiveUpdate
-  native
-{
+mkShell (lib.recursiveUpdate target {
   inputsFrom = [ codchi ];
 
-  packages = [
+  packages = (target.packages or [ ]) ++ [
     nil
     nixpkgs-fmt
 
@@ -78,12 +84,6 @@ mkShell (lib.recursiveUpdate
     graphviz
     cargo-autoinherit
     # cargo-udeps
-
-    (writeShellScriptBin "msvc-fetch-manifest" ''
-      CACHE="$(mktemp -d)"
-      ${codchi.passthru.xwin}/bin/xwin --accept-license --cache-dir "$CACHE" download
-      cat "$CACHE"/dl/manifest*.json
-    '')
 
     (buildFHSUserEnv {
       name = "zed";
@@ -118,7 +118,7 @@ mkShell (lib.recursiveUpdate
     # export CODCHI_DATA_DIR="$(git rev-parse --show-toplevel)/.codchi/data"
     # export CODCHI_RUNTIME_DIR="$(git rev-parse --show-toplevel)/.codchi/runtime"
     # export CODCHI_NIX_DIR="$(git rev-parse --show-toplevel)/.codchi/nix"
-  '' + (native.shellHook or "");
+  '' + (target.shellHook or "");
 
   inherit (codchi) CARGO_BUILD_TARGET;
 

@@ -1,7 +1,7 @@
 use super::*;
 use crate::cli::ModuleAttrPath;
-use crate::consts::ToPath;
 use git_url_parse::{GitUrl, Scheme};
+use shared::consts::ToPath;
 use shared::util::*;
 use std::marker::PhantomData;
 

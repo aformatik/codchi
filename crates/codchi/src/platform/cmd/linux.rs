@@ -1,10 +1,12 @@
-use self::platform::LinuxCommandDriver;
+use crate::platform::platform::LinuxCommandDriver;
+
 use super::*;
+use cmd::{CommandExt, OutputType};
 use shared::util::LinuxPath;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::Write;
-use std::process::{Child, Stdio};
+use std::process::{Child, Command, Stdio};
 
 pub trait LinuxCommandTarget {
     fn build(
@@ -145,7 +147,7 @@ impl Debug for LinuxCommandBuilder {
 }
 
 impl CommandExt for LinuxCommandBuilder {
-    fn spawn(&mut self, out_ty: OutputType) -> Result<Child> {
+    fn spawn(&mut self, out_ty: OutputType) -> cmd::Result<Child> {
         let mut cmd: Command = self.clone().into();
 
         cmd.stdout(out_ty.clone());

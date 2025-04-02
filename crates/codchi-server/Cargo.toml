@@ -1,10 +1,27 @@
 [package]
-name = "codchid"
+name = "codchi-server"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
-[features]
-nightly = []
-
 [dependencies]
+remoc.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+futures-signals.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+tracing-subscriber.workspace = true
+# tarpc.workspace = true
+shared.workspace = true
+ipc.workspace = true
+# anyhow.workspace = true
+tokio.workspace = true
+scc.workspace = true
+# futures.workspace = true
+# rand.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+which.workspace = true
+nix = { version = "0.29.0", features = ["user", "hostname"] }

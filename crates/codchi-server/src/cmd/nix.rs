@@ -1,9 +1,12 @@
-use super::*;
-use crate::cli::ModuleAttrPath;
-use cmd::CommandExt;
+use serde::Deserialize;
 use serde_json::Value;
-use shared::util::LinuxPath;
+use shared::{cmd::CommandExt, module_attr_path::ModuleAttrPath, util::LinuxPath};
 use std::{thread, time::Duration};
+use thiserror::Error;
+
+use crate::platform::shell::ShellDriver;
+
+use super::LinuxCommand;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -24,13 +27,13 @@ pub enum Error {
     FileMissing(String),
 
     #[error("Nix command failed: {0}")]
-    Command(super::cmd::Error),
+    Command(shared::cmd::Error),
 }
 pub type Result<T> = std::result::Result<T, Error>;
 
-impl From<cmd::Error> for Error {
-    fn from(err: cmd::Error) -> Self {
-        if let cmd::Error::Other { stderr, .. } = &err {
+impl From<shared::cmd::Error> for Error {
+    fn from(err: shared::cmd::Error) -> Self {
+        if let shared::cmd::Error::Other { stderr, .. } = &err {
             if stderr.contains("SSL peer certificate or SSH remote key was not OK") {
                 Error::InvalidRemoteSSLOrSSH
             } else if
@@ -57,7 +60,7 @@ impl From<cmd::Error> for Error {
     }
 }
 
-pub trait NixDriver: LinuxCommandTarget {
+pub trait NixDriver: ShellDriver {
     fn list_nixos_modules(&self, url: &str) -> Result<Vec<ModuleAttrPath>> {
         let list_attr_names = |attr_path: &str| -> Result<Vec<String>> {
             let args = [
@@ -72,7 +75,7 @@ pub trait NixDriver: LinuxCommandTarget {
                 "builtins.attrNames",
             ];
             match self
-                .run("nix", &args)
+                .build(LinuxCommand::run("nix", &args))
                 .output_json::<Vec<String>>()
                 .map_err(|err| err.into())
             {
@@ -108,7 +111,9 @@ pub trait NixDriver: LinuxCommandTarget {
             "--no-write-lock-file",
             &self.quote_shell_arg(url),
         ];
-        let metadata = self.run("nix", &args).output_json::<Value>()?;
+        let metadata = self
+            .build(LinuxCommand::run("nix", &args))
+            .output_json::<Value>()?;
 
         Ok(metadata
             .get("locks")
@@ -122,23 +127,28 @@ pub trait NixDriver: LinuxCommandTarget {
         T: for<'de> Deserialize<'de>,
     {
         Ok(self
-            .run(
-                "nix",
-                &[
-                    "eval",
-                    &self.quote_shell_arg(&format!(".#{path}")),
-                    "--no-write-lock-file",
-                    "--json",
-                ],
+            .build(
+                LinuxCommand::run(
+                    "nix",
+                    &[
+                        "eval",
+                        &self.quote_shell_arg(&format!(".#{path}")),
+                        "--no-write-lock-file",
+                        "--json",
+                    ],
+                )
+                .with_cwd(flake),
             )
-            .with_cwd(flake)
             .output_json::<T>()?)
     }
 
     fn ping_store(&self) -> bool {
-        self.run("nix", &["store", "ping", "--store", "daemon"])
-            .wait_ok()
-            .is_ok()
+        self.build(LinuxCommand::run(
+            "nix",
+            &["store", "ping", "--store", "daemon"],
+        ))
+        .wait_ok()
+        .is_ok()
     }
     fn wait_pinging_store(&self) -> Result<()> {
         while !self.ping_store() {
@@ -148,4 +158,4 @@ pub trait NixDriver: LinuxCommandTarget {
     }
 }
 
-impl<T: LinuxCommandTarget> NixDriver for T {}
+impl<T: ShellDriver> NixDriver for T {}

@@ -2,6 +2,7 @@ use super::*;
 use crate::cli::ModuleName;
 use crate::consts::{host, ToPath, MACHINE_PREFIX};
 use anyhow::anyhow;
+use shared::config::LockedConfig;
 use shared::util::{PathExt, Required};
 use std::path;
 

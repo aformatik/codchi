@@ -3,11 +3,25 @@ name = "shared"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-
-[features]
-nightly = []
+build = "build.rs"
 
 [dependencies]
 anyhow.workspace = true
-rand.workspace = true
+directories.workspace = true
+fs4.workspace = true
 log.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+toml_edit.workspace = true
+lazy-regex.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+directories.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+daemonize = "0.5.0"
+
+[build-dependencies]
+build-data.workspace = true
