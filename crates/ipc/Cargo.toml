@@ -1,0 +1,24 @@
+[package]
+name = "ipc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+nightly = []
+
+[dependencies]
+anyhow.workspace = true
+log.workspace = true
+tokio.workspace = true
+shared.workspace = true
+serde.workspace = true
+# tarpc.workspace = true
+# tsyncp = { version = "0.4.1", default-features = false, features =  [ "bincode"] }
+remoc.workspace = true
+# futures.workspace = true
+#backon = "1.4.1"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.60", features = ["Win32_System_Console", "Win32_UI_WindowsAndMessaging", "Win32_System_Diagnostics_Debug", "Win32_Storage_FileSystem", "Win32_Security", "Win32_System_Threading"] }
+

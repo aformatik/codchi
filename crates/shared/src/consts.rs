@@ -1,4 +1,4 @@
-use shared::util::LinuxPath;
+use crate::util::LinuxPath;
 use std::sync::LazyLock;
 use std::{
     env,
@@ -7,6 +7,7 @@ use std::{
 
 pub const APP_NAME: &str = "codchi";
 
+pub static GIT_COMMIT: &str = env!("CODCHI_GIT_BRANCH");
 pub static GIT_BRANCH: &str = env!("CODCHI_GIT_BRANCH");
 
 /// When building with cargo (locally), use the branch as the main flake ref (easier testing)
@@ -30,6 +31,7 @@ pub const MACHINE_PREFIX: &str = "machine";
 // these are used for store / machine container init
 pub const INIT_EXIT_ERR: &str = "INIT_ERR";
 pub const INIT_EXIT_SUCCESS: &str = "INIT_SUCCESS";
+pub const LOG_ENV_SERVER: &str = "CODCHI_SERVER_LOG";
 
 pub trait ToPath: Sized {
     fn join_str(&self, name: &str) -> Self;
@@ -52,7 +54,7 @@ impl ToPath for PathBuf {
 }
 
 pub mod host {
-    use crate::config::CodchiConfig;
+    use crate::config::codchi::CodchiConfig;
     use directories::BaseDirs;
 
     use super::*;

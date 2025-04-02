@@ -48,18 +48,6 @@ fn main() -> Result<()> {
             println!("cargo:rustc-env=CODCHI_WSL_VERSION_MAX={wsl_ver_max}",);
         }
 
-        let commit = build_data::exec("nix-git-commit", &[])?;
-        println!("cargo:rustc-env=CODCHI_GIT_COMMIT={}", commit);
-        build_data::set_SOURCE_TIMESTAMP();
-
-        if let Ok(branch) = build_data::get_git_branch() {
-            println!("cargo:rustc-env=CODCHI_GIT_BRANCH={}", branch);
-        } else {
-            println!(
-                "cargo:rustc-env=CODCHI_GIT_BRANCH=v{}",
-                env::var("CARGO_PKG_VERSION")?
-            );
-        }
         if let Ok(profile) = env::var("PROFILE") {
             println!("cargo:rustc-cfg=profile={:?}", profile);
         }

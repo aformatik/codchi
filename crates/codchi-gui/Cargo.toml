@@ -4,9 +4,6 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
-[features]
-nightly = []
-
 [dependencies]
 shared = { path = "../shared" }
 anyhow = { workspace = true, features = ["backtrace"] }

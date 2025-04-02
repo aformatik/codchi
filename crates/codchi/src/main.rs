@@ -9,6 +9,7 @@ use crate::{
 use clap::{CommandFactory, Parser};
 use config::{git_url::GitUrl, CodchiConfig, MachineConfig};
 use console::style;
+use ipc::{service::Api, RUNTIME_MT};
 use itertools::Itertools;
 use log::Level;
 use logging::{hide_progress, set_progress_status, CodchiOutput};
@@ -26,7 +27,7 @@ use std::{
 
 pub mod cli;
 pub mod config;
-pub mod consts;
+pub use shared::consts;
 pub mod logging;
 pub mod module;
 pub mod platform;
@@ -39,7 +40,7 @@ fn main() -> anyhow::Result<()> {
             format!(
                 "{} Commit: {}",
                 env!("CARGO_PKG_VERSION"),
-                env!("CODCHI_GIT_COMMIT")
+                consts::GIT_COMMIT
             ),
         );
         let cause = get_panic_cause(info);
@@ -82,6 +83,14 @@ Thank you kindly!"#
     logging::init(cli.verbose.log_level_filter())?;
 
     log::trace!("Started codchi with args: {:?}", cli);
+
+    {
+        RUNTIME_MT.block_on(async {
+            dbg!(ipc::client::connect().await?.ping().await);
+            anyhow::Ok(())
+        })?;
+        exit(0);
+    }
 
     // preload config
     let _ = CodchiConfig::get();

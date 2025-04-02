@@ -1,14 +1,13 @@
-use std::{
-    borrow::Cow,
-    io::Write,
-    sync::{Arc, OnceLock, RwLock},
-};
-
 use anyhow::{Context, Result};
 use console::style;
 use indicatif_log_bridge::LogWrapper;
 use log::{Level, LevelFilter};
 use progress::{Progress, ROOT_BAR};
+use std::{
+    borrow::Cow,
+    io::Write,
+    sync::{Arc, OnceLock, RwLock},
+};
 
 mod nix;
 pub mod output;

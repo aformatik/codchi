@@ -1,14 +1,11 @@
-{ callPackage
-, lib
-, self
-, platform
+{ lib
+, targetPlatform # one of ["linux" "windows"]
+, buildRustCodchi
 }:
 let
   Cargo = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 in
-callPackage ../build/build-rust-package.nix
-{ inherit self platform; }
-{
+buildRustCodchi targetPlatform {
   pname = "codchi";
   inherit (Cargo.workspace.package) version;
 
@@ -18,8 +15,12 @@ callPackage ../build/build-rust-package.nix
     "^codchi-gui.*$"
     "^codchiw.*$"
     "^shared.*$"
+    "^ipc.*$"
+    "^utils.*$"
     "^Cargo\..*"
   ];
+  cargoBuildFlags = [ "-p codchi" "-p codchi-server" "-p codchi-gui" ]
+    ++ lib.optional (targetPlatform == "windows") "-p codchiw";
   cargoLock.lockFile = ./Cargo.lock;
   cargoLock.outputHashes = {
     # "tray-icon-0.16.0" = "sha256-LxkEP31myIiWh6FDOzr9rZ8KAWISbja0jmEx0E2lM44=";
