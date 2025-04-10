@@ -173,7 +173,7 @@ Thank you kindly!"#
                     module_paths,
                 )?;
                 if !options.no_build {
-                    machine.build(true)?;
+                    machine.full_build(true)?;
                     machine.run_init_script(*dont_run_init)?;
                     log::info!("Machine '{machine_name}' is ready! Use `codchi exec {machine_name}` to start it.")
                 } else {
@@ -220,7 +220,7 @@ Thank you kindly!"#
         }
 
         Cmd::Rebuild { no_update, name } => {
-            Machine::by_name(name, true)?.build(*no_update)?;
+            Machine::by_name(name, true)?.full_build(*no_update)?;
             log::info!("Machine {name} rebuilt successfully!");
         }
 
@@ -317,7 +317,7 @@ secret. Is this OK? [y/n]",
                 let mut machine =
                     module::add(machine_name, GitUrl::from(url), options, module_paths)?;
                 if !options.no_build {
-                    machine.build(true)?;
+                    machine.full_build(true)?;
                 } else {
                     alert_dirty(machine);
                 }
@@ -339,7 +339,7 @@ secret. Is this OK? [y/n]",
                     url.as_ref().map(GitUrl::from),
                 )?;
                 if !options.no_build {
-                    machine.build(false)?;
+                    machine.full_build(false)?;
                 } else {
                     alert_dirty(machine);
                 }

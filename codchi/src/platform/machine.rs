@@ -301,6 +301,14 @@ fi
         Ok(())
     }
 
+    pub fn full_build(&mut self, no_update: bool) -> Result<()> {
+        self.build(no_update)?;
+        self.build_eval_secrets()?;
+        self.build_install()?;
+
+        Ok(())
+    }
+
     pub fn build(&mut self, no_update: bool) -> Result<()> {
         self.write_flake()?;
 
@@ -365,6 +373,10 @@ git add flake.*
             );
         }
 
+        Ok(())
+    }
+
+    fn build_eval_secrets(&mut self) -> Result<()> {
         set_progress_status("Evaluating secrets...");
         let secrets = self.eval_env_secrets()?;
 
@@ -387,6 +399,10 @@ git add flake.*
         cfg.write(lock)?;
         self.config = cfg;
 
+        Ok(())
+    }
+
+    pub fn build_install(&mut self) -> Result<()> {
         set_progress_status(format!("Building {}...", self.config.name));
         let status = Self::read_platform_status(&self.config.name)?;
         if status == PlatformStatus::NotInstalled {
@@ -599,7 +615,7 @@ git add flake.*
         };
         self.duplicate_container(&new_machine)?;
         new_machine.write_flake()?;
-        new_machine.build(true)?;
+        new_machine.full_build(true)?;
 
         log::info!(
             "Successfully duplicated machine '{}' to '{target_name}'",

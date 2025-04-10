@@ -600,7 +600,7 @@ pub fn clone(
         &input_options,
         module_paths,
     )?;
-    machine.build(true)?;
+    machine.full_build(true)?;
     progress_scope! {
         set_progress_status("Cloning git repository...");
 

@@ -64,6 +64,7 @@ ctrlc = { version = "3.4.5", features = ["termination"] }
 egui = "0.31.0"
 eframe = "0.31.0"
 egui_extras = { version = "0.31.0", features = ["default", "image"] }
+rfd = "0.15.3"
 
 [target.'cfg(unix)'.dependencies]
 indoc = "2.0.5"
