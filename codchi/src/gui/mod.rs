@@ -5,7 +5,10 @@ mod util;
 
 use anyhow::Result;
 use egui::*;
-use main_panel::{machine_inspection::MachineInspectionIntent, MainPanel, MainPanelIntent};
+use main_panel::{
+    empty_machine_creation::EmptyMachineCreationIntent, machine_creation::MachineCreationIntent,
+    machine_inspection::MachineInspectionIntent, MainPanel, MainPanelIntent, MainPanelType,
+};
 use menubar::MenubarIntent;
 use side_panel::{GuiSidePanel, SidePanelIntent};
 use std::{
@@ -14,7 +17,7 @@ use std::{
     thread,
 };
 use util::{
-    backend_broker::{self, BackendBroker, BackendIntent},
+    backend_broker::{BackendBroker, BackendIntent},
     dialog_manager::{DialogIntent, DialogManager},
     status_entries::StatusEntries,
     textures_manager::TexturesManager,
@@ -140,15 +143,21 @@ impl Gui {
 
     fn update_main_panel(&mut self, ctx: &Context) {
         CentralPanel::default().show(ctx, |ui| {
-            let intents = self.main_panel.update(
-                ui,
-                &mut self.status_entries,
-                &mut self.dialog_manager,
-                &mut self.textures_manager,
-            );
-            for intent in intents {
-                self.eval_main_panel_intent(intent);
-            }
+            ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
+                ui.separator();
+                ui.vertical(|ui| {
+                    let intents = self.main_panel.update(
+                        ui,
+                        &mut self.status_entries,
+                        &mut self.dialog_manager,
+                        &mut self.textures_manager,
+                    );
+
+                    for intent in intents {
+                        self.eval_main_panel_intent(intent);
+                    }
+                })
+            })
         });
     }
 
@@ -213,18 +222,28 @@ impl Gui {
                 doc.enable_wsl_vpnkit(val);
                 doc.write().expect("Failed to write config");
             }
-            menubar::MenubarIntent::InsertUrl(url) => todo!(),
+            menubar::MenubarIntent::InsertUrl(url) => {
+                self.main_panel.panels.get_machine_creation().pass_url(url);
+                self.main_panel.change(MainPanelType::MachineCreation);
+            }
         }
     }
 
     fn eval_side_panel_intent(&mut self, side_panel_intent: SidePanelIntent) {
         match side_panel_intent {
-            SidePanelIntent::DisplayMachine(machine) => self
-                .main_panel
-                .panels
-                .get_machine_inspection()
-                .change(machine, &mut self.status_entries),
-            SidePanelIntent::BeginMachineCreation => todo!(),
+            SidePanelIntent::DisplayMachine(machine) => {
+                self.main_panel
+                    .panels
+                    .get_machine_inspection()
+                    .change(machine, &mut self.status_entries);
+                self.main_panel.change(MainPanelType::MachineInspection)
+            }
+            SidePanelIntent::BeginMachineCreation => {
+                self.main_panel.change(MainPanelType::MachineCreation)
+            }
+            SidePanelIntent::BeginEmptyMachineCreation => {
+                self.main_panel.change(MainPanelType::EmptyMachineCreation)
+            }
         }
     }
 
@@ -233,35 +252,42 @@ impl Gui {
             util::dialog_manager::DialogIntent::Rebuild {
                 machine,
                 update_modules,
-            } => self
-                .backend_broker
-                .rebuild(machine, update_modules, &mut self.status_entries),
+            } => self.backend_broker.rebuild_machine(
+                machine,
+                update_modules,
+                false,
+                &mut self.status_entries,
+            ),
             util::dialog_manager::DialogIntent::Duplicate {
                 machine,
                 duplicate_name,
-            } => self
-                .backend_broker
-                .duplicate(machine, duplicate_name, &mut self.status_entries),
+            } => self.backend_broker.duplicate_machine(
+                machine,
+                duplicate_name,
+                &mut self.status_entries,
+            ),
             util::dialog_manager::DialogIntent::Tar { machine, file_path } => self
                 .backend_broker
-                .tar(machine, file_path, &mut self.status_entries),
-            util::dialog_manager::DialogIntent::Stop { machine } => {
-                self.backend_broker.stop(machine, &mut self.status_entries)
-            }
+                .tar_machine(machine, file_path, &mut self.status_entries),
+            util::dialog_manager::DialogIntent::Stop { machine } => self
+                .backend_broker
+                .stop_machine(machine, &mut self.status_entries),
             util::dialog_manager::DialogIntent::Delete { machine, confirm } => {
                 if confirm {
                     self.backend_broker
-                        .delete(machine, &mut self.status_entries);
+                        .delete_machine(machine, &mut self.status_entries);
                 }
             }
             util::dialog_manager::DialogIntent::Secret {
                 machine_name,
                 name,
                 value,
-            } => {
-                self.backend_broker
-                    .set_secret(machine_name, name, value, &mut self.status_entries)
-            }
+            } => self.backend_broker.insert_secret(
+                machine_name,
+                name,
+                value,
+                &mut self.status_entries,
+            ),
         }
     }
 
@@ -269,6 +295,10 @@ impl Gui {
         match main_panel_intent {
             MainPanelIntent::MachineInspection(intent) => {
                 self.eval_machine_inspection_intent(intent)
+            }
+            MainPanelIntent::MachineCreation(intent) => self.eval_machine_creation_intent(intent),
+            MainPanelIntent::EmptyMachineCreation(intent) => {
+                self.eval_empty_machine_creation_intent(intent)
             }
         }
     }
@@ -309,6 +339,62 @@ impl Gui {
         }
     }
 
+    fn eval_machine_creation_intent(&mut self, machine_creation_intent: MachineCreationIntent) {
+        match machine_creation_intent {
+            MachineCreationIntent::CreateMachine(
+                machine_name,
+                git_url,
+                options,
+                modules,
+                dont_run_init,
+            ) => {
+                self.backend_broker.create_machine(
+                    machine_name,
+                    git_url,
+                    options,
+                    modules,
+                    dont_run_init,
+                    &mut self.status_entries,
+                );
+            }
+            MachineCreationIntent::LoadRepository(auth_url) => {
+                if self
+                    .main_panel
+                    .panels
+                    .get_machine_creation()
+                    .is_auth_url_loaded(&auth_url)
+                {
+                    self.main_panel
+                        .panels
+                        .get_machine_creation()
+                        .to_repository_panel(Some(auth_url));
+                } else {
+                    self.backend_broker
+                        .access_repository(auth_url, &mut self.status_entries)
+                }
+            }
+            MachineCreationIntent::LoadModules(repo) => {
+                self.backend_broker
+                    .load_modules(repo, &mut self.status_entries);
+            }
+        }
+    }
+
+    fn eval_empty_machine_creation_intent(
+        &mut self,
+        empty_machine_creation_intent: EmptyMachineCreationIntent,
+    ) {
+        match empty_machine_creation_intent {
+            EmptyMachineCreationIntent::CreateMachine(machine_name, dont_build) => {
+                self.backend_broker.create_empty_machine(
+                    machine_name,
+                    dont_build,
+                    &mut self.status_entries,
+                );
+            }
+        }
+    }
+
     fn eval_backend_intent(&mut self, backend_intent: BackendIntent) {
         match backend_intent {
             BackendIntent::DuplicatedMachine(machine_name) => {
@@ -317,6 +403,34 @@ impl Gui {
             }
             BackendIntent::DeletedMachine(machine_name) => {
                 self.side_panel.remove_machine(machine_name);
+            }
+            BackendIntent::AccessedRepository(auth_url) => {
+                self.backend_broker
+                    .load_repository(auth_url, &mut self.status_entries);
+            }
+            BackendIntent::LoadedBranches(auth_url, branches_result) => {
+                if let Ok(branches) = branches_result {
+                    self.main_panel
+                        .panels
+                        .get_machine_creation()
+                        .pass_branches(auth_url, branches);
+                }
+            }
+            BackendIntent::LoadedTags(auth_url, tags_result) => {
+                if let Ok(tags) = tags_result {
+                    self.main_panel
+                        .panels
+                        .get_machine_creation()
+                        .pass_tags(auth_url, tags);
+                }
+            }
+            BackendIntent::LoadedModules(repo, modules_result) => {
+                if let Ok(modules) = modules_result {
+                    self.main_panel
+                        .panels
+                        .get_machine_creation()
+                        .pass_modules(repo, modules);
+                }
             }
         }
     }

@@ -14,7 +14,7 @@ fn password_field_ui(ui: &mut Ui, password: &mut String) -> Response {
 
     let mut show_plaintext = ui.data_mut(|d| d.get_temp::<bool>(state_id).unwrap_or(false));
 
-    let result = ui.horizontal(|ui| {
+    let result = ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
         let response = ui
             .add(SelectableLabel::new(show_plaintext, "👁"))
             .on_hover_text("Show/hide password");
@@ -24,7 +24,7 @@ fn password_field_ui(ui: &mut Ui, password: &mut String) -> Response {
         }
 
         ui.add_sized(
-            [200.0, ui.available_height()],
+            [ui.available_width(), 0.0],
             TextEdit::singleline(password).password(!show_plaintext),
         );
     });
@@ -56,7 +56,7 @@ pub fn advanced_password_field_ui(
             .unwrap_or(String::from(password))
     });
 
-    let result = ui.horizontal(|ui| {
+    let result = ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
         let response = ui
             .add(SelectableLabel::new(show_plaintext, "👁"))
             .on_hover_text("Show/hide password");
@@ -66,7 +66,7 @@ pub fn advanced_password_field_ui(
         }
 
         ui.add_sized(
-            [200.0, ui.available_height()],
+            [250.0, 0.0],
             TextEdit::singleline(&mut text).password(!show_plaintext),
         );
 

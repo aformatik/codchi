@@ -67,12 +67,18 @@ impl GuiSidePanel {
         let mut intent = Vec::new();
 
         ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
-            let new_machine_button = Button::new(RichText::new("New").heading());
-            let new_machin_button_handle =
-                ui.add_sized([ui.available_width(), 0.0], new_machine_button);
-            if new_machin_button_handle.clicked() {
-                intent.push(SidePanelIntent::BeginMachineCreation);
-            }
+            ui.vertical_centered_justified(|ui| {
+                ui.menu_button(RichText::new("New").heading(), |ui| {
+                    if ui.button("Standard").clicked() {
+                        intent.push(SidePanelIntent::BeginMachineCreation);
+                        ui.close_menu();
+                    }
+                    if ui.button("Empty").clicked() {
+                        intent.push(SidePanelIntent::BeginEmptyMachineCreation);
+                        ui.close_menu();
+                    }
+                });
+            });
             ui.separator();
 
             ui.horizontal_top(|ui| {
@@ -178,4 +184,5 @@ impl GuiSidePanel {
 pub enum SidePanelIntent {
     DisplayMachine(Machine),
     BeginMachineCreation,
+    BeginEmptyMachineCreation,
 }

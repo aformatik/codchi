@@ -1,8 +1,5 @@
 use super::{
-    super::util::{
-        dialog_manager::DialogManager, status_entries::StatusEntries,
-        textures_manager::TexturesManager,
-    },
+    super::util::{status_entries::StatusEntries, textures_manager::TexturesManager},
     MainPanelIntent,
 };
 use crate::{
@@ -36,20 +33,11 @@ enum ChannelDTO {
     Secrets(String, Result<Vec<EnvSecret>>),
 }
 
-pub enum MachineInspectionIntent {
-    Rebuild(Machine),
-    Duplicate(Machine),
-    Tar(Machine),
-    Stop(Machine),
-    Delete(Machine),
-}
-
 impl MachineInspection {
     pub fn update(
         &mut self,
         ui: &mut Ui,
         status_entries: &mut StatusEntries,
-        _dialog_manager: &mut DialogManager,
         textures_manager: &mut TexturesManager,
     ) -> Vec<MainPanelIntent> {
         self.receive_msgs(status_entries);
@@ -416,4 +404,12 @@ impl MachineData {
     fn is_initialized(&self) -> bool {
         self.applications.is_some() && self.modules.is_some() && self.secrets.is_some()
     }
+}
+
+pub enum MachineInspectionIntent {
+    Rebuild(Machine),
+    Duplicate(Machine),
+    Tar(Machine),
+    Stop(Machine),
+    Delete(Machine),
 }
