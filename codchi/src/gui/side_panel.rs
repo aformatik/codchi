@@ -174,10 +174,10 @@ impl GuiSidePanel {
         self.reload_machine_from_list(status_entries);
     }
 
-    pub fn remove_machine(&mut self, machine_name: String) {
-        self.machine_load_names.retain(|name| name != &machine_name);
+    pub fn remove_machine(&mut self, machine_name: &String) {
+        self.machine_load_names.retain(|name| name != machine_name);
         self.machine_button_names
-            .retain(|name| name != &machine_name);
+            .retain(|name| name != machine_name);
     }
 }
 

@@ -402,7 +402,11 @@ impl Gui {
                     .add_machine(machine_name, &mut self.status_entries);
             }
             BackendIntent::DeletedMachine(machine_name) => {
-                self.side_panel.remove_machine(machine_name);
+                self.side_panel.remove_machine(&machine_name);
+                self.main_panel
+                    .panels
+                    .get_machine_inspection()
+                    .unselect_machine(&machine_name);
             }
             BackendIntent::AccessedRepository(auth_url) => {
                 self.backend_broker

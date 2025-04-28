@@ -368,6 +368,16 @@ impl MachineInspection {
 
         intent
     }
+
+    pub fn unselect_machine(&mut self, machine_name: &String) {
+        if self
+            .current_machine
+            .as_ref()
+            .is_some_and(|current_machine| current_machine == machine_name)
+        {
+            self.current_machine = None;
+        }
+    }
 }
 
 struct MachineData {
