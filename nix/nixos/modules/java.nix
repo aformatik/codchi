@@ -32,7 +32,7 @@ in
         (name: path:
           lib.nameValuePair
             "${config.users.users.codchi.home}/.jdks/${name}"
-            { L.argument = "${path}/lib/openjdk"; }
+            { "L+".argument = "${path}/lib/openjdk"; }
         )
         cfg.packages;
 
