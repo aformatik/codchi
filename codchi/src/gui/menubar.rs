@@ -23,8 +23,11 @@ pub fn update(ui: &mut Ui, textures_manager: &mut TexturesManager) -> Vec<Menuba
     let mut intent = Vec::new();
 
     ui.horizontal_centered(|ui| {
-        let codchi_button = match textures_manager.deliver("logo", "assets/logo.png", 45) {
-            Some(image) => Button::image(image),
+        let codchi_button = match textures_manager.deliver("logo", "assets/logo.png") {
+            Some(tex_handle) => {
+                let image = Image::new(tex_handle).max_size(vec2(48.0, 48.0));
+                Button::image(image)
+            }
             None => Button::new("Home"),
         };
         if ui.add(codchi_button).on_hover_text("Home").clicked() {
@@ -35,8 +38,12 @@ pub fn update(ui: &mut Ui, textures_manager: &mut TexturesManager) -> Vec<Menuba
 
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             let github_button =
-                match textures_manager.deliver("github_logo", "assets/github_logo.png", 25) {
-                    Some(image) => Button::image(image),
+                match textures_manager.deliver_svg("github_logo", "assets/github_logo.svg") {
+                    Some(tex_handle) => Button::image(
+                        Image::new(tex_handle)
+                            .tint(ui.visuals().widgets.inactive.fg_stroke.color)
+                            .max_size(vec2(24.0, 24.0)),
+                    ),
                     None => Button::new("Github"),
                 };
             if ui.add(github_button).on_hover_text("Github").clicked() {
@@ -45,8 +52,12 @@ pub fn update(ui: &mut Ui, textures_manager: &mut TexturesManager) -> Vec<Menuba
             }
 
             let bug_report_button =
-                match textures_manager.deliver("bug_icon", "assets/bug_icon.png", 25) {
-                    Some(image) => Button::image(image),
+                match textures_manager.deliver_svg("bug_icon", "assets/bug_icon.svg") {
+                    Some(tex_handle) => Button::image(
+                        Image::new(tex_handle)
+                            .tint(ui.visuals().widgets.inactive.fg_stroke.color)
+                            .max_size(vec2(24.0, 24.0)),
+                    ),
                     None => Button::new("Bug-Report"),
                 };
             if ui
@@ -73,11 +84,15 @@ pub fn update(ui: &mut Ui, textures_manager: &mut TexturesManager) -> Vec<Menuba
 fn update_settings_menu(ui: &mut Ui, textures_manager: &mut TexturesManager) -> Vec<MenubarIntent> {
     let mut intent = Vec::new();
 
-    let settings_button = match textures_manager.deliver("settings", "assets/settings.png", 25) {
-        Some(image) => Button::image(image),
+    let menu_button = match textures_manager.deliver_svg("menu", "assets/menu_icon.svg") {
+        Some(tex_handle) => Button::image(
+            Image::new(tex_handle)
+                .tint(ui.visuals().widgets.inactive.fg_stroke.color)
+                .max_size(vec2(24.0, 24.0)),
+        ),
         None => Button::new("Settings"),
     };
-    menu::menu_custom_button(ui, settings_button, |ui| {
+    menu::menu_custom_button(ui, menu_button, |ui| {
         if ui.button("Zoom In").clicked() {
             intent.push(MenubarIntent::ZoomIn);
             ui.close_menu();

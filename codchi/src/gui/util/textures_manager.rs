@@ -1,8 +1,10 @@
+use anyhow::Result;
 use egui::*;
 use image::{ImageBuffer, ImageReader, Rgba};
+use resvg::tiny_skia::Pixmap;
 use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
+    collections::{HashMap, HashSet},
+    path::PathBuf,
     sync::mpsc::{channel, Receiver, Sender},
     thread,
 };
@@ -10,14 +12,14 @@ use std::{
 pub struct TexturesManager {
     textures: HashMap<String, TextureHandle>,
 
-    sender: Sender<ChannelDTO>,
-    receiver: Receiver<ChannelDTO>,
-    awaits_answer: bool,
+    sender: Sender<(String, ChannelDTO)>,
+    receiver: Receiver<(String, ChannelDTO)>,
+
+    open_requests: HashSet<String>,
 }
 
 enum ChannelDTO {
-    ColorImage(String, ColorImage),
-    Image(String, ImageBuffer<Rgba<u8>, Vec<u8>>, [usize; 2]),
+    ColorImage(ColorImage),
 }
 
 impl TexturesManager {
@@ -29,7 +31,8 @@ impl TexturesManager {
 
             sender,
             receiver,
-            awaits_answer: false,
+
+            open_requests: HashSet::new(),
         }
     }
 
@@ -45,42 +48,54 @@ impl TexturesManager {
         self.get(name).map(|tex| Image::from_texture(tex))
     }
 
-    pub fn deliver(&mut self, name: &str, path: &str, dim: u32) -> Option<&TextureHandle> {
+    pub fn deliver(&mut self, name: &str, path: &str) -> Option<&TextureHandle> {
         let texture_handle = self.textures.get(name);
 
-        if !self.awaits_answer && texture_handle.is_none() {
-            self.awaits_answer = true;
-            load_color_image_async(&self.sender, name.to_string(), path.to_string(), dim);
+        if texture_handle.is_none() {
+            let name_string = name.to_string();
+            if !self.open_requests.contains(&name_string) {
+                self.open_requests.insert(name_string);
+                load_color_image_async(&self.sender, name.to_string(), path.to_string());
+            }
         }
 
         texture_handle
     }
 
-    pub fn deliver_image(&mut self, name: &str, path: &PathBuf) -> Option<&TextureHandle> {
+    pub fn deliver_ico(&mut self, name: &str, path: &PathBuf) -> Option<&TextureHandle> {
         let texture_handle = self.textures.get(name);
 
-        if !self.awaits_answer && texture_handle.is_none() {
-            self.awaits_answer = true;
-            load_image_async(&self.sender, name.to_string(), path.clone());
+        if texture_handle.is_none() {
+            let name_string = name.to_string();
+            if !self.open_requests.contains(&name_string) {
+                self.open_requests.insert(name_string);
+                load_image_buffer_async(&self.sender, name.to_string(), path.clone());
+            }
+        }
+
+        texture_handle
+    }
+
+    pub fn deliver_svg(&mut self, name: &str, path: &str) -> Option<&TextureHandle> {
+        let texture_handle = self.textures.get(name);
+
+        if texture_handle.is_none() {
+            let name_string = name.to_string();
+            if !self.open_requests.contains(&name_string) {
+                self.open_requests.insert(name_string);
+                load_svg_async(&self.sender, name.to_string(), path.to_string());
+            }
         }
 
         texture_handle
     }
 
     fn receive_msgs(&mut self, ctx: &Context) {
-        while let Ok(channel_dto) = self.receiver.try_recv() {
-            self.awaits_answer = false;
+        while let Ok((name, channel_dto)) = self.receiver.try_recv() {
+            self.open_requests.remove(&name);
             match channel_dto {
-                ChannelDTO::ColorImage(name, color_image) => {
+                ChannelDTO::ColorImage(color_image) => {
                     let texture_handle = ctx.load_texture(&name, color_image, Default::default());
-                    self.textures.insert(name, texture_handle);
-                }
-                ChannelDTO::Image(name, image_buffer, size) => {
-                    let texture_handle = ctx.load_texture(
-                        "icon_texture",
-                        ColorImage::from_rgba_unmultiplied(size, &image_buffer),
-                        Default::default(),
-                    );
                     self.textures.insert(name, texture_handle);
                 }
             }
@@ -88,84 +103,95 @@ impl TexturesManager {
     }
 }
 
-fn load_image_async(sender: &Sender<ChannelDTO>, name: String, path: PathBuf) {
+fn load_color_image_async(sender: &Sender<(String, ChannelDTO)>, name: String, location: String) {
     let sender_clone = sender.clone();
     thread::spawn(move || {
-        if let Some((image_buffer, size)) = load_image_from_path(&path) {
-            let dto = ChannelDTO::Image(name, image_buffer, size);
-            sender_clone.send(dto).unwrap();
+        let path = PathBuf::from(&location);
+        if let Ok(color_image) = load_color_image_from_path(&path) {
+            let dto = ChannelDTO::ColorImage(color_image);
+            sender_clone.send((name, dto)).unwrap();
         }
     });
 }
 
-fn load_image_from_path(path: &PathBuf) -> Option<(ImageBuffer<Rgba<u8>, Vec<u8>>, [usize; 2])> {
-    let image = image::open(path)
-        .expect("Failed to open image icon")
-        .to_rgba8();
-    let size = [image.width() as usize, image.height() as usize];
-
-    Some((image, size))
-}
-
-fn load_color_image_async(sender: &Sender<ChannelDTO>, name: String, path: String, dim: u32) {
+fn load_image_buffer_async(sender: &Sender<(String, ChannelDTO)>, name: String, path: PathBuf) {
     let sender_clone = sender.clone();
     thread::spawn(move || {
-        if let Some(color_image) = load_color_image_from_path(&path, dim) {
-            let dto = ChannelDTO::ColorImage(name, color_image);
-            sender_clone.send(dto).unwrap();
+        if let Ok((image_buffer, size)) = load_image_from_path(&path) {
+            let color_image = ColorImage::from_rgba_unmultiplied(size, &image_buffer);
+            let dto = ChannelDTO::ColorImage(color_image);
+            sender_clone.send((name, dto)).unwrap();
         }
     });
 }
 
-fn load_color_image_from_path(path: &str, dim: u32) -> Option<ColorImage> {
-    let img = ImageReader::open(Path::new(path))
-        .ok()?
-        .decode()
-        .ok()?
-        .resize(dim, dim, image::imageops::FilterType::Lanczos3)
-        .to_rgba8();
+fn load_svg_async(sender: &Sender<(String, ChannelDTO)>, name: String, location: String) {
+    let sender_clone = sender.clone();
+    thread::spawn(move || {
+        let path = PathBuf::from(&location);
+        if let Ok(color_image) = load_svg_from_path(&path) {
+            let dto = ChannelDTO::ColorImage(color_image);
+            sender_clone.send((name, dto)).unwrap();
+        }
+    });
+}
 
-    let (width, height) = img.dimensions();
-    let pixels = img.into_raw();
+fn load_color_image_from_path(path: &PathBuf) -> Result<ColorImage> {
+    let image = ImageReader::open(path)?.decode()?.to_rgba8();
 
-    Some(ColorImage::from_rgba_unmultiplied(
+    let (width, height) = image.dimensions();
+    let pixels = image.into_raw();
+
+    Ok(ColorImage::from_rgba_unmultiplied(
         [width as usize, height as usize],
         &pixels,
     ))
 }
 
-fn load_square_textures_async(sender: &Sender<ChannelDTO>) {
+fn load_image_from_path(path: &PathBuf) -> Result<(ImageBuffer<Rgba<u8>, Vec<u8>>, [usize; 2])> {
+    let image = image::open(path)?.to_rgba8();
+    let size = [image.width() as usize, image.height() as usize];
+
+    Ok((image, size))
+}
+
+fn load_svg_from_path(path: &PathBuf) -> Result<ColorImage> {
+    let rtree = usvg::Tree::from_data(&std::fs::read(path)?, &usvg::Options::default())?;
+
+    let w = rtree.size().width();
+    let h = rtree.size().height();
+
+    let mut pixmap = Pixmap::new(w as u32, h as u32).unwrap();
+    resvg::render(&rtree, Default::default(), &mut pixmap.as_mut());
+
+    Ok(ColorImage::from_rgba_unmultiplied(
+        [w as usize, h as usize],
+        pixmap.data(),
+    ))
+}
+
+fn load_square_textures_async(sender: &Sender<(String, ChannelDTO)>) {
     let sender_clone = sender.clone();
     thread::spawn(move || {
-        let dto = ChannelDTO::ColorImage(
-            "black".to_string(),
-            ColorImage::new([10, 10], Color32::BLACK),
-        );
-        sender_clone.send(dto).unwrap();
+        let dto = ChannelDTO::ColorImage(ColorImage::new([10, 10], Color32::BLACK));
+        sender_clone.send(("black".to_string(), dto)).unwrap();
     });
 
     let sender_clone = sender.clone();
     thread::spawn(move || {
-        let dto = ChannelDTO::ColorImage(
-            "dark_red".to_string(),
-            ColorImage::new([10, 10], Color32::DARK_RED),
-        );
-        sender_clone.send(dto).unwrap();
+        let dto = ChannelDTO::ColorImage(ColorImage::new([10, 10], Color32::DARK_RED));
+        sender_clone.send(("dark_red".to_string(), dto)).unwrap();
     });
 
     let sender_clone = sender.clone();
     thread::spawn(move || {
-        let dto =
-            ChannelDTO::ColorImage("red".to_string(), ColorImage::new([10, 10], Color32::RED));
-        sender_clone.send(dto).unwrap();
+        let dto = ChannelDTO::ColorImage(ColorImage::new([10, 10], Color32::RED));
+        sender_clone.send(("red".to_string(), dto)).unwrap();
     });
 
     let sender_clone = sender.clone();
     thread::spawn(move || {
-        let dto = ChannelDTO::ColorImage(
-            "green".to_string(),
-            ColorImage::new([10, 10], Color32::GREEN),
-        );
-        sender_clone.send(dto).unwrap();
+        let dto = ChannelDTO::ColorImage(ColorImage::new([10, 10], Color32::GREEN));
+        sender_clone.send(("green".to_string(), dto)).unwrap();
     });
 }

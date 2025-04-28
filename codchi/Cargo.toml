@@ -63,8 +63,10 @@ rand = "0.9.0"
 ctrlc = { version = "3.4.5", features = ["termination"] }
 egui = "0.31.0"
 eframe = "0.31.0"
-egui_extras = { version = "0.31.0", features = ["default", "image"] }
+egui_extras = { version = "0.31.0", features = ["default", "image", "svg"] }
 rfd = "0.15.3"
+usvg = "0.45.1"
+resvg = "0.45.1"
 
 [target.'cfg(unix)'.dependencies]
 indoc = "2.0.5"

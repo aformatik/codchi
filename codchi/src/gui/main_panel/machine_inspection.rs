@@ -214,10 +214,8 @@ impl MachineInspection {
                 for desktop_entry in desktop_entries {
                     let app_icon = match &desktop_entry.icon {
                         Some(icon_path) => textures_manager
-                            .deliver_image(&desktop_entry.app_name, icon_path)
-                            .map(|tex| {
-                                Image::from_texture(tex).max_size(Vec2 { x: 12.0, y: 12.0 })
-                            }),
+                            .deliver_ico(&desktop_entry.app_name, icon_path)
+                            .map(|tex| Image::from_texture(tex).shrink_to_fit()),
                         None => None,
                     };
                     let app_text = WidgetText::RichText(RichText::new(&desktop_entry.app_name));
