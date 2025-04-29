@@ -433,6 +433,16 @@ impl BackendBroker {
             sender_clone.send((status_index, dto)).unwrap();
         });
     }
+
+    pub fn recover_store(&mut self, status_entries: &mut StatusEntries) {
+        let index = status_entries.create_entry(String::from("Recovering Codchi store..."));
+
+        let sender_clone = self.sender.clone();
+        thread::spawn(move || {
+            let _ = crate::platform::platform::store_recover();
+            sender_clone.send((index, ChannelDTO::Default)).unwrap();
+        });
+    }
 }
 
 fn access_repo(auth_url: &AuthUrl) -> Result<Vec<ModuleAttrPath>> {

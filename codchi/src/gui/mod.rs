@@ -11,11 +11,7 @@ use main_panel::{
 };
 use menubar::MenubarIntent;
 use side_panel::{GuiSidePanel, SidePanelIntent};
-use std::{
-    path::PathBuf,
-    sync::mpsc::{channel, Receiver, Sender},
-    thread,
-};
+use std::path::PathBuf;
 use util::{
     backend_broker::{BackendBroker, BackendIntent},
     dialog_manager::{DialogIntent, DialogManager},
@@ -34,26 +30,16 @@ struct Gui {
     textures_manager: TexturesManager,
 
     backend_broker: BackendBroker,
-
-    sender: Sender<(usize, ChannelDTO)>,
-    receiver: Receiver<(usize, ChannelDTO)>,
-}
-
-enum ChannelDTO {
-    Generic,
 }
 
 impl eframe::App for Gui {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
-        self.receive_msgs();
-
         self.update_ui(ctx);
     }
 }
 
 impl Gui {
     fn new() -> Self {
-        let (sender, receiver) = channel();
         Self {
             side_panel: GuiSidePanel::new(),
             main_panel: MainPanel::new(),
@@ -63,18 +49,6 @@ impl Gui {
             textures_manager: TexturesManager::new(),
 
             backend_broker: BackendBroker::new(),
-
-            sender,
-            receiver,
-        }
-    }
-
-    fn receive_msgs(&mut self) {
-        while let Ok((status_index, channel_dto)) = self.receiver.try_recv() {
-            self.status_entries.decrease(status_index);
-            match channel_dto {
-                ChannelDTO::Generic => {}
-            }
         }
     }
 
@@ -193,14 +167,7 @@ impl Gui {
             MenubarIntent::ZoomIn => gui_zoom::zoom_in(ctx),
             MenubarIntent::ZoomOut => gui_zoom::zoom_out(ctx),
             MenubarIntent::RecoverStore => {
-                let index = self
-                    .status_entries
-                    .push(String::from("Recovering Codchi store..."), 1);
-                let sender_clone = self.sender.clone();
-                thread::spawn(move || {
-                    let _ = crate::platform::platform::store_recover();
-                    sender_clone.send((index, ChannelDTO::Generic)).unwrap();
-                });
+                self.backend_broker.recover_store(&mut self.status_entries)
             }
             MenubarIntent::ShowTray(val) => {
                 let mut doc = CodchiConfig::open_mut().expect("Failed to open config");
