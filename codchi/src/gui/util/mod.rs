@@ -14,23 +14,26 @@ fn password_field_ui(ui: &mut Ui, password: &mut String) -> Response {
 
     let mut show_plaintext = ui.data_mut(|d| d.get_temp::<bool>(state_id).unwrap_or(false));
 
-    let result = ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
-        let response = ui
-            .add(SelectableLabel::new(show_plaintext, "👁"))
-            .on_hover_text("Show/hide password");
+    let result = ui
+        .with_layout(Layout::right_to_left(Align::Min), |ui| {
+            let response = ui
+                .add(SelectableLabel::new(show_plaintext, "👁"))
+                .on_hover_text("Show/hide password");
 
-        if response.clicked() {
-            show_plaintext = !show_plaintext;
-        }
+            if response.clicked() {
+                show_plaintext = !show_plaintext;
+            }
 
-        ui.add_sized(
-            [ui.available_width(), 0.0],
-            TextEdit::singleline(password).password(!show_plaintext),
-        );
-    });
+            ui.add_sized(
+                [ui.available_width(), 0.0],
+                TextEdit::singleline(password).password(!show_plaintext),
+            )
+        })
+        .inner;
+
     ui.data_mut(|d| d.insert_temp(state_id, show_plaintext));
 
-    result.response
+    result
 }
 
 pub fn advanced_password_field<'a>(

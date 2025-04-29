@@ -183,16 +183,16 @@ impl Gui {
 
     fn eval_menubar_intent(&mut self, ctx: &Context, menubar_intent: MenubarIntent) {
         match menubar_intent {
-            menubar::MenubarIntent::Home => self.main_panel.reset(),
-            menubar::MenubarIntent::OpenGithub => {
+            MenubarIntent::Home => self.main_panel.reset(),
+            MenubarIntent::OpenGithub => {
                 ctx.open_url(OpenUrl::new_tab("https://github.com/aformatik/codchi/"))
             }
-            menubar::MenubarIntent::OpenIssues => ctx.open_url(OpenUrl::new_tab(
+            MenubarIntent::OpenIssues => ctx.open_url(OpenUrl::new_tab(
                 "https://github.com/aformatik/codchi/issues",
             )),
-            menubar::MenubarIntent::ZoomIn => gui_zoom::zoom_in(ctx),
-            menubar::MenubarIntent::ZoomOut => gui_zoom::zoom_out(ctx),
-            menubar::MenubarIntent::RecoverStore => {
+            MenubarIntent::ZoomIn => gui_zoom::zoom_in(ctx),
+            MenubarIntent::ZoomOut => gui_zoom::zoom_out(ctx),
+            MenubarIntent::RecoverStore => {
                 let index = self
                     .status_entries
                     .push(String::from("Recovering Codchi store..."), 1);
@@ -202,27 +202,27 @@ impl Gui {
                     sender_clone.send((index, ChannelDTO::Generic)).unwrap();
                 });
             }
-            menubar::MenubarIntent::ShowTray(val) => {
+            MenubarIntent::ShowTray(val) => {
                 let mut doc = CodchiConfig::open_mut().expect("Failed to open config");
                 doc.tray_autostart(val);
                 doc.write().expect("Failed to write config");
             }
-            menubar::MenubarIntent::EnableVcxsrv(val) => {
+            MenubarIntent::EnableVcxsrv(val) => {
                 let mut doc = CodchiConfig::open_mut().expect("Failed to open config");
                 doc.vcxsrv_enable(val);
                 doc.write().expect("Failed to write config");
             }
-            menubar::MenubarIntent::ShowTrayVcxsrv(val) => {
+            MenubarIntent::ShowTrayVcxsrv(val) => {
                 let mut doc = CodchiConfig::open_mut().expect("Failed to open config");
                 doc.vcxsrv_tray(val);
                 doc.write().expect("Failed to write config");
             }
-            menubar::MenubarIntent::EnableWslVpnkit(val) => {
+            MenubarIntent::EnableWslVpnkit(val) => {
                 let mut doc = CodchiConfig::open_mut().expect("Failed to open config");
                 doc.enable_wsl_vpnkit(val);
                 doc.write().expect("Failed to write config");
             }
-            menubar::MenubarIntent::InsertUrl(url) => {
+            MenubarIntent::InsertUrl(url) => {
                 self.main_panel.panels.get_machine_creation().pass_url(url);
                 self.main_panel.change(MainPanelType::MachineCreation);
             }
@@ -408,9 +408,16 @@ impl Gui {
                     .get_machine_inspection()
                     .unselect_machine(&machine_name);
             }
-            BackendIntent::AccessedRepository(auth_url) => {
-                self.backend_broker
-                    .load_repository(auth_url, &mut self.status_entries);
+            BackendIntent::AccessedRepository(auth_url, result) => {
+                if result.is_ok() {
+                    self.backend_broker
+                        .load_repository(auth_url, &mut self.status_entries);
+                } else {
+                    self.main_panel
+                        .panels
+                        .get_machine_creation()
+                        .repo_is_inaccessible();
+                }
             }
             BackendIntent::LoadedBranches(auth_url, branches_result) => {
                 if let Ok(branches) = branches_result {

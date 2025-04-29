@@ -7,6 +7,9 @@ pub struct GenericsPanel {
     pub(super) machine_name: String,
     auth_url: AuthUrl,
     pub(super) dont_build: bool,
+
+    occupied_loading_repo: bool,
+    repo_inaccessible: bool,
 }
 
 impl GenericsPanel {
@@ -33,7 +36,9 @@ impl GenericsPanel {
             ui.end_row();
 
             ui.label("URL");
-            ui.add_sized(
+            add_sized_colored(
+                ui,
+                &mut self.repo_inaccessible,
                 ui.available_size(),
                 TextEdit::singleline(&mut self.auth_url.url)
                     .hint_text("https://gitlab.example.com/my_repo"),
@@ -41,14 +46,18 @@ impl GenericsPanel {
             ui.end_row();
 
             ui.label("Username");
-            ui.add_sized(
+            add_sized_colored(
+                ui,
+                &mut self.repo_inaccessible,
                 ui.available_size(),
                 TextEdit::singleline(&mut self.auth_url.username),
             );
             ui.end_row();
 
             ui.label("Password");
-            ui.add_sized(
+            add_sized_colored(
+                ui,
+                &mut self.repo_inaccessible,
                 ui.available_size(),
                 password_field(&mut self.auth_url.password),
             );
@@ -66,12 +75,16 @@ impl GenericsPanel {
         let mut intent = Vec::new();
 
         ui.with_layout(Layout::bottom_up(Align::Max), |ui| {
-            if ui.button("Next").clicked() {
-                if !self.auth_url.url.is_empty() {
-                    intent.push(InternalIntent::ToRepositoryPanel(Some(
-                        self.auth_url.clone(),
-                    )));
-                }
+            let button = Button::new("Next");
+            let enabled = !self.occupied_loading_repo
+                && !self.auth_url.url.is_empty()
+                && !self.machine_name.is_empty();
+            let button_handle = ui.add_enabled(enabled, button);
+            if button_handle.clicked() {
+                intent.push(InternalIntent::ToRepositoryPanel(Some(
+                    self.auth_url.clone(),
+                )));
+                self.occupied_loading_repo = true;
             }
         });
 
@@ -81,4 +94,32 @@ impl GenericsPanel {
     pub fn set_url(&mut self, url: String) {
         self.auth_url.url = url;
     }
+
+    pub fn finished_loading_repo(&mut self) {
+        self.occupied_loading_repo = false;
+    }
+
+    pub fn set_repo_inaccessible(&mut self) {
+        self.repo_inaccessible = true;
+    }
+}
+
+fn add_sized_colored(
+    ui: &mut Ui,
+    condition: &mut bool,
+    max_size: impl Into<Vec2>,
+    widget: impl Widget,
+) -> Response {
+    ui.horizontal(|ui| {
+        if *condition {
+            ui.visuals_mut().widgets.inactive.bg_stroke.width = 1.0;
+            ui.visuals_mut().widgets.inactive.bg_stroke.color = Color32::RED;
+        }
+        let handle = ui.add_sized(max_size, widget);
+        if handle.gained_focus() {
+            *condition = false;
+        }
+        handle
+    })
+    .inner
 }

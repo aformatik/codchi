@@ -119,6 +119,11 @@ impl MachineCreation {
         self.generics_panel.set_url(url);
     }
 
+    pub fn repo_is_inaccessible(&mut self) {
+        self.generics_panel.finished_loading_repo();
+        self.generics_panel.set_repo_inaccessible();
+    }
+
     pub fn is_auth_url_loaded(&self, auth_url: &AuthUrl) -> bool {
         self.repository_panel.is_auth_url_loaded(auth_url)
     }
@@ -150,6 +155,7 @@ impl MachineCreation {
     pub fn to_repository_panel(&mut self, auth_url_option: Option<AuthUrl>) {
         if let Some(auth_url) = auth_url_option {
             self.repository_panel.set_current_auth_url(auth_url);
+            self.generics_panel.finished_loading_repo();
         }
         self.creation_step = CreationStep::Repository;
     }

@@ -35,7 +35,7 @@ enum ChannelDTO {
     DuplicatedMachine(String),
     DeletedMachine(String),
 
-    RepositoryAccessed(AuthUrl),
+    RepositoryAccessed(AuthUrl, Result<()>),
     BranchesLoaded(AuthUrl, Result<Vec<String>>),
     TagsLoaded(AuthUrl, Result<Vec<String>>),
     ModulesLoaded(
@@ -53,7 +53,7 @@ enum ChannelDTO {
 pub enum BackendIntent {
     DuplicatedMachine(String),
     DeletedMachine(String),
-    AccessedRepository(AuthUrl),
+    AccessedRepository(AuthUrl, Result<()>),
     LoadedBranches(AuthUrl, Result<Vec<String>>),
     LoadedTags(AuthUrl, Result<Vec<String>>),
     LoadedModules(
@@ -106,8 +106,8 @@ impl BackendBroker {
                 ChannelDTO::DeletedMachine(machine_name) => {
                     intent.push(BackendIntent::DeletedMachine(machine_name));
                 }
-                ChannelDTO::RepositoryAccessed(auth_url) => {
-                    intent.push(BackendIntent::AccessedRepository(auth_url));
+                ChannelDTO::RepositoryAccessed(auth_url, result) => {
+                    intent.push(BackendIntent::AccessedRepository(auth_url, result));
                 }
                 ChannelDTO::BranchesLoaded(auth_url, branches) => {
                     intent.push(BackendIntent::LoadedBranches(auth_url, branches));
@@ -287,8 +287,8 @@ impl BackendBroker {
         let sender_clone = self.sender.clone();
         thread::spawn(move || {
             let dto = match access_repo(&auth_url) {
-                Ok(_) => ChannelDTO::RepositoryAccessed(auth_url),
-                Err(_) => ChannelDTO::Default,
+                Ok(_) => ChannelDTO::RepositoryAccessed(auth_url, Ok(())),
+                Err(err) => ChannelDTO::RepositoryAccessed(auth_url, Err(err)),
             };
             sender_clone.send((status_index, dto)).unwrap();
         });
@@ -440,7 +440,7 @@ fn access_repo(auth_url: &AuthUrl) -> Result<Vec<ModuleAttrPath>> {
         dont_prompt: true,
         no_build: true,
         use_nixpkgs: None,
-        auth: auth_url.get_auth().or(Some(String::from(""))),
+        auth: auth_url.get_auth().or(Some(String::from(":"))),
         branch: None,
         tag: None,
         commit: None,
