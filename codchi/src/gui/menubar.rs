@@ -9,6 +9,7 @@ pub enum MenubarIntent {
     Home,
     OpenGithub,
     OpenIssues,
+    ToggleMode,
     ZoomIn,
     ZoomOut,
     RecoverStore,
@@ -93,6 +94,9 @@ fn update_settings_menu(ui: &mut Ui, textures_manager: &mut TexturesManager) -> 
         None => Button::new("Settings"),
     };
     menu::menu_custom_button(ui, menu_button, |ui| {
+        if ui.button("Change mode").clicked() {
+            intent.push(MenubarIntent::ToggleMode);
+        }
         if ui.button("Zoom In").clicked() {
             intent.push(MenubarIntent::ZoomIn);
             ui.close_menu();

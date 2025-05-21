@@ -164,6 +164,13 @@ impl Gui {
             MenubarIntent::OpenIssues => ctx.open_url(OpenUrl::new_tab(
                 "https://github.com/aformatik/codchi/issues",
             )),
+            MenubarIntent::ToggleMode => {
+                if ctx.style().visuals.dark_mode {
+                    ctx.set_visuals(light_visuals());
+                } else {
+                    ctx.set_visuals(dark_visuals());
+                }
+            }
             MenubarIntent::ZoomIn => gui_zoom::zoom_in(ctx),
             MenubarIntent::ZoomOut => gui_zoom::zoom_out(ctx),
             MenubarIntent::RecoverStore => {
@@ -424,7 +431,7 @@ pub fn run() -> Result<()> {
         options,
         Box::new(|cc| {
             // set custom theme
-            cc.egui_ctx.set_visuals(get_visuals());
+            cc.egui_ctx.set_visuals(dark_visuals());
 
             // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
@@ -440,9 +447,12 @@ pub fn run() -> Result<()> {
     Ok(())
 }
 
-pub fn get_visuals() -> Visuals {
-    let mut visuals = Visuals::dark();
-    visuals.widgets.active.fg_stroke.color = Color32::WHITE;
-    visuals.widgets.noninteractive.fg_stroke.color = Color32::LIGHT_GRAY;
+pub fn light_visuals() -> Visuals {
+    let visuals = Visuals::light();
+    visuals
+}
+
+pub fn dark_visuals() -> Visuals {
+    let visuals = Visuals::dark();
     visuals
 }
