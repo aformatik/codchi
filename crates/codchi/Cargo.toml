@@ -19,6 +19,7 @@ serde_with.workspace = true
 strum = { workspace = true, features = ["derive"] }
 itertools.workspace = true
 lazy-regex.workspace = true
+tokio.workspace = true
 # base64 = "0.22.1"
 clap = { workspace = true, features = ["derive", "cargo", "string"] }
 clap_complete_command = { workspace = true, features = ["fig", "carapace"] }

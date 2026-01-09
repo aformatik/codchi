@@ -45,7 +45,7 @@ pub struct StreamingChild {
 pub trait CommandExt: Debug {
     fn spawn(&mut self, out_ty: OutputType) -> Result<Child>;
     fn output_ok(&mut self) -> Result<Vec<u8>> {
-        log::trace!("Running command: {self:?}");
+        tracing::trace!("Running command: {self:?}");
 
         let out = self.spawn(OutputType::Collect)?.wait_with_output()?;
         if out.status.success() {
@@ -53,7 +53,7 @@ pub trait CommandExt: Debug {
         } else {
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
             let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-            log::trace!(
+            tracing::trace!(
                 "Got error when running {self:?}:
 Stdout:
 {stdout}
@@ -66,7 +66,7 @@ Stderr:
                 stderr,
             })
         }
-        .map(|out| out.peek(|out| log::trace!("Got output:\n{}", String::from_utf8_lossy(out))))
+        .map(|out| out.peek(|out| tracing::trace!("Got output:\n{}", String::from_utf8_lossy(out))))
     }
     fn output_utf8_ok(&mut self) -> Result<String> {
         let output = self.output_ok()?;
@@ -104,7 +104,7 @@ Stderr:
 
     /// Spawn child while streaming AND collecting both stderr and stdout.
     fn spawn_streaming(&mut self) -> Result<StreamingChild> {
-        log::trace!("Running command: {self:?}");
+        tracing::trace!("Running command: {self:?}");
         let mut child = self.spawn(OutputType::Collect)?;
         fn stream(
             stream: impl Read,
@@ -197,23 +197,23 @@ Stderr:
         if was_canceled || status.success() {
             Ok(stdout)
         } else {
-            log::trace!("Got error when running {self:?}:\n{stderr}");
+            tracing::trace!("Got error when running {self:?}:\n{stderr}");
             Err(Error::Other {
                 cmd: format!("{self:?}"),
                 exit_status: status,
                 stderr,
             })
         }
-        .map(|out| out.peek(|out| log::trace!("Got output:\n{out}")))
+        .map(|out| out.peek(|out| tracing::trace!("Got output:\n{out}")))
     }
 
     fn exec(&mut self) -> Result<()> {
-        log::trace!("Execing command: {self:?}");
+        tracing::trace!("Execing command: {self:?}");
         exit(self.spawn(OutputType::Inherit)?.wait()?.code().unwrap_or(1))
     }
 
     fn wait_inherit(&mut self) -> Result<()> {
-        log::trace!("Executing command with inherited stdio: {self:?}");
+        tracing::trace!("Executing command with inherited stdio: {self:?}");
         let result = self.spawn(OutputType::Inherit)?.wait()?;
         if result.success() {
             Ok(())

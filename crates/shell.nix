@@ -1,9 +1,9 @@
 { mkShell
 , writeShellScriptBin
 , lib
-, buildFHSUserEnv
-, system
-, fetchFromGitHub
+  # , buildFHSUserEnv
+  # , system
+  # , fetchFromGitHub
 
 , codchi
 
@@ -14,7 +14,7 @@
 , gdbgui
 
 , targetPlatform # one of ["linux" "windows"]
-  # , jetbrains
+, jetbrains
 
 , cargo-watch
 , cargo-edit
@@ -49,7 +49,7 @@ let
       ];
     };
     linux = {
-      inherit (codchi) CODCHI_LXD_CONTAINER_STORE CODCHI_LXD_CONTAINER_MACHINE;
+      inherit (codchi) CODCHI_PODMAN_STORE_IMAGE;
       LD_LIBRARY_PATH = lib.makeLibraryPath codchi.buildInputs;
     };
   };
@@ -75,6 +75,7 @@ mkShell (lib.recursiveUpdate target {
     #     sha256 = "sha256:0nq62y0cqvhx8a81c7wc1zrm9bp00ljrh96qlsvmy0mwn3s278ym";
     #   };
     # }))
+    jetbrains.rust-rover
 
     cargo-bloat
     # cargo-deps
@@ -85,22 +86,22 @@ mkShell (lib.recursiveUpdate target {
     cargo-autoinherit
     # cargo-udeps
 
-    (buildFHSUserEnv {
-      name = "zed";
-      targetPkgs = _: [
-        # import directly to prevent polluting flake inputs
-        (import
-          (fetchFromGitHub {
-            owner = "nixos";
-            repo = "nixpkgs";
-            rev = "nixos-unstable";
-            sha256 = "sha256-Z/ELQhrSd7bMzTO8r7NZgi9g5emh+aRKoCdaAv5fiO0=";
-          })
-          { inherit system; }).zed-editor
-      ];
-      runScript = "zed";
-    })
-
+    # (buildFHSUserEnv {
+    #   name = "zed";
+    #   targetPkgs = _: [
+    #     # import directly to prevent polluting flake inputs
+    #     (import
+    #       (fetchFromGitHub {
+    #         owner = "nixos";
+    #         repo = "nixpkgs";
+    #         rev = "nixos-unstable";
+    #         sha256 = "sha256-Z/ELQhrSd7bMzTO8r7NZgi9g5emh+aRKoCdaAv5fiO0=";
+    #       })
+    #       { inherit system; }).zed-editor
+    #   ];
+    #   runScript = "zed";
+    # })
+    #
     (vscode-with-extensions.override {
       vscode = vscodium;
       vscodeExtensions = with vscode-extensions; [

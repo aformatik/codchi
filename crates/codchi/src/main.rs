@@ -1,4 +1,3 @@
-#![feature(let_chains)]
 #![feature(once_cell_try)]
 #![deny(unused_crate_dependencies)]
 
@@ -6,9 +5,11 @@ use crate::{
     cli::{Cli, Cmd, CLI_ARGS},
     platform::{Driver, Machine, Store},
 };
+use anyhow::{anyhow, bail};
 use clap::{CommandFactory, Parser};
 use config::{git_url::GitUrl, CodchiConfig, MachineConfig};
 use console::style;
+use ipc::service::{ApiClient, ServerStatus};
 use ipc::{service::Api, RUNTIME_MT};
 use itertools::Itertools;
 use log::Level;
@@ -27,7 +28,9 @@ use std::{
 
 pub mod cli;
 pub mod config;
+use crate::logging::log_progress;
 pub use shared::consts;
+
 pub mod logging;
 pub mod module;
 pub mod platform;
@@ -83,28 +86,34 @@ Thank you kindly!"#
     logging::init(cli.verbose.log_level_filter())?;
 
     log::trace!("Started codchi with args: {:?}", cli);
+    RUNTIME_MT.block_on(async {
+        progress_scope! {
+            set_progress_status("Connecting to server...");
+            let mut client = ApiClient::connect().await?;
+            let mut watch = client .wait_ready().await?;
+            let mut log = client.stream_log().await?;
+            loop {
+                tokio::select! {
+                    Ok(()) = watch.changed() => {
+                       let status = watch.borrow_and_update()?.clone();
+                       if status == ServerStatus::Degraded {
+                           bail!("Server is degraded. Inspect logs for further details");
+                       } else if status == ServerStatus::Ready {
+                           break;
+                       } else {
+                           set_progress_status(format!("Connecting to server [{status:?}]..."));
+                       }
+                    }
+                    Ok(log_line) = log.recv() => {
+                       log_progress(&format!("server/{}", log_line.topic), log_line.level.into(), &log_line.text);
+                    }
+                }
+             }
+             anyhow::Ok(())
+        }
+    })?;
 
-    {
-        // RUNTIME_MT.block_on(async {
-        //     let mut watch = ipc::client::connect().await?.wait_ready().await?;
-        //     while let Ok(()) = watch.changed().await {
-        //         let value = watch.borrow_and_update()?;
-        //         println!("Server Status: {:?}", *value);
-        //     }
-        //     anyhow::Ok(())
-        // })?;
-        RUNTIME_MT.block_on(async {
-            let mut log = ipc::client::connect()
-                .await?
-                .stream_store_init_log()
-                .await?;
-            while let Ok(line) = log.recv().await {
-                println!("[{}]: {}", line.topic.unwrap_or_default(), line.text);
-            }
-            anyhow::Ok(())
-        })?;
-        exit(0);
-    }
+    log::trace!("Server is ready");
 
     // preload config
     let _ = CodchiConfig::get();
@@ -199,7 +208,7 @@ Thank you kindly!"#
                 }
                 anyhow::Ok(())
             })()
-            .inspect_err(|_| interrupt_machine_creation(machine_name))?;
+                .inspect_err(|_| interrupt_machine_creation(machine_name))?;
         }
 
         Cmd::Clone {

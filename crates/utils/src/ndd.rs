@@ -11,6 +11,7 @@ use sysinfo::{CpuRefreshKind, Networks, RefreshKind, System};
 /// build where it left)
 
 const NIX_LOG_ERR: u64 = 0;
+const NIX_LOG_WARN: u64 = 1;
 // const NIX_LOG_DEBUG: u64 = 3;
 const NIX_LOG_TRACE: u64 = 4;
 
@@ -72,7 +73,7 @@ CPU: {cpu_usage}, Network: {network_usage_kbs}, Stdout/err: {stdout_inactivity:?
                 last_activity = Instant::now();
             } else if inactivity > max_inactive_duration {
                 log(
-                    NIX_LOG_ERR,
+                    NIX_LOG_WARN,
                     "Detected deadlock. Deleting locks and restarting nix...",
                 );
                 child.kill().expect("Failed to kill nix process");

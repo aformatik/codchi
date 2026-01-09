@@ -83,7 +83,7 @@ impl CodchiConfig {
                 |content| Ok(toml_edit::de::from_str(content)?),
                 || Ok(Self::default()),
             )?;
-            log::trace!("Read codchi config: {cfg:?}");
+            tracing::trace!("Read codchi config: {cfg:?}");
             Ok(cfg)
         });
         result.expect("Failed initializing Driver")

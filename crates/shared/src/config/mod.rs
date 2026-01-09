@@ -60,7 +60,9 @@ impl LockedConfig {
         let val = if !content.is_empty() {
             parse(&content)
                 .map_err(|err| {
-                    log::warn!("Failed parsing config at '{path:?}':\n{err}\n Using default value.")
+                    tracing::warn!(
+                        "Failed parsing config at '{path:?}':\n{err}\n Using default value."
+                    )
                 })
                 .or_else(|_| default())
         } else {

@@ -8,8 +8,7 @@
 
 , lib
 
-, store-lxd-tarball
-, machine-lxd-tarball
+, store-podman-image
 , targetPlatform # one of ["linux" "windows"]
 
 , makeRustPlatform
@@ -172,8 +171,7 @@ let
     linux = rec {
       CARGO_BUILD_TARGET = "x86_64-unknown-linux-gnu";
 
-      CODCHI_LXD_CONTAINER_STORE = store-lxd-tarball;
-      CODCHI_LXD_CONTAINER_MACHINE = machine-lxd-tarball;
+      CODCHI_PODMAN_STORE_IMAGE = store-podman-image;
 
       passthru = {
         inherit nix-git;
@@ -212,8 +210,7 @@ let
         patchelf "$out/bin/codchi" \
           --add-rpath ${lib.makeLibraryPath buildInputs}
         wrapProgram "$out/bin/codchi" \
-          --set CODCHI_LXD_CONTAINER_STORE $CODCHI_LXD_CONTAINER_STORE \
-          --set CODCHI_LXD_CONTAINER_MACHINE $CODCHI_LXD_CONTAINER_MACHINE
+          --set CODCHI_PODMAN_STORE_IMAGE $CODCHI_PODMAN_STORE_IMAGE
       '';
     };
   };

@@ -7,7 +7,7 @@
   };
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       flake = false; # prevent fetching transitive inputs TODO
@@ -49,8 +49,8 @@
                 };
               }
             );
-            store-lxd = self.mkContainer "store" "lxd";
-            store-lxd-tarball = self.store-lxd.config.build.tarball;
+            store-podman = self.mkContainer "store" "podman";
+            store-podman-image = self.store-podman.config.build.dockerImage;
             store-wsl = self.mkContainer "store" "wsl";
             store-wsl-tarball = self.store-wsl.config.build.tarball;
 
@@ -86,11 +86,17 @@
           };
 
           packages.${system} = {
-            inherit (pkgs) store-lxd store-wsl machine-lxd machine-wsl codchi-utils;
+            inherit (pkgs) store-podman store-podman-image store-wsl machine-lxd machine-wsl codchi-utils;
             default = pkgs.codchi;
             windows = pkgs.codchi-windows;
             inherit (pkgs.pkgsStatic) busybox;
             # editor = pkgs.nixvim.makeNixvim (import ./editor.nix);
+            foo = pkgs.dockerTools.buildImage {
+              name = "hello";
+              tag = "latest";
+              copyToRoot = pkgs.hello;
+              config = { cmd = [ "/bin/hello" ]; };
+            };
           };
 
           devShells.${system} = {
@@ -111,7 +117,6 @@
                 self.packages.${system}.default
                 self.packages.${system}.windows
               ]
-              ++ container self.packages.${system}.store-lxd
               ++ container self.packages.${system}.store-wsl
               ++ container self.packages.${system}.machine-lxd
               ++ container self.packages.${system}.machine-wsl

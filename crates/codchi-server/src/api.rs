@@ -1,4 +1,5 @@
 use crate::state::ServerState;
+use futures::StreamExt;
 use futures_signals::signal::SignalExt;
 use ipc::service::*;
 use remoc::{
@@ -7,6 +8,7 @@ use remoc::{
 };
 use shared::util::{ResultExt, UtilExt};
 use tracing::instrument;
+use ipc::logging::LogLine;
 
 #[rtc::async_trait]
 impl Api for ServerState {
@@ -15,6 +17,7 @@ impl Api for ServerState {
         let (tx, rx) = rch::watch::channel(self.status.lock_ref().clone());
 
         let status_signal = self.status.signal_cloned();
+
         tokio::spawn(
             status_signal
                 .stop_if(|status| matches!(status, ServerStatus::Ready | ServerStatus::Degraded))
@@ -36,15 +39,15 @@ impl Api for ServerState {
     }
 
     #[instrument]
-    async fn stream_store_init_log(&mut self) -> RtcResult<broadcast::Receiver<LogLine>> {
-        Ok(self.store_init_log.subscribe(5))
+    async fn stream_log(&mut self) -> RtcResult<broadcast::Receiver<LogLine>> {
+        Ok(self.log.subscribe(5))
     }
 
-    #[instrument]
-    async fn stream_machine_init_log(
-        &mut self,
-        machine_name: String,
-    ) -> RtcResult<broadcast::Receiver<LogLine>> {
-        todo!()
-    }
+    // #[instrument]
+    // async fn stream_machine_init_log(
+    //     &mut self,
+    //     machine_name: String,
+    // ) -> RtcResult<broadcast::Receiver<LogLine>> {
+    //     todo!()
+    // }
 }

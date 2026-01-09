@@ -1,11 +1,13 @@
-use std::{
-    env, fs,
-    path::PathBuf,
-    sync::{mpsc::channel, OnceLock},
-    thread,
-    time::Duration,
+use super::{
+    lxd::{self, container::LxdDevice},
+    shell::LxdShellImpl,
 };
-
+use crate::{
+    cmd::{LinuxCommand, NixDriver},
+    log,
+    platform::{shell::ShellDriver, store::Store},
+    state::{PlatformStatus, DEBUG},
+};
 use anyhow::Context;
 use ipc::{service::LogLevel, RUNTIME_MT};
 use shared::{
@@ -13,16 +15,12 @@ use shared::{
     consts::{self, ToPath},
     util::{PathExt, ResultExt},
 };
-
-use crate::{
-    cmd::{LinuxCommand, NixDriver},
-    platform::{shell::ShellDriver, store::Store},
-    state::{PlatformStatus, DEBUG},
-};
-
-use super::{
-    lxd::{self, container::LxdDevice},
-    shell::LxdShellImpl,
+use std::{
+    env, fs,
+    path::PathBuf,
+    sync::{mpsc::channel, OnceLock},
+    thread,
+    time::Duration,
 };
 
 pub struct StoreImpl;
@@ -53,7 +51,7 @@ Please see <https://codchi.dev/introduction/installation#linux> for setup instru
         )
     }
 
-    fn install<L: crate::state::HasLogger>(&self, logger: &L) -> anyhow::Result<()> {
+    fn install(&self) -> anyhow::Result<()> {
         let rootfs = env::var("CODCHI_LXD_CONTAINER_STORE")
                         .map(PathBuf::from)
                         .context("Failed reading $CODCHI_LXD_CONTAINER_STORE from environment. This indicates a broken build.")?;
@@ -89,8 +87,7 @@ Please see <https://codchi.dev/introduction/installation#linux> for setup instru
         Ok(())
     }
 
-    fn start<L: crate::state::HasLogger>(&self, logger: &'static L) -> anyhow::Result<()> {
-        thread::sleep(Duration::from_secs(5));
+    fn start(&self) -> anyhow::Result<()> {
         lxd::container::config_set(
             consts::CONTAINER_STORE_NAME,
             &format!("environment.CODCHI_DEBUG={}", if *DEBUG { "1" } else { "" }),
@@ -113,12 +110,10 @@ Please see <https://codchi.dev/introduction/installation#linux> for setup instru
                 )))
                 // .output_ok()
                 .output_ok_streaming(cancel_rx, |line| {
-                    logger.log(LogLevel::Debug, Some("store_init".to_string()), line);
+                    tracing::debug!(topic = log::TOPIC_STORE, line);
                     //     tracing::info!("store_init: {line}");
                 })
         });
-        // thread::spawn(move || {
-        // });
         self.shell().wait_pinging_store()?;
         let _ = cancel_tx
             .send(())
@@ -127,7 +122,7 @@ Please see <https://codchi.dev/introduction/installation#linux> for setup instru
         anyhow::Ok(())
     }
 
-    fn stop<L: crate::state::HasLogger>(&self, logger: &L) -> anyhow::Result<()> {
+    fn stop(&self) -> anyhow::Result<()> {
         todo!()
     }
 }

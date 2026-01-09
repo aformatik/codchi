@@ -9,10 +9,13 @@ nightly = []
 
 [dependencies]
 anyhow.workspace = true
+tracing.workspace = true
 log.workspace = true
 tokio.workspace = true
 shared.workspace = true
 serde.workspace = true
+num_enum.workspace = true
+#tracing.workspace = true
 # tarpc.workspace = true
 # tsyncp = { version = "0.4.1", default-features = false, features =  [ "bincode"] }
 remoc.workspace = true

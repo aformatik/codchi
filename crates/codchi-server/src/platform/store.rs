@@ -1,19 +1,7 @@
 use super::shell::ShellDriver;
-use crate::{
-    consts::{self, store, ToPath},
-    state::{HasLogger, PlatformStatus},
-};
-
-use anyhow::{bail, Context, Result};
-use serde::{Deserialize, Serialize};
-use shared::util::{LinuxPath, PathExt};
-use std::{
-    collections::HashMap,
-    fs::{self, File},
-    io::Write,
-    path::PathBuf,
-    sync::mpsc::channel,
-};
+use crate::state::PlatformStatus;
+use shared::consts;
+use std::sync::mpsc::Receiver;
 
 // use super::cmd::nix::NixDriver;
 //
@@ -39,7 +27,7 @@ use std::{
 // /// The interface to a platform specific store driver (LXD / WSL) which provides access to nix.
 pub trait Store: Sized {
     /// Attribute of the store tar.gz in codchi's flake.nix
-    fn NIX_FLAKE_ATTRIBUTE(&self) -> &'static str;
+    fn get_nix_flake_attribute(&self) -> &'static str;
 
     /// Get driver for running shell commands inside store
     fn shell(&self) -> impl ShellDriver + 'static;
@@ -47,15 +35,16 @@ pub trait Store: Sized {
     /// Get driver for running shell commands inside store
     fn read_platform_status(&self) -> anyhow::Result<PlatformStatus>;
 
-    /// Install store container
-    fn install<L: HasLogger>(&self, logger: &L) -> anyhow::Result<()>;
+    /// Register the store container with the platform driver. Don't start it as starting the first
+    /// time / subsequent times should be isomorphic
+    fn register(&self) -> anyhow::Result<()>;
 
-    /// Start store container. This method should verify that the container was started /
-    /// initialized successfully and everything is up and running
-    fn start<L: HasLogger>(&self, logger: &'static L) -> anyhow::Result<()>;
+    /// Start store container and return stream to its logs. Each platform implementation should
+    /// healthcheck the platform side. Health checks inside the container are done centrally.
+    fn start(&self) -> anyhow::Result<Receiver<String>>;
 
     /// Stop store container
-    fn stop<L: HasLogger>(&self, logger: &L) -> anyhow::Result<()>;
+    fn stop(&self) -> anyhow::Result<()>;
 
     //     /// Import (if not existant) and start the store container (if not running). Must wait for it
     //     /// to start properly
@@ -153,4 +142,24 @@ pub trait Store: Sized {
     //
     //         Ok(host_path)
     //     }
+}
+
+pub trait GenFlake {
+    fn gen_flake(&self) -> String;
+}
+
+impl<T: Store> GenFlake for T {
+    fn gen_flake(&self) -> String {
+        let flake_url = consts::CODCHI_FLAKE_URL;
+        let system = consts::NIX_SYSTEM;
+        let store_package = self.get_nix_flake_attribute();
+        format!(
+            r#"{{
+  inputs.codchi.url = "{flake_url}";
+  outputs = {{ codchi, ... }}: {{
+    packages.{system}.default = codchi.packages.{system}.{store_package}.config.build.runtime;
+  }};
+}}"#
+        )
+    }
 }

@@ -150,12 +150,6 @@ pub trait NixDriver: ShellDriver {
         .wait_ok()
         .is_ok()
     }
-    fn wait_pinging_store(&self) -> Result<()> {
-        while !self.ping_store() {
-            thread::sleep(Duration::from_millis(250));
-        }
-        Ok(())
-    }
 }
 
 impl<T: ShellDriver> NixDriver for T {}

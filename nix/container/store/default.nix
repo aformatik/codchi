@@ -4,7 +4,7 @@ let inherit (lib) mkOption mkEnableOption types mkIf;
 in
 {
   imports = [
-    ./lxd.nix
+    ./podman.nix
     ./wsl.nix
   ];
 

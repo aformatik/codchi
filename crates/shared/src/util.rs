@@ -157,7 +157,7 @@ impl<T, E: Display> ResultExt<E> for Result<T, E> {
 
     fn trace_err(self, msg: &str) -> Self {
         self.map_err(|err| {
-            log::debug!("{msg}: {err}");
+            tracing::debug!("{msg}: {err}");
             err
         })
     }
@@ -171,7 +171,7 @@ where
     let result = f();
     let duration = start.elapsed();
 
-    log::debug!("Time elapsed in {title}: {duration:?}");
+    tracing::debug!("Time elapsed in {title}: {duration:?}");
 
     result
 }
@@ -190,7 +190,7 @@ where
 
     f(&path).finally(|| {
         let _ = fs::remove_file(&path)
-            .map_err(|err| log::debug!("Failed deleting tmpfile {}: {err}", path.display()));
+            .map_err(|err| tracing::debug!("Failed deleting tmpfile {}: {err}", path.display()));
     })
 }
 
@@ -228,7 +228,7 @@ pub trait PathExt: AsRef<Path> + Sized + Debug {
         Ok(self)
     }
 
-    /// Remove the directory and log::warn if an error occured
+    /// Remove the directory and tracing::warn if an error occured
     fn remove(self) {
         if let Ok(meta) = fs::metadata(&self) {
             let result = if meta.is_dir() {
@@ -237,10 +237,10 @@ pub trait PathExt: AsRef<Path> + Sized + Debug {
                 fs::remove_file(&self)
             };
             if let Err(err) = result {
-                log::warn!("Could not remove '{self:?}'. Reason: {err}");
+                tracing::warn!("Could not remove '{self:?}'. Reason: {err}");
             }
         } else {
-            log::trace!("Not removing non existant path '{self:?}'");
+            tracing::trace!("Not removing non existant path '{self:?}'");
         }
     }
 

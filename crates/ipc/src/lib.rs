@@ -1,4 +1,3 @@
-#![feature(let_chains)]
 #![feature(once_cell_try)]
 // #![deny(unused_crate_dependencies)]
 
@@ -11,6 +10,8 @@ use tokio::runtime::Runtime;
 
 pub mod client;
 pub mod service;
+pub mod health;
+pub mod logging;
 
 pub const SERVER_ADDR: (IpAddr, u16) = (SERVER_IP, SERVER_PORT);
 pub const SERVER_IP: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);

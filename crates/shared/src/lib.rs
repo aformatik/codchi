@@ -1,4 +1,3 @@
-#![feature(let_chains)]
 #![feature(once_cell_try)]
 #![deny(unused_crate_dependencies)]
 pub mod cmd;
