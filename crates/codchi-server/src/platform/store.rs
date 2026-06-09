@@ -1,7 +1,13 @@
 use super::shell::ShellDriver;
+use crate::platform::cmd::{LinuxCommand, NixDriver};
 use crate::state::PlatformStatus;
+use anyhow::Context;
+use ipc::health::HealthCheck;
+use shared::cmd::CommandExt;
 use shared::consts;
 use std::sync::mpsc::Receiver;
+use std::thread;
+use std::time::{Duration, SystemTime};
 
 // use super::cmd::nix::NixDriver;
 //
@@ -45,6 +51,48 @@ pub trait Store: Sized {
 
     /// Stop store container
     fn stop(&self) -> anyhow::Result<()>;
+
+    fn check_health(&self) -> HealthCheck {
+        let shell = self.shell();
+
+        try {
+            // check if basic shell command in store succeeds
+            shell
+                .build(LinuxCommand::run("echo", &[]))
+                .wait_ok()
+                .context("Failed to run basic shell command in store container")?;
+            // check if staticBin is installed
+            shell
+                .build(LinuxCommand::run("nix", &["--version"]))
+                .wait_ok()
+                .context("Failed to run package from static binaries")?;
+            // check if runtimePackages are installed
+            shell
+                .build(LinuxCommand::run("git", &["--version"]))
+                .wait_ok()
+                .context("Failed to run package from runtime packages")?;
+
+            let start = SystemTime::now();
+            let mut ping_success = shell.ping_store();
+            let max_ping_duration = Duration::from_secs(10);
+            while !ping_success
+                && SystemTime::now()
+                    .duration_since(start)
+                    .unwrap_or(Duration::from_millis(0))
+                    < max_ping_duration
+            {
+                thread::sleep(Duration::from_millis(250));
+                ping_success = shell.ping_store();
+            }
+
+            if !ping_success {
+                Err(anyhow::anyhow!(
+                    "Failed to ping store after {max_ping_duration:?}"
+                ))?;
+            }
+        }
+        .into()
+    }
 
     //     /// Import (if not existant) and start the store container (if not running). Must wait for it
     //     /// to start properly

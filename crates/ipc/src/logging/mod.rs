@@ -39,18 +39,18 @@ pub enum LogMessage {
     Text(String),
 }
 
-// impl Into<Level> for LogLevel {
-//     fn into(self) -> Level {
-//         match self {
-//             LogLevel::Error => Level::Error,
-//             LogLevel::Warning => Level::Warn,
-//             LogLevel::Info => Level::Info,
-//             LogLevel::Debug => Level::Debug,
-//             LogLevel::Trace => Level::Trace,
-//         }
-//     }
-// }
-//
+impl Into<log::Level> for LogLevel {
+    fn into(self) -> log::Level {
+        match self {
+            LogLevel::Error => log::Level::Error,
+            LogLevel::Warning => log::Level::Warn,
+            LogLevel::Info => log::Level::Info,
+            LogLevel::Debug => log::Level::Debug,
+            LogLevel::Trace => log::Level::Trace,
+        }
+    }
+}
+
 // impl From<Level> for LogLevel {
 //     fn from(value: Level) -> Self {
 //         match value {

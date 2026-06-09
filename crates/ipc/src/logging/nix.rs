@@ -1,7 +1,8 @@
+use crate::logging::LogLevel;
+use log::Level;
 /// from https://github.com/dramforever/nix-json-progress/blob/main/src/log_item.rs
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use remoc::rtc::{Deserialize, Serialize};
-use crate::logging::LogLevel;
 
 #[derive(
     Clone,
@@ -39,6 +40,21 @@ impl From<Verbosity> for LogLevel {
             Verbosity::Chatty => LogLevel::Trace,
             Verbosity::Debug => LogLevel::Trace,
             Verbosity::Vomit => LogLevel::Trace,
+        }
+    }
+}
+
+impl From<Verbosity> for Level {
+    fn from(value: Verbosity) -> Self {
+        match value {
+            Verbosity::Error => Level::Error,
+            Verbosity::Warn => Level::Info,
+            Verbosity::Notice => Level::Info,
+            Verbosity::Info => Level::Debug,
+            Verbosity::Talkative => Level::Trace,
+            Verbosity::Chatty => Level::Trace,
+            Verbosity::Debug => Level::Trace,
+            Verbosity::Vomit => Level::Trace,
         }
     }
 }
@@ -102,7 +118,9 @@ pub enum Activity {
 //     }
 // }
 
-#[derive(Clone, Copy, Debug, TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Serialize, Deserialize,
+)]
 #[repr(i64)]
 // #[non_exhaustive]
 pub enum ActivityType {

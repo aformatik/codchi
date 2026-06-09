@@ -1,0 +1,3141 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Codchi API",
+    "description": "Per-user codchi-server v1 contract. See v1/phases/00-contract-decisions.md.",
+    "version": "1"
+  },
+  "paths": {
+    "/v1/server": {
+      "get": {
+        "summary": "Get server status",
+        "operationId": "server_status",
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Get server status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/machines": {
+      "get": {
+        "summary": "List machines",
+        "operationId": "list_machines",
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "List machines",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MachineView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a machine (job)",
+        "operationId": "create_machine",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMachineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Create a machine (job)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView_for_Null"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/machines/{id}": {
+      "get": {
+        "summary": "Get a machine",
+        "operationId": "get_machine",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Get a machine",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a machine (job)",
+        "operationId": "delete_machine",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Delete a machine (job)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView_for_Null"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/machines/{id}/clone": {
+      "post": {
+        "summary": "Clone a machine (job)",
+        "operationId": "clone_machine",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloneMachineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Clone a machine (job)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView_for_Null"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/machines/{id}/modules": {
+      "post": {
+        "summary": "Set a machine's modules",
+        "operationId": "set_modules",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetModulesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Set a machine's modules"
+          }
+        }
+      }
+    },
+    "/v1/machines/{id}/secrets": {
+      "get": {
+        "summary": "List declared secret keys",
+        "operationId": "list_secrets",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "List declared secret keys",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SecretKey"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/machines/{id}/secrets/{key}": {
+      "get": {
+        "summary": "Get a secret value",
+        "operationId": "get_secret",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Get a secret value",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Set a secret value",
+        "operationId": "set_secret",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSecretRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Set a secret value"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a secret",
+        "operationId": "delete_secret",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Delete a secret"
+          }
+        }
+      }
+    },
+    "/v1/machines/{id}/rebuild": {
+      "post": {
+        "summary": "Rebuild a machine (job)",
+        "operationId": "rebuild",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Rebuild a machine (job)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView_for_Rebuilt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/machines/{id}/update": {
+      "post": {
+        "summary": "Update a machine (job)",
+        "operationId": "update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Update a machine (job)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView_for_Updated"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/machines/{id}/generations": {
+      "get": {
+        "summary": "List machine generations",
+        "operationId": "list_generations",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "List machine generations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GenerationView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/machines/{id}/generations/{generation}/activate": {
+      "post": {
+        "summary": "Activate a generation (job)",
+        "operationId": "activate_generation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          },
+          {
+            "in": "path",
+            "name": "generation",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Activate a generation (job)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView_for_Null"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/store/generations": {
+      "get": {
+        "summary": "List store generations",
+        "operationId": "list_store_generations",
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "List store generations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StoreGenerationView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/resolve-config": {
+      "post": {
+        "summary": "Resolve a flake's modules (job)",
+        "operationId": "resolve_config",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Resolve a flake's modules (job)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView_for_ConfigResolution"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/machines/{id}/exec": {
+      "post": {
+        "summary": "Prepare an exec session (job)",
+        "operationId": "prepare_exec",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareExecRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Prepare an exec session (job)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView_for_ExecPlan"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/{id}": {
+      "get": {
+        "summary": "Get a job",
+        "operationId": "get_job",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Get a job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView_for_JobOutput"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/{id}/cancel": {
+      "post": {
+        "summary": "Cancel a job",
+        "operationId": "cancel_job",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Cancel a job"
+          }
+        }
+      }
+    },
+    "/v1/jobs/{id}/events": {
+      "get": {
+        "summary": "Stream job events (NDJSON)",
+        "operationId": "stream_job_events",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          },
+          {
+            "in": "query",
+            "name": "follow",
+            "schema": {
+              "description": "Keep streaming after the current tail. Default `true`.",
+              "default": true,
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "in": "query",
+            "name": "since_seq",
+            "schema": {
+              "description": "Resume strictly after this sequence (exclusive). Wins over `tail`.",
+              "default": null,
+              "$ref": "#/components/schemas/EventSeq",
+              "nullable": true
+            },
+            "style": "form"
+          },
+          {
+            "in": "query",
+            "name": "tail",
+            "schema": {
+              "description": "Return the last N events before following. Default 200. Ignored if `since_seq` is set (Q2 precedence).",
+              "default": null,
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0,
+              "nullable": true
+            },
+            "style": "form"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Stream job events (NDJSON)",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/doctor": {
+      "get": {
+        "summary": "Get cached doctor findings",
+        "operationId": "doctor",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "machine",
+            "schema": {
+              "description": "Restrict to a single machine, if set.",
+              "default": null,
+              "type": "string",
+              "nullable": true
+            },
+            "style": "form"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Get cached doctor findings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoctorReport"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/doctor/scan": {
+      "post": {
+        "summary": "Run a doctor scan (job)",
+        "operationId": "doctor_scan",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DoctorOpts"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Run a doctor scan (job)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView_for_DoctorReport"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/doctor/findings/{id}/fix": {
+      "post": {
+        "summary": "Fix a finding (job)",
+        "operationId": "doctor_fix",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Fix a finding (job)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView_for_Null"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/migration/plan": {
+      "get": {
+        "summary": "Get the beta migration plan",
+        "operationId": "migration_plan",
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Get the beta migration plan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MigrationPlan"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/migration/run": {
+      "post": {
+        "summary": "Run beta migration (job)",
+        "operationId": "migration_run",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MigrationOpts"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Run beta migration (job)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView_for_MigrationSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "description": "Typed API error. Serialized as an internally-tagged object with a stable `code` discriminator, e.g. `{\"code\":\"machine_not_found\",\"machine\":\"foo\"}`.",
+        "oneOf": [
+          {
+            "description": "No machine with this id exists.",
+            "type": "object",
+            "required": [
+              "code",
+              "machine"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "machine_not_found"
+                ]
+              },
+              "machine": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "description": "Another writer job holds this machine (P7 rule 2).",
+            "type": "object",
+            "required": [
+              "code",
+              "job",
+              "machine"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "machine_busy"
+                ]
+              },
+              "job": {
+                "$ref": "#/components/schemas/JobId"
+              },
+              "machine": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "description": "No job with this id exists, or its metadata was pruned.",
+            "type": "object",
+            "required": [
+              "code",
+              "job"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "job_not_found"
+                ]
+              },
+              "job": {
+                "$ref": "#/components/schemas/JobId"
+              }
+            }
+          },
+          {
+            "description": "The job is past the point where cancellation is accepted (P7).",
+            "type": "object",
+            "required": [
+              "code",
+              "job",
+              "state"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "job_not_cancellable"
+                ]
+              },
+              "job": {
+                "$ref": "#/components/schemas/JobId"
+              },
+              "state": {
+                "$ref": "#/components/schemas/JobState"
+              }
+            }
+          },
+          {
+            "description": "The store is unavailable, migrating, or needs repair (P7 rule 5).",
+            "type": "object",
+            "required": [
+              "code",
+              "reason"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "store_unavailable"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "description": "A store repair/migration job is already running (P7).",
+            "type": "object",
+            "required": [
+              "code",
+              "job"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "store_busy"
+                ]
+              },
+              "job": {
+                "$ref": "#/components/schemas/JobId"
+              }
+            }
+          },
+          {
+            "description": "The on-disk SQLite schema must be migrated before serving.",
+            "type": "object",
+            "required": [
+              "code",
+              "current",
+              "required"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "schema_migration_required"
+                ]
+              },
+              "current": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              },
+              "required": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            }
+          },
+          {
+            "description": "Requested `since_seq` is older than retained events (Q2 → `410 Gone`).",
+            "type": "object",
+            "required": [
+              "code",
+              "oldest",
+              "requested"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "resume_gap_too_large"
+                ]
+              },
+              "oldest": {
+                "$ref": "#/components/schemas/EventSeq"
+              },
+              "requested": {
+                "$ref": "#/components/schemas/EventSeq"
+              }
+            }
+          },
+          {
+            "description": "The client and server disagree on the API major version (Q5).",
+            "type": "object",
+            "required": [
+              "client",
+              "code",
+              "server"
+            ],
+            "properties": {
+              "client": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "api_version_mismatch"
+                ]
+              },
+              "server": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            }
+          },
+          {
+            "description": "Implicit start blocked because declared secrets are unset (R5).",
+            "type": "object",
+            "required": [
+              "code",
+              "keys",
+              "machine"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "missing_required_secrets"
+                ]
+              },
+              "keys": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SecretKey"
+                }
+              },
+              "machine": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "description": "A request field failed validation (P4). `field` is the request field path (e.g. `id`, `source`, `target`).",
+            "type": "object",
+            "required": [
+              "code",
+              "field",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "field": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "description": "Unexpected server-side failure.",
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "internal"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "CloneMachineRequest": {
+        "description": "Clone an existing machine into a new one (job). The source is the `{id}` path segment of `POST /machines/{id}/clone`; only the new name travels in the body.",
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "type": "string"
+          }
+        }
+      },
+      "Component": {
+        "description": "The subsystem a finding pertains to.",
+        "type": "string",
+        "enum": [
+          "server",
+          "store",
+          "machine",
+          "job",
+          "migration"
+        ]
+      },
+      "ConfigResolution": {
+        "description": "Typed output of `resolve_config` and the matching [`crate::dto::job::JobOutput`] variant.",
+        "type": "object",
+        "required": [
+          "available_modules",
+          "nixpkgs_input_present"
+        ],
+        "properties": {
+          "available_modules": {
+            "description": "Modules discovered in the flake.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModuleSpec"
+            }
+          },
+          "nixpkgs_input_present": {
+            "description": "Whether the flake exposes a `nixpkgs` input that machines may follow.",
+            "type": "boolean"
+          }
+        }
+      },
+      "CreateMachineRequest": {
+        "description": "Create a new machine (job). All inputs are supplied up front; the job runs to success or fails (R9).",
+        "type": "object",
+        "required": [
+          "id",
+          "modules"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "keep_on_fail": {
+            "description": "Retain the failed machine row + artifacts on failure for introspection (R9). Defaults to `false` (tear down completely).",
+            "default": false,
+            "type": "boolean"
+          },
+          "modules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModuleSpec"
+            }
+          }
+        }
+      },
+      "DoctorOpts": {
+        "description": "Options for the `doctor` read and `doctor_scan` job.",
+        "type": "object",
+        "properties": {
+          "machine": {
+            "description": "Restrict to a single machine, if set.",
+            "default": null,
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "DoctorReport": {
+        "description": "A point-in-time report of findings.",
+        "type": "object",
+        "required": [
+          "findings",
+          "generated_at"
+        ],
+        "properties": {
+          "findings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            }
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Event": {
+        "description": "One event on a job stream. Adding variants is non-breaking; renaming or removing one is breaking (Q5).\n\nPer R8 these split across persistence tiers: `Progress` is a throttled in-memory aggregate (never persisted per-delta); the raw build firehose is live-only `Log` (topic `build`) and is not replayed; `Phase`, `StateChange`, `NixBuild`, `HealthFinding`, and `Log` for nix `Msg{Error,Warn}` / eval errors are the durable, replayable tier.",
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "kind",
+              "level",
+              "message",
+              "seq",
+              "topic",
+              "ts"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "log"
+                ]
+              },
+              "level": {
+                "$ref": "#/components/schemas/LogLevel"
+              },
+              "message": {
+                "type": "string"
+              },
+              "seq": {
+                "$ref": "#/components/schemas/EventSeq"
+              },
+              "topic": {
+                "type": "string"
+              },
+              "ts": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "done",
+              "kind",
+              "phase",
+              "seq",
+              "ts"
+            ],
+            "properties": {
+              "done": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "progress"
+                ]
+              },
+              "phase": {
+                "type": "string"
+              },
+              "seq": {
+                "$ref": "#/components/schemas/EventSeq"
+              },
+              "total": {
+                "default": null,
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0,
+                "nullable": true
+              },
+              "ts": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "seq",
+              "status",
+              "ts"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "phase"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "seq": {
+                "$ref": "#/components/schemas/EventSeq"
+              },
+              "status": {
+                "$ref": "#/components/schemas/PhaseStatus"
+              },
+              "ts": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "kind",
+              "seq",
+              "state",
+              "ts"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "state_change"
+                ]
+              },
+              "seq": {
+                "$ref": "#/components/schemas/EventSeq"
+              },
+              "state": {
+                "$ref": "#/components/schemas/JobState"
+              },
+              "ts": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "drv",
+              "kind",
+              "seq",
+              "status",
+              "ts"
+            ],
+            "properties": {
+              "drv": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "nix_build"
+                ]
+              },
+              "seq": {
+                "$ref": "#/components/schemas/EventSeq"
+              },
+              "status": {
+                "$ref": "#/components/schemas/NixBuildStatus"
+              },
+              "ts": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "finding",
+              "kind",
+              "seq",
+              "ts"
+            ],
+            "properties": {
+              "finding": {
+                "$ref": "#/components/schemas/FindingId"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "health_finding"
+                ]
+              },
+              "seq": {
+                "$ref": "#/components/schemas/EventSeq"
+              },
+              "ts": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        ]
+      },
+      "EventSeq": {
+        "description": "Per-job monotonic event sequence number (Q2). Wire-stable `u64`.",
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0.0
+      },
+      "EventStreamOpts": {
+        "description": "Query options for `stream_job_events` (Q2).",
+        "type": "object",
+        "properties": {
+          "follow": {
+            "description": "Keep streaming after the current tail. Default `true`.",
+            "default": true,
+            "type": "boolean"
+          },
+          "since_seq": {
+            "description": "Resume strictly after this sequence (exclusive). Wins over `tail`.",
+            "default": null,
+            "$ref": "#/components/schemas/EventSeq",
+            "nullable": true
+          },
+          "tail": {
+            "description": "Return the last N events before following. Default 200. Ignored if `since_seq` is set (Q2 precedence).",
+            "default": null,
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0,
+            "nullable": true
+          }
+        }
+      },
+      "ExecPlan": {
+        "description": "Everything a client needs to attach an exec session once the machine is ready.",
+        "type": "object",
+        "required": [
+          "command",
+          "machine",
+          "target"
+        ],
+        "properties": {
+          "command": {
+            "description": "Resolved command line to execute inside the machine.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cwd": {
+            "description": "Working directory inside the machine, if one was resolved.",
+            "default": null,
+            "type": "string",
+            "nullable": true
+          },
+          "machine": {
+            "type": "string"
+          },
+          "target": {
+            "description": "Platform resource the client execs into (Podman container / WSL distro name, derived from the machine id).",
+            "type": "string"
+          }
+        }
+      },
+      "Finding": {
+        "description": "A single health finding produced by the reconciler or a `doctor_scan`.",
+        "type": "object",
+        "required": [
+          "auto_fixable",
+          "code",
+          "component",
+          "created_at",
+          "id",
+          "message",
+          "severity"
+        ],
+        "properties": {
+          "auto_fixable": {
+            "description": "`true` only if repair cannot touch user data or rewrite `flake.lock`.",
+            "type": "boolean"
+          },
+          "code": {
+            "description": "Stable code, e.g. `\"store.rootfs_missing\"`.",
+            "type": "string"
+          },
+          "component": {
+            "$ref": "#/components/schemas/Component"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "$ref": "#/components/schemas/FindingId"
+          },
+          "machine": {
+            "default": null,
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "description": "User-facing message; may evolve.",
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "source_job": {
+            "description": "`Some` for `doctor_scan` findings; `None` for background-reconcile.",
+            "default": null,
+            "$ref": "#/components/schemas/JobId",
+            "nullable": true
+          },
+          "suggested_action": {
+            "default": null,
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "FindingId": {
+        "description": "Finding identifier (UUID v7).",
+        "type": "string",
+        "format": "uuid"
+      },
+      "FindingsSummary": {
+        "description": "Counts of active findings by severity. Lets the tray render a badge without a `doctor` call.",
+        "type": "object",
+        "required": [
+          "critical",
+          "error",
+          "info",
+          "warning"
+        ],
+        "properties": {
+          "critical": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "error": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "info": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "warning": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          }
+        }
+      },
+      "GenerationId": {
+        "description": "Per-machine monotonic generation number.",
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0.0
+      },
+      "GenerationStatus": {
+        "description": "Lifecycle of a generation. Shared by machine and store generations.",
+        "oneOf": [
+          {
+            "description": "Currently activated.",
+            "type": "string",
+            "enum": [
+              "active"
+            ]
+          },
+          {
+            "description": "Built and retained, not active.",
+            "type": "string",
+            "enum": [
+              "inactive"
+            ]
+          },
+          {
+            "description": "Pinned against garbage collection.",
+            "type": "string",
+            "enum": [
+              "protected"
+            ]
+          },
+          {
+            "description": "Tombstoned; retained only for history.",
+            "type": "string",
+            "enum": [
+              "deleted"
+            ]
+          }
+        ]
+      },
+      "GenerationView": {
+        "description": "One machine generation (a built + activatable system).",
+        "type": "object",
+        "required": [
+          "created_at",
+          "flake_lock_hash",
+          "id",
+          "source_job",
+          "status",
+          "system_store_path"
+        ],
+        "properties": {
+          "activated_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "flake_lock_hash": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/GenerationId"
+          },
+          "source_job": {
+            "description": "The job that produced this generation.",
+            "$ref": "#/components/schemas/JobId"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GenerationStatus"
+          },
+          "system_store_path": {
+            "type": "string"
+          }
+        }
+      },
+      "JobId": {
+        "description": "Job identifier (UUID v7).",
+        "type": "string",
+        "format": "uuid"
+      },
+      "JobKind": {
+        "description": "What a job does. No `Start`/`Stop`/`Restart` (R6); no `Reconcile` (P6).",
+        "oneOf": [
+          {
+            "type": "string",
+            "enum": [
+              "init",
+              "clone",
+              "rebuild",
+              "update",
+              "delete",
+              "activate_generation",
+              "garbage_collect",
+              "migration",
+              "doctor_scan",
+              "doctor_fix"
+            ]
+          },
+          {
+            "description": "R3: read-only flake fetch+eval → [`crate::dto::config::ConfigResolution`].",
+            "type": "string",
+            "enum": [
+              "resolve"
+            ]
+          },
+          {
+            "description": "R7: ensure store+machine running, session, env → [`ExecPlan`].",
+            "type": "string",
+            "enum": [
+              "prepare_exec"
+            ]
+          }
+        ]
+      },
+      "JobOutput": {
+        "description": "Type-erased terminal success output, one variant per producing [`JobKind`]. Each variant wraps the same payload type the corresponding typed [`JobView<O>`] carries, so a `JobView<Rebuilt>` and a type-erased [`JobView`] of the same job describe the same data. Adding a variant is additive (Q5). A `None` `JobView.output` is valid for kinds with no payload (e.g. `delete`, `activate_generation`).\n\nThis is the output type of the kind-erased [`crate::service::CodchiService::get_job`]; the kind-specific job methods return a narrowed [`JobView<O>`] instead.",
+        "oneOf": [
+          {
+            "description": "Typed output of `resolve_config` and the matching [`crate::dto::job::JobOutput`] variant.",
+            "type": "object",
+            "required": [
+              "available_modules",
+              "kind",
+              "nixpkgs_input_present"
+            ],
+            "properties": {
+              "available_modules": {
+                "description": "Modules discovered in the flake.",
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ModuleSpec"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "config_resolution"
+                ]
+              },
+              "nixpkgs_input_present": {
+                "description": "Whether the flake exposes a `nixpkgs` input that machines may follow.",
+                "type": "boolean"
+              }
+            }
+          },
+          {
+            "description": "Typed success payload of a `rebuild` job: the new active generation.",
+            "type": "object",
+            "required": [
+              "generation",
+              "kind"
+            ],
+            "properties": {
+              "generation": {
+                "$ref": "#/components/schemas/GenerationId"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "rebuilt"
+                ]
+              }
+            }
+          },
+          {
+            "description": "Typed success payload of an `update` job: the new generation plus the `flake.lock` diff.",
+            "type": "object",
+            "required": [
+              "generation",
+              "input_changes",
+              "kind"
+            ],
+            "properties": {
+              "generation": {
+                "$ref": "#/components/schemas/GenerationId"
+              },
+              "input_changes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/LockInputChange"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "updated"
+                ]
+              }
+            }
+          },
+          {
+            "description": "Typed success payload of a `garbage_collect` job: bytes freed in the store.",
+            "type": "object",
+            "required": [
+              "freed_bytes",
+              "kind"
+            ],
+            "properties": {
+              "freed_bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "garbage_collected"
+                ]
+              }
+            }
+          },
+          {
+            "description": "Result summary of a completed migration.",
+            "type": "object",
+            "required": [
+              "failed",
+              "kind",
+              "migrated",
+              "skipped"
+            ],
+            "properties": {
+              "failed": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "migrated"
+                ]
+              },
+              "migrated": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              },
+              "skipped": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            }
+          },
+          {
+            "description": "A point-in-time report of findings.",
+            "type": "object",
+            "required": [
+              "findings",
+              "generated_at",
+              "kind"
+            ],
+            "properties": {
+              "findings": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Finding"
+                }
+              },
+              "generated_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "scanned"
+                ]
+              }
+            }
+          },
+          {
+            "description": "Everything a client needs to attach an exec session once the machine is ready.",
+            "type": "object",
+            "required": [
+              "command",
+              "kind",
+              "machine",
+              "target"
+            ],
+            "properties": {
+              "command": {
+                "description": "Resolved command line to execute inside the machine.",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "cwd": {
+                "description": "Working directory inside the machine, if one was resolved.",
+                "default": null,
+                "type": "string",
+                "nullable": true
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "exec_plan"
+                ]
+              },
+              "machine": {
+                "type": "string"
+              },
+              "target": {
+                "description": "Platform resource the client execs into (Podman container / WSL distro name, derived from the machine id).",
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "JobState": {
+        "description": "Job lifecycle states (P7).",
+        "type": "string",
+        "enum": [
+          "queued",
+          "running",
+          "cancel_requested",
+          "cleaning_up",
+          "succeeded",
+          "failed",
+          "cancelled"
+        ]
+      },
+      "JobView_for_ConfigResolution": {
+        "description": "The canonical view of a job, generic over its typed success output `O`.\n\nA terminal job is exactly one of: `Failed` with `error: Some(_)`, or `Succeeded` with `output` set — or `output: None` for kinds with no output (R1). The type parameter makes the success payload visible at the call site: kind-specific methods return e.g. `JobView<Rebuilt>` or `JobView<()>` (no output), while the kind-erased [`crate::service::CodchiService::get_job`] returns the default `JobView` = `JobView<JobOutput>`.",
+        "type": "object",
+        "required": [
+          "created_at",
+          "id",
+          "kind",
+          "last_event_seq",
+          "state"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "description": "`Some` iff terminal `Failed` (R1/R2).",
+            "default": null,
+            "$ref": "#/components/schemas/ApiError",
+            "nullable": true
+          },
+          "finished_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "id": {
+            "$ref": "#/components/schemas/JobId"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/JobKind"
+          },
+          "last_event_seq": {
+            "description": "Highest event sequence emitted so far.",
+            "$ref": "#/components/schemas/EventSeq"
+          },
+          "machine": {
+            "default": null,
+            "type": "string",
+            "nullable": true
+          },
+          "output": {
+            "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
+            "$ref": "#/components/schemas/ConfigResolution",
+            "nullable": true
+          },
+          "started_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "state": {
+            "$ref": "#/components/schemas/JobState"
+          }
+        }
+      },
+      "JobView_for_DoctorReport": {
+        "description": "The canonical view of a job, generic over its typed success output `O`.\n\nA terminal job is exactly one of: `Failed` with `error: Some(_)`, or `Succeeded` with `output` set — or `output: None` for kinds with no output (R1). The type parameter makes the success payload visible at the call site: kind-specific methods return e.g. `JobView<Rebuilt>` or `JobView<()>` (no output), while the kind-erased [`crate::service::CodchiService::get_job`] returns the default `JobView` = `JobView<JobOutput>`.",
+        "type": "object",
+        "required": [
+          "created_at",
+          "id",
+          "kind",
+          "last_event_seq",
+          "state"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "description": "`Some` iff terminal `Failed` (R1/R2).",
+            "default": null,
+            "$ref": "#/components/schemas/ApiError",
+            "nullable": true
+          },
+          "finished_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "id": {
+            "$ref": "#/components/schemas/JobId"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/JobKind"
+          },
+          "last_event_seq": {
+            "description": "Highest event sequence emitted so far.",
+            "$ref": "#/components/schemas/EventSeq"
+          },
+          "machine": {
+            "default": null,
+            "type": "string",
+            "nullable": true
+          },
+          "output": {
+            "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
+            "$ref": "#/components/schemas/DoctorReport",
+            "nullable": true
+          },
+          "started_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "state": {
+            "$ref": "#/components/schemas/JobState"
+          }
+        }
+      },
+      "JobView_for_ExecPlan": {
+        "description": "The canonical view of a job, generic over its typed success output `O`.\n\nA terminal job is exactly one of: `Failed` with `error: Some(_)`, or `Succeeded` with `output` set — or `output: None` for kinds with no output (R1). The type parameter makes the success payload visible at the call site: kind-specific methods return e.g. `JobView<Rebuilt>` or `JobView<()>` (no output), while the kind-erased [`crate::service::CodchiService::get_job`] returns the default `JobView` = `JobView<JobOutput>`.",
+        "type": "object",
+        "required": [
+          "created_at",
+          "id",
+          "kind",
+          "last_event_seq",
+          "state"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "description": "`Some` iff terminal `Failed` (R1/R2).",
+            "default": null,
+            "$ref": "#/components/schemas/ApiError",
+            "nullable": true
+          },
+          "finished_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "id": {
+            "$ref": "#/components/schemas/JobId"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/JobKind"
+          },
+          "last_event_seq": {
+            "description": "Highest event sequence emitted so far.",
+            "$ref": "#/components/schemas/EventSeq"
+          },
+          "machine": {
+            "default": null,
+            "type": "string",
+            "nullable": true
+          },
+          "output": {
+            "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
+            "$ref": "#/components/schemas/ExecPlan",
+            "nullable": true
+          },
+          "started_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "state": {
+            "$ref": "#/components/schemas/JobState"
+          }
+        }
+      },
+      "JobView_for_JobOutput": {
+        "description": "The canonical view of a job, generic over its typed success output `O`.\n\nA terminal job is exactly one of: `Failed` with `error: Some(_)`, or `Succeeded` with `output` set — or `output: None` for kinds with no output (R1). The type parameter makes the success payload visible at the call site: kind-specific methods return e.g. `JobView<Rebuilt>` or `JobView<()>` (no output), while the kind-erased [`crate::service::CodchiService::get_job`] returns the default `JobView` = `JobView<JobOutput>`.",
+        "type": "object",
+        "required": [
+          "created_at",
+          "id",
+          "kind",
+          "last_event_seq",
+          "state"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "description": "`Some` iff terminal `Failed` (R1/R2).",
+            "default": null,
+            "$ref": "#/components/schemas/ApiError",
+            "nullable": true
+          },
+          "finished_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "id": {
+            "$ref": "#/components/schemas/JobId"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/JobKind"
+          },
+          "last_event_seq": {
+            "description": "Highest event sequence emitted so far.",
+            "$ref": "#/components/schemas/EventSeq"
+          },
+          "machine": {
+            "default": null,
+            "type": "string",
+            "nullable": true
+          },
+          "output": {
+            "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
+            "$ref": "#/components/schemas/JobOutput",
+            "nullable": true
+          },
+          "started_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "state": {
+            "$ref": "#/components/schemas/JobState"
+          }
+        }
+      },
+      "JobView_for_MigrationSummary": {
+        "description": "The canonical view of a job, generic over its typed success output `O`.\n\nA terminal job is exactly one of: `Failed` with `error: Some(_)`, or `Succeeded` with `output` set — or `output: None` for kinds with no output (R1). The type parameter makes the success payload visible at the call site: kind-specific methods return e.g. `JobView<Rebuilt>` or `JobView<()>` (no output), while the kind-erased [`crate::service::CodchiService::get_job`] returns the default `JobView` = `JobView<JobOutput>`.",
+        "type": "object",
+        "required": [
+          "created_at",
+          "id",
+          "kind",
+          "last_event_seq",
+          "state"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "description": "`Some` iff terminal `Failed` (R1/R2).",
+            "default": null,
+            "$ref": "#/components/schemas/ApiError",
+            "nullable": true
+          },
+          "finished_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "id": {
+            "$ref": "#/components/schemas/JobId"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/JobKind"
+          },
+          "last_event_seq": {
+            "description": "Highest event sequence emitted so far.",
+            "$ref": "#/components/schemas/EventSeq"
+          },
+          "machine": {
+            "default": null,
+            "type": "string",
+            "nullable": true
+          },
+          "output": {
+            "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
+            "$ref": "#/components/schemas/MigrationSummary",
+            "nullable": true
+          },
+          "started_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "state": {
+            "$ref": "#/components/schemas/JobState"
+          }
+        }
+      },
+      "JobView_for_Null": {
+        "description": "The canonical view of a job, generic over its typed success output `O`.\n\nA terminal job is exactly one of: `Failed` with `error: Some(_)`, or `Succeeded` with `output` set — or `output: None` for kinds with no output (R1). The type parameter makes the success payload visible at the call site: kind-specific methods return e.g. `JobView<Rebuilt>` or `JobView<()>` (no output), while the kind-erased [`crate::service::CodchiService::get_job`] returns the default `JobView` = `JobView<JobOutput>`.",
+        "type": "object",
+        "required": [
+          "created_at",
+          "id",
+          "kind",
+          "last_event_seq",
+          "state"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "description": "`Some` iff terminal `Failed` (R1/R2).",
+            "default": null,
+            "$ref": "#/components/schemas/ApiError",
+            "nullable": true
+          },
+          "finished_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "id": {
+            "$ref": "#/components/schemas/JobId"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/JobKind"
+          },
+          "last_event_seq": {
+            "description": "Highest event sequence emitted so far.",
+            "$ref": "#/components/schemas/EventSeq"
+          },
+          "machine": {
+            "default": null,
+            "type": "string",
+            "nullable": true
+          },
+          "output": {
+            "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
+            "type": "null",
+            "nullable": true
+          },
+          "started_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "state": {
+            "$ref": "#/components/schemas/JobState"
+          }
+        }
+      },
+      "JobView_for_Rebuilt": {
+        "description": "The canonical view of a job, generic over its typed success output `O`.\n\nA terminal job is exactly one of: `Failed` with `error: Some(_)`, or `Succeeded` with `output` set — or `output: None` for kinds with no output (R1). The type parameter makes the success payload visible at the call site: kind-specific methods return e.g. `JobView<Rebuilt>` or `JobView<()>` (no output), while the kind-erased [`crate::service::CodchiService::get_job`] returns the default `JobView` = `JobView<JobOutput>`.",
+        "type": "object",
+        "required": [
+          "created_at",
+          "id",
+          "kind",
+          "last_event_seq",
+          "state"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "description": "`Some` iff terminal `Failed` (R1/R2).",
+            "default": null,
+            "$ref": "#/components/schemas/ApiError",
+            "nullable": true
+          },
+          "finished_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "id": {
+            "$ref": "#/components/schemas/JobId"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/JobKind"
+          },
+          "last_event_seq": {
+            "description": "Highest event sequence emitted so far.",
+            "$ref": "#/components/schemas/EventSeq"
+          },
+          "machine": {
+            "default": null,
+            "type": "string",
+            "nullable": true
+          },
+          "output": {
+            "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
+            "$ref": "#/components/schemas/Rebuilt",
+            "nullable": true
+          },
+          "started_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "state": {
+            "$ref": "#/components/schemas/JobState"
+          }
+        }
+      },
+      "JobView_for_Updated": {
+        "description": "The canonical view of a job, generic over its typed success output `O`.\n\nA terminal job is exactly one of: `Failed` with `error: Some(_)`, or `Succeeded` with `output` set — or `output: None` for kinds with no output (R1). The type parameter makes the success payload visible at the call site: kind-specific methods return e.g. `JobView<Rebuilt>` or `JobView<()>` (no output), while the kind-erased [`crate::service::CodchiService::get_job`] returns the default `JobView` = `JobView<JobOutput>`.",
+        "type": "object",
+        "required": [
+          "created_at",
+          "id",
+          "kind",
+          "last_event_seq",
+          "state"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "description": "`Some` iff terminal `Failed` (R1/R2).",
+            "default": null,
+            "$ref": "#/components/schemas/ApiError",
+            "nullable": true
+          },
+          "finished_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "id": {
+            "$ref": "#/components/schemas/JobId"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/JobKind"
+          },
+          "last_event_seq": {
+            "description": "Highest event sequence emitted so far.",
+            "$ref": "#/components/schemas/EventSeq"
+          },
+          "machine": {
+            "default": null,
+            "type": "string",
+            "nullable": true
+          },
+          "output": {
+            "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
+            "$ref": "#/components/schemas/Updated",
+            "nullable": true
+          },
+          "started_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "state": {
+            "$ref": "#/components/schemas/JobState"
+          }
+        }
+      },
+      "LockInputChange": {
+        "description": "One changed flake input in an `update` job's lock diff.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "description": "Input name in `flake.lock`.",
+            "type": "string"
+          },
+          "new_rev": {
+            "description": "New locked revision, if the input still exists after.",
+            "default": null,
+            "type": "string",
+            "nullable": true
+          },
+          "old_rev": {
+            "description": "Previous locked revision, if the input existed before.",
+            "default": null,
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "LogLevel": {
+        "description": "Log level for [`Event::Log`].",
+        "type": "string",
+        "enum": [
+          "trace",
+          "debug",
+          "info",
+          "warn",
+          "error"
+        ]
+      },
+      "MachineDetail": {
+        "description": "The detail view of a machine.",
+        "type": "object",
+        "required": [
+          "flake_lock_hash",
+          "generations",
+          "modules",
+          "secrets",
+          "view"
+        ],
+        "properties": {
+          "flake_lock_hash": {
+            "type": "string"
+          },
+          "generations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GenerationView"
+            }
+          },
+          "modules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModuleSpec"
+            }
+          },
+          "secrets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SecretKey"
+            }
+          },
+          "view": {
+            "$ref": "#/components/schemas/MachineView"
+          }
+        }
+      },
+      "MachineView": {
+        "description": "The list view of a machine. Returned from the daemon-maintained snapshot; read endpoints must not probe synchronously (P6).",
+        "type": "object",
+        "required": [
+          "id",
+          "run_status",
+          "schema_version",
+          "update_status"
+        ],
+        "properties": {
+          "active_generation": {
+            "description": "`None` ⇒ creating or failed-create (R9).",
+            "default": null,
+            "$ref": "#/components/schemas/GenerationId",
+            "nullable": true
+          },
+          "busy_with": {
+            "description": "The in-flight job owning this machine, if any.",
+            "default": null,
+            "$ref": "#/components/schemas/JobId",
+            "nullable": true
+          },
+          "findings": {
+            "description": "Active findings; `health = health(&findings)` (R10).",
+            "default": [],
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_reconcile_attempt_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "last_reconciled_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "run_status": {
+            "$ref": "#/components/schemas/RunStatus"
+          },
+          "schema_version": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "snapshot_stale": {
+            "default": false,
+            "type": "boolean"
+          },
+          "update_status": {
+            "$ref": "#/components/schemas/UpdateStatus"
+          }
+        }
+      },
+      "MigrationMachinePlan": {
+        "description": "What migrating one beta machine would do.",
+        "type": "object",
+        "required": [
+          "source_name",
+          "target"
+        ],
+        "properties": {
+          "blockers": {
+            "description": "Why this machine cannot be migrated as-is (P4 dry-run flags), if any. Empty ⇒ migratable.",
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source_name": {
+            "description": "Beta machine name as found on disk.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Proposed `MachineId` (Q1: imports the existing name).",
+            "type": "string"
+          }
+        }
+      },
+      "MigrationOpts": {
+        "description": "Options for `migration_run`.",
+        "type": "object",
+        "properties": {
+          "dry_run": {
+            "description": "Plan only; make no changes.",
+            "default": false,
+            "type": "boolean"
+          }
+        }
+      },
+      "MigrationPlan": {
+        "description": "A pure plan/read view of a beta → v1 migration.",
+        "type": "object",
+        "required": [
+          "beta_detected",
+          "machines"
+        ],
+        "properties": {
+          "beta_detected": {
+            "description": "Whether a beta installation was detected at all.",
+            "type": "boolean"
+          },
+          "machines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MigrationMachinePlan"
+            }
+          }
+        }
+      },
+      "MigrationSummary": {
+        "description": "Result summary of a completed migration.",
+        "type": "object",
+        "required": [
+          "failed",
+          "migrated",
+          "skipped"
+        ],
+        "properties": {
+          "failed": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "migrated": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          }
+        }
+      },
+      "ModuleSpec": {
+        "description": "A single module a machine pulls in. `url` is the codchi flake-url form (`<scheme>://<host>/<repo>?<query>#<attr>`, see beta `FlakeUrl`); `name` is the local handle used in CLI/config.",
+        "type": "object",
+        "required": [
+          "name",
+          "url"
+        ],
+        "properties": {
+          "is_nixpkgs_source": {
+            "description": "Whether this module supplies the machine's `nixpkgs` input (beta `nixpkgs_from`).",
+            "default": false,
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Local handle for the module (the map key in beta `MachineConfig`).",
+            "type": "string"
+          },
+          "url": {
+            "description": "Codchi flake-url including the module attribute path.",
+            "type": "string"
+          }
+        }
+      },
+      "NixBuildStatus": {
+        "description": "Nix build reference status for [`Event::NixBuild`].",
+        "type": "string",
+        "enum": [
+          "started",
+          "built",
+          "failed"
+        ]
+      },
+      "PhaseStatus": {
+        "description": "Phase boundary status for [`Event::Phase`].",
+        "type": "string",
+        "enum": [
+          "started",
+          "finished",
+          "failed"
+        ]
+      },
+      "PrepareExecRequest": {
+        "description": "Request to prepare an exec session into a machine. The target machine is the `{id}` path segment of `POST /machines/{id}/exec`; only the command body travels here.",
+        "type": "object",
+        "properties": {
+          "command": {
+            "description": "Command + args to run. `None` requests an interactive login shell.",
+            "default": null,
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        }
+      },
+      "Rebuilt": {
+        "description": "Typed success payload of a `rebuild` job: the new active generation.",
+        "type": "object",
+        "required": [
+          "generation"
+        ],
+        "properties": {
+          "generation": {
+            "$ref": "#/components/schemas/GenerationId"
+          }
+        }
+      },
+      "ResolveConfigRequest": {
+        "description": "Request to resolve a flake url into its available modules.",
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "description": "Flake url to fetch and evaluate (codchi flake-url form, the `#attr` part may be omitted — resolution discovers the available attrs).",
+            "type": "string"
+          }
+        }
+      },
+      "RunStatus": {
+        "description": "Platform liveness, from the reconciler snapshot (P6).",
+        "type": "string",
+        "enum": [
+          "stopped",
+          "running"
+        ]
+      },
+      "SchemaStatus": {
+        "description": "SQLite schema status.",
+        "type": "object",
+        "required": [
+          "current",
+          "migrating",
+          "required"
+        ],
+        "properties": {
+          "current": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "migrating": {
+            "type": "boolean"
+          },
+          "required": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          }
+        }
+      },
+      "SecretKey": {
+        "description": "A declared secret key. Values are never carried on this type.",
+        "type": "object",
+        "required": [
+          "description",
+          "has_value",
+          "name"
+        ],
+        "properties": {
+          "description": {
+            "description": "Human-readable description from the NixOS declaration.",
+            "type": "string"
+          },
+          "has_value": {
+            "description": "Whether a value is currently stored for this key.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Declared key name (matches the `codchi.secrets.env` attribute).",
+            "type": "string"
+          }
+        }
+      },
+      "ServerLifecycle": {
+        "description": "Headline daemon lifecycle state.",
+        "type": "string",
+        "enum": [
+          "starting",
+          "migrating",
+          "healthcheck",
+          "ready",
+          "degraded",
+          "stopping"
+        ]
+      },
+      "ServerStatus": {
+        "description": "Server status (P5). `api_version` is also exposed as an HTTP response header on every call; this field is authoritative for consumers of this endpoint.",
+        "type": "object",
+        "required": [
+          "api_version",
+          "findings_summary",
+          "lifecycle",
+          "schema",
+          "server_version",
+          "started_at",
+          "store"
+        ],
+        "properties": {
+          "api_version": {
+            "description": "Q5 mismatch detection.",
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "findings_summary": {
+            "$ref": "#/components/schemas/FindingsSummary"
+          },
+          "last_reconciled_at": {
+            "description": "Reconciler overall heartbeat.",
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lifecycle": {
+            "$ref": "#/components/schemas/ServerLifecycle"
+          },
+          "schema": {
+            "$ref": "#/components/schemas/SchemaStatus"
+          },
+          "server_version": {
+            "description": "Build version of the running server.",
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startup_error": {
+            "description": "`Some` only when `lifecycle` indicates a recoverable failure.",
+            "default": null,
+            "$ref": "#/components/schemas/ApiError",
+            "nullable": true
+          },
+          "store": {
+            "$ref": "#/components/schemas/StoreStatus"
+          }
+        }
+      },
+      "SetModulesRequest": {
+        "description": "Write a machine's desired module set (sync). Marks `needs_rebuild`; does not auto-trigger a rebuild (Q4).",
+        "type": "object",
+        "required": [
+          "modules"
+        ],
+        "properties": {
+          "modules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModuleSpec"
+            }
+          }
+        }
+      },
+      "SetSecretRequest": {
+        "description": "Body for `set_secret` — the plaintext value (the key is in the path).",
+        "type": "object",
+        "required": [
+          "value"
+        ],
+        "properties": {
+          "value": {
+            "description": "Plaintext secret value. Never logged; never placed on event streams.",
+            "type": "string"
+          }
+        }
+      },
+      "Severity": {
+        "description": "Finding severity, ordered least → most severe.",
+        "type": "string",
+        "enum": [
+          "info",
+          "warning",
+          "error",
+          "critical"
+        ]
+      },
+      "StoreGenerationId": {
+        "description": "Monotonic store-generation number.",
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0.0
+      },
+      "StoreGenerationView": {
+        "description": "One store generation. Read-only in v1 (no activation endpoint); exposed for diagnostics and tray display.",
+        "type": "object",
+        "required": [
+          "created_at",
+          "flake_lock_hash",
+          "id",
+          "runtime_store_path",
+          "status"
+        ],
+        "properties": {
+          "activated_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "flake_lock_hash": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/StoreGenerationId"
+          },
+          "runtime_store_path": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GenerationStatus"
+          }
+        }
+      },
+      "StoreState": {
+        "description": "Store availability, fed by the 15 s store sentinel (P6), not a fresh probe.",
+        "type": "string",
+        "enum": [
+          "up",
+          "down",
+          "recovering",
+          "unknown"
+        ]
+      },
+      "StoreStatus": {
+        "description": "Store status carried in [`ServerStatus`].",
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "last_checked_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "last_error": {
+            "default": null,
+            "type": "string",
+            "nullable": true
+          },
+          "state": {
+            "$ref": "#/components/schemas/StoreState"
+          }
+        }
+      },
+      "UpdateStatus": {
+        "description": "Desired-vs-built config status (beta's `ConfigStatus`).",
+        "type": "string",
+        "enum": [
+          "up_to_date",
+          "needs_rebuild",
+          "updates_available"
+        ]
+      },
+      "Updated": {
+        "description": "Typed success payload of an `update` job: the new generation plus the `flake.lock` diff.",
+        "type": "object",
+        "required": [
+          "generation",
+          "input_changes"
+        ],
+        "properties": {
+          "generation": {
+            "$ref": "#/components/schemas/GenerationId"
+          },
+          "input_changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LockInputChange"
+            }
+          }
+        }
+      }
+    }
+  }
+}

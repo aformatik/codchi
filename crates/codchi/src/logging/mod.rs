@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use console::style;
 use indicatif_log_bridge::LogWrapper;
+use ipc::logging::LogLine;
 use log::{Level, LevelFilter};
 use progress::{Progress, ROOT_BAR};
 use std::{
@@ -64,6 +65,10 @@ pub fn set_progress_status<M: Into<Cow<'static, str>>>(status: M) {
 
 pub fn log_progress(fallback_target: &str, fallback_level: Level, msg: &str) {
     with_progress(|progress| progress.log(fallback_target, fallback_level, msg));
+}
+
+pub fn log_line_progress(line: LogLine) {
+    with_progress(|progress| progress.log_line(line));
 }
 
 pub fn hide_progress() {

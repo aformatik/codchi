@@ -2,19 +2,19 @@
 #![deny(unused_crate_dependencies)]
 
 use crate::{
-    cli::{Cli, Cmd, CLI_ARGS},
+    cli::{CLI_ARGS, Cli, Cmd},
     platform::{Driver, Machine, Store},
 };
 use anyhow::{anyhow, bail};
 use clap::{CommandFactory, Parser};
-use config::{git_url::GitUrl, CodchiConfig, MachineConfig};
+use config::{CodchiConfig, MachineConfig, git_url::GitUrl};
 use console::style;
 use ipc::service::{ApiClient, ServerStatus};
-use ipc::{service::Api, RUNTIME_MT};
+use ipc::{RUNTIME_MT, service::Api};
 use itertools::Itertools;
 use log::Level;
-use logging::{hide_progress, set_progress_status, CodchiOutput};
-use platform::{store_debug_shell, ConfigStatus, MachineDriver, PlatformStatus};
+use logging::{CodchiOutput, hide_progress, set_progress_status};
+use platform::{ConfigStatus, MachineDriver, PlatformStatus, store_debug_shell};
 use secrets::MachineSecrets;
 use shared::util::ResultExt;
 use std::{
@@ -22,13 +22,13 @@ use std::{
     io::IsTerminal,
     panic::{self, PanicHookInfo},
     process::exit,
-    sync::{mpsc::channel, OnceLock},
+    sync::{OnceLock, mpsc::channel},
     thread,
 };
 
 pub mod cli;
 pub mod config;
-use crate::logging::log_progress;
+use crate::logging::{log_line_progress, log_progress};
 pub use shared::consts;
 
 pub mod logging;
@@ -105,7 +105,7 @@ Thank you kindly!"#
                        }
                     }
                     Ok(log_line) = log.recv() => {
-                       log_progress(&format!("server/{}", log_line.topic), log_line.level.into(), &log_line.text);
+                       log_line_progress(log_line);
                     }
                 }
              }
@@ -115,6 +115,7 @@ Thank you kindly!"#
 
     log::trace!("Server is ready");
 
+    unreachable!();
     // preload config
     let _ = CodchiConfig::get();
 

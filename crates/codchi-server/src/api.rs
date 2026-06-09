@@ -1,6 +1,7 @@
 use crate::state::ServerState;
 use futures::StreamExt;
 use futures_signals::signal::SignalExt;
+use ipc::logging::LogLine;
 use ipc::service::*;
 use remoc::{
     rch::{self, broadcast},
@@ -8,7 +9,6 @@ use remoc::{
 };
 use shared::util::{ResultExt, UtilExt};
 use tracing::instrument;
-use ipc::logging::LogLine;
 
 #[rtc::async_trait]
 impl Api for ServerState {
@@ -28,26 +28,10 @@ impl Api for ServerState {
         );
 
         Ok(rx)
-        // let health = if let Some(health) = &self.health {
-        //     health.clone()
-        // } else {
-        //     let health = PlatformRegistry::virtualisation().healthcheck();
-        //     self.health = Some(health.clone());
-        //     health
-        // };
-        // Ok(health)
     }
 
     #[instrument]
     async fn stream_log(&mut self) -> RtcResult<broadcast::Receiver<LogLine>> {
         Ok(self.log.subscribe(5))
     }
-
-    // #[instrument]
-    // async fn stream_machine_init_log(
-    //     &mut self,
-    //     machine_name: String,
-    // ) -> RtcResult<broadcast::Receiver<LogLine>> {
-    //     todo!()
-    // }
 }

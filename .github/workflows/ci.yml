@@ -1,0 +1,58 @@
+name: ci
+
+# Phase 0 contract CI for the v1 `codchi-api` crate. The product crates are
+# deactivated from the cargo workspace during the migration (see v1/STATUS.md),
+# so this gates only what is active: lint, tests, the committed OpenAPI snapshot,
+# formatting, and OpenAPI breaking-change classification.
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - server
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          source-tag: "v0.32.0"
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      # clippy (-D warnings) + cargo test + OpenAPI snapshot-drift, hermetically.
+      - name: codchi-api contract checks
+        run: nix build -L --accept-flake-config .#checks.x86_64-linux.codchi-api
+      # rustfmt (edition 2024) + nixpkgs-fmt over the active surface.
+      - name: formatting
+        run: nix build -L --accept-flake-config .#checks.x86_64-linux.formatting
+
+  openapi-breaking:
+    # Classify the OpenAPI diff against the PR's base branch; fail breaking
+    # changes. The internal API has no /v2 yet, so breaking changes must be
+    # deliberate (bump + migrate) rather than accidental.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          source-tag: "v0.32.0"
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: Build oasdiff
+        run: nix build -L --accept-flake-config .#packages.x86_64-linux.oasdiff
+      - name: Fetch base OpenAPI snapshot
+        run: |
+          git fetch --depth=1 origin "${{ github.base_ref }}"
+          if git show "origin/${{ github.base_ref }}:crates/codchi-api/openapi.json" > base-openapi.json 2>/dev/null; then
+            echo "have_base=true" >> "$GITHUB_ENV"
+          else
+            echo "have_base=false" >> "$GITHUB_ENV"
+            echo "No base openapi.json (new contract); skipping breaking-change gate."
+          fi
+      - name: Breaking-change gate
+        if: env.have_base == 'true'
+        run: ./result/bin/oasdiff breaking base-openapi.json crates/codchi-api/openapi.json --fail-on ERR

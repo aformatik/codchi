@@ -1,15 +1,13 @@
 name: test
+
+# Post-release smoke test: installs the signed MSIX produced by build-windows
+# and runs the Windows Pester suite against it. Code-level checks (lint, tests,
+# OpenAPI contract) live in ci.yml and run on every push/PR.
 on:
   workflow_run:
     workflows: [build-windows]
     types: [completed]
-  # pull_request:
-  #   branches:
-  #   - 'rust'
   workflow_dispatch: {}
-      
-#     paths:
-#       - 'cli/**'
 
 permissions:
   contents: read
@@ -26,7 +24,7 @@ jobs:
       run: |
         # Fetch all the tags
         git fetch --tags
-        
+
         # Get the latest commit matching the pattern 'v*.*.*'
         echo "latest_version=$(git describe --tags --match "v*.*.*" $(git rev-list --tags --max-count=1))" >> $GITHUB_OUTPUT
   windows:
@@ -49,26 +47,3 @@ jobs:
         wsl --set-default-version 2 2>&1
     - run: |
         Invoke-Pester ./tests/windows.ps1 2>&1
-    # - if: ${{ failure() }}
-    #   uses: mxschmitt/action-tmate@v3
-      # timeout-minutes: 10
-  linux:
-    needs: setup
-    if: ${{ github.event.workflow_run.name == 'build-linux' || github.event_name == 'push' }}
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - uses: canonical/setup-lxd@main
-    - uses: DeterminateSystems/nix-installer-action@main
-    - uses: DeterminateSystems/magic-nix-cache-action@main
-    - name: Download assets from prerelease@${{ needs.setup.outputs.latest_version }}
-      uses: robinraju/release-downloader@v1.9
-      with:
-        tag: ${{ needs.setup.outputs.latest_version }}
-    - name: tests
-      run: |
-        cd codchi
-        nix develop . -c cargo run -- -vv
-    # - if: ${{ failure() }}
-    #   uses: mxschmitt/action-tmate@v3
-    #   timeout-minutes: 15

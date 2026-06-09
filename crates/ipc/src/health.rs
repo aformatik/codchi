@@ -24,6 +24,17 @@ pub enum HealthCheck {
     },
 }
 
+impl From<anyhow::Result<()>> for HealthCheck {
+    fn from(value: anyhow::Result<()>) -> Self {
+        match value {
+            Ok(()) => HealthCheck::Ok,
+            Err(err) => HealthCheck::Err {
+                name: "".to_string(),
+                last_errors: vec![err.to_string()],
+            },
+        }
+    }
+}
 impl Into<anyhow::Result<()>> for HealthCheck {
     fn into(self) -> anyhow::Result<()> {
         match self {

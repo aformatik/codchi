@@ -1,6 +1,7 @@
+use crate::platform::cmd::{LinuxUser, Program};
 use crate::platform::shell::ShellDriver;
 use shared::consts;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 #[derive(Clone, Debug)]
 pub struct PodmanShellImpl {
@@ -22,70 +23,68 @@ impl PodmanShellImpl {
 
 impl ShellDriver for PodmanShellImpl {
     fn build(&self, command: crate::platform::cmd::LinuxCommand) -> std::process::Command {
-        Command::new("podman")
-        // let mut cmd = lxc_command(&["exec", &self.container_name]);
-        // if let Some(cwd) = &command.cwd {
-        //     cmd.args(["--cwd", &cwd.0]);
+        let mut cmd = Command::new("podman");
+        cmd.arg("exec");
+
+        if let Some(cwd) = &command.cwd {
+            cmd.args(["-w", &cwd.0]);
+        }
+        // if *DEBUG { TODO
+        cmd.args(["-e", "CODCHI_DEBUG=1"]);
         // }
-        // // if *DEBUG { TODO
-        // cmd.args(["--env", "CODCHI_DEBUG=1"]);
-        // // }
-        // if let Some(user) = &command.user {
-        //     cmd.args([
-        //         "--user",
-        //         match user {
-        //             LinuxUser::Root => consts::user::ROOT_UID,
-        //             LinuxUser::Default => consts::user::DEFAULT_UID,
-        //         },
-        //     ]);
-        //     cmd.args([
-        //         "--group",
-        //         match user {
-        //             LinuxUser::Root => consts::user::ROOT_GID,
-        //             LinuxUser::Default => consts::user::DEFAULT_GID,
-        //         },
-        //     ]);
-        //     cmd.args([
-        //         "--env",
-        //         &format!(
-        //             "HOME={}",
-        //             match user {
-        //                 LinuxUser::Root => &consts::user::ROOT_HOME.0,
-        //                 LinuxUser::Default => &consts::user::DEFAULT_HOME.0,
-        //             }
-        //         ),
-        //     ]);
-        //     cmd.args(["--env", "DISPLAY=:0"]);
-        //     cmd.args([
-        //         "--env",
-        //         &format!("XAUTHORITY={}/.Xauthority", consts::user::DEFAULT_HOME.0),
-        //     ]);
-        // }
-        // for (name, val) in command.env {
-        //     // should be already escaped / no escaping needed on linux
-        //     cmd.args(["--env", &format!("{name}={val}")]);
-        // }
-        // cmd.arg("--");
-        //
-        // match &command.program {
-        //     Program::Run { program, args } => {
-        //         cmd.args(["run", program]);
-        //         for arg in args.iter() {
-        //             cmd.arg(arg);
-        //         }
-        //     }
-        //     Program::Script(_) => {
-        //         cmd.arg("runin");
-        //         cmd.stdin(Stdio::piped());
-        //     }
-        //     Program::Raw { program, args } => {
-        //         cmd.arg(program);
-        //         for arg in args.iter() {
-        //             cmd.arg(arg);
-        //         }
-        //     }
-        // };
-        // cmd
+        if let Some(user) = &command.user {
+            // Podman uses --user for combined user:group format
+            let uid = match user {
+                LinuxUser::Root => consts::user::ROOT_UID,
+                LinuxUser::Default => consts::user::DEFAULT_UID,
+            };
+            let gid = match user {
+                LinuxUser::Root => consts::user::ROOT_GID,
+                LinuxUser::Default => consts::user::DEFAULT_GID,
+            };
+            cmd.args(["--user", &format!("{}:{}", uid, gid)]);
+            // cmd.args([
+            //     "--env",
+            //     &format!(
+            //         "HOME={}",
+            //         match user {
+            //             LinuxUser::Root => &consts::user::ROOT_HOME.0,
+            //             LinuxUser::Default => &consts::user::DEFAULT_HOME.0,
+            //         }
+            //     ),
+            // ]);
+            // cmd.args(["-e", "DISPLAY=:0"]);
+            // cmd.args([
+            //     "-e",
+            //     &format!("XAUTHORITY={}/.Xauthority", consts::user::DEFAULT_HOME.0),
+            // ]);
+        }
+        for (name, val) in command.env {
+            // should be already escaped / no escaping needed on linux
+            cmd.args(["-e", &format!("{name}={val}")]);
+        }
+
+        cmd.arg(&self.container_name);
+
+        match &command.program {
+            Program::Run { program, args } => {
+                cmd.args(["run", program]);
+                for arg in args.iter() {
+                    cmd.arg(arg);
+                }
+            }
+            Program::Script(_) => {
+                cmd.arg("runin");
+                cmd.stdin(Stdio::piped());
+            }
+            Program::Raw { program, args } => {
+                cmd.arg(program);
+                for arg in args.iter() {
+                    cmd.arg(arg);
+                }
+            }
+        };
+        cmd
     }
 
     fn quote_shell_arg(&self, arg: &str) -> String {

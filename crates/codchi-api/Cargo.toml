@@ -1,0 +1,28 @@
+[package]
+name = "codchi-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Codchi v1 wire contract: DTOs, errors, events, and the CodchiService trait shared by server and clients."
+
+# This crate is the single source of truth for the v1 HTTP contract.
+# Hard rule (see v1/phases/00-contract-decisions.md "Crate Rules"):
+# no axum, no reqwest, no rusqlite, no platform-specific deps.
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+schemars.workspace = true
+aide.workspace = true
+futures-core.workspace = true
+indexmap.workspace = true
+
+[dev-dependencies]
+futures = { workspace = true }
+
+[[bin]]
+name = "gen-openapi"
+path = "src/bin/gen-openapi.rs"

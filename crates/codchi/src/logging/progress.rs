@@ -1,6 +1,6 @@
-use super::nix::{self, Activity, ActivityType, LogItem, LogResult};
 use console::style;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use ipc::logging::{LogLine, LogMessage};
 use itertools::Itertools;
 use log::Level;
 use number_prefix::NumberPrefix;
@@ -83,6 +83,7 @@ impl Progress {
     // }
 
     pub fn log(&mut self, fallback_target: &str, fallback_level: Level, msg: &str) {
+        use super::nix::{self, Activity, ActivityType, LogItem, LogResult};
         let result = nix::parse_line(msg);
         match result {
             Err(err) => {
@@ -159,6 +160,151 @@ impl Progress {
                 // self.activities.remove(&id);
             }
             Ok(LogItem::Result { id, result }) => {
+                use LogResult::*;
+                if let Some(activity) = self.activities.get_mut(&id) {
+                    match result {
+                        BuildLogLine { line } => {
+                            if let NixActivity::Build { name, phase } = activity {
+                                let phase = phase
+                                    .to_owned()
+                                    .map(|phase| format!(" ({phase})"))
+                                    .unwrap_or_default();
+                                log::log!(target: "nix", fallback_level, "{name}{phase}> {line}");
+                            }
+                        }
+                        SetExpected {
+                            expected,
+                            activity_type,
+                        } => match activity {
+                            NixActivity::Root {
+                                dl_bytes_expected,
+                                unpack_bytes_expected,
+                            } => {
+                                if activity_type == ActivityType::FileTransfer {
+                                    *dl_bytes_expected = expected as u64;
+                                } else if activity_type == ActivityType::CopyPath {
+                                    *unpack_bytes_expected = expected as u64;
+                                }
+                            }
+                            NixActivity::BuildRoot {
+                                expected: total, ..
+                            } => {
+                                *total = expected as u64;
+                            }
+                            _else => {}
+                        },
+                        SetPhase { phase } => {
+                            if let NixActivity::Build {
+                                phase: build_phase, ..
+                            } = activity
+                            {
+                                *build_phase = Some(phase)
+                            }
+                        }
+                        Progress {
+                            done,
+                            expected,
+                            running: _,
+                            failed: _,
+                        } => match activity {
+                            NixActivity::BuildRoot {
+                                done: done_total,
+                                expected: expected_total,
+                            } => {
+                                *done_total = done as u64;
+                                *expected_total = expected as u64;
+                            }
+                            NixActivity::Unpack { done: done_total } => {
+                                *done_total = done as u64;
+                            }
+                            NixActivity::Download { done: done_total } => {
+                                // log::error!("{done}, {done_total}");
+                                *done_total = done as u64;
+                            }
+                            _else => {}
+                        },
+                        _else => {}
+                    }
+                }
+            }
+        }
+        if self.throttle.accept().is_ok() {
+            self.render();
+        }
+    }
+
+    pub fn log_line(&mut self, line: LogLine) {
+        use ipc::logging::nix::{self, Activity, ActivityType, LogItem, LogResult};
+        let fallback_level: Level = line.level.into();
+        match line.msg {
+            LogMessage::Text(text) => {
+                log::log!(fallback_level, "[{:?}] {text}", line.topic);
+            }
+            LogMessage::Nix(LogItem::Msg { level, msg }) => {
+                let msg = msg.lines().join("\r\n");
+                log::log!(target: "nix", level.into(), "{msg}")
+            }
+            LogMessage::Nix(LogItem::Start {
+                id,
+                level: _,
+                text,
+                activity,
+            }) => {
+                match activity {
+                    // root activity with total expected dl / unpack
+                    Activity::Realise => {
+                        self.activities.clear();
+                        self.activities.insert(
+                            id,
+                            NixActivity::Root {
+                                dl_bytes_expected: 0,
+                                unpack_bytes_expected: 0,
+                            },
+                        );
+                        log::log!(target: "nix", fallback_level, "{text}");
+                    }
+                    // root activity for build count
+                    Activity::Builds => {
+                        self.activities.insert(
+                            id,
+                            NixActivity::BuildRoot {
+                                done: 0,
+                                expected: 0,
+                            },
+                        );
+                    }
+                    // individual build activities
+                    Activity::Build { path, .. } => {
+                        let name = store_path_base(&path);
+                        self.activities
+                            .insert(id, NixActivity::Build { name, phase: None });
+                        log::log!(target: "nix", fallback_level, "{text}");
+                    }
+                    // unpack activity count
+                    // Activity::CopyPaths => {
+                    //     self.activities.insert(id, NixActivity::UnpackRoot(0));
+                    // }
+                    // individual unpack activities
+                    Activity::CopyPath { .. } => {
+                        self.activities.insert(id, NixActivity::Unpack { done: 0 });
+                        log::log!(target: "nix", fallback_level, "{text}");
+                    }
+                    // individual download activities
+                    Activity::FileTransfer { .. } => {
+                        self.activities
+                            .insert(id, NixActivity::Download { done: 0 });
+                        // log::log!(target: "nix", fallback_level, "{text}");
+                    }
+                    _else => {}
+                }
+            }
+            LogMessage::Nix(LogItem::Stop { id }) => {
+                if let Some(NixActivity::Root { .. }) = self.activities.get(&id) {
+                    self.activities.clear();
+                };
+                // self.activities.remove(&id);
+            }
+            LogMessage::Nix(LogItem::Result { id, result }) => {
                 use LogResult::*;
                 if let Some(activity) = self.activities.get_mut(&id) {
                     match result {

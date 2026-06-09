@@ -4,6 +4,7 @@ use crate::platform::shell::ShellDriver;
 use crate::platform::store::Store;
 use crate::state::PlatformStatus;
 use anyhow::Context;
+use ipc::health::HealthCheck;
 use shared::cmd::CommandExt;
 use shared::consts;
 use shared::util::PathExt;
@@ -12,8 +13,8 @@ use shared::util::UtilExt;
 use std::env;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::mpsc::channel;
 use std::sync::mpsc::Receiver;
+use std::sync::mpsc::channel;
 use std::thread;
 
 pub struct StoreImpl;
