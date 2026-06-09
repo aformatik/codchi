@@ -5,18 +5,15 @@
 Long-running mutating operations are jobs.
 
 The authoritative `JobKind` catalog lives in
-[phases/00-contract-decisions.md](phases/00-contract-decisions.md). Examples:
+[phases/00-contract-decisions.md](phases/00-contract-decisions.md). Each job
+carries a `subject: LogSource` (R11) — `Machine(id)`, `Store`, or `Server`.
+Examples:
 
-- init
-- clone
-- rebuild
-- update
-- delete
-- activate generation
-- garbage collection
-- migration
-- doctor scan
-- doctor fix
+- init, clone, rebuild, update, delete (machine subject)
+- activate generation (machine subject)
+- garbage collection (store subject)
+- store start, store recover (store subject, R11)
+- migration, doctor scan, doctor fix (server subject)
 
 Module and secret mutations are **sync**, not jobs (see Q4). Changing modules
 marks the machine `NeedsRebuild`; the user starts a rebuild job explicitly.
@@ -85,7 +82,18 @@ Default replay should be a bounded tail, for example the last 200 events.
 ## Logs
 
 Logs are a **debugging aid, not an audit trail**, and codchi does not re-store
-what Nix already keeps. Job output is tiered (see **R8** in
+what Nix already keeps.
+
+**Logs are source-keyed (R11).** A log belongs to a long-lived **source** —
+`Server`, `Store`, or `Machine(id)` — each with its own durable stream
+(`GET /v1/logs/{source}`). A **job** is an operation against a source: it carries
+a `subject: LogSource` and its events are written into that source's log,
+correlated by `job_id`. So `stream_job_events(job_id)` is the job-correlated
+*subset* of `stream_logs(source)` — two lenses over one store. The tiering below
+describes a job's output; the same tiers apply to a source's own (job-less)
+output (e.g. ongoing store-container chatter).
+
+Job output is tiered (see **R8** in
 [phases/00-contract-decisions.md](phases/00-contract-decisions.md)):
 
 - **Aggregate progress** — every nix progress message is consumed to maintain a
@@ -102,9 +110,9 @@ what Nix already keeps. Job output is tiered (see **R8** in
 
 SQLite indexes the durable tier:
 
-- job id
+- source (`server` / `store` / `machine-<id>`)
+- job id (when the line belongs to a job)
 - job kind
-- machine id
 - status
 - timestamps
 - log path
@@ -113,9 +121,10 @@ SQLite indexes the durable tier:
 
 The durable tier is written as JSONL on disk and indexed by SQLite. Events use
 the tagged `Event` enum from
-[phases/00-contract-decisions.md](phases/00-contract-decisions.md); `job_id`
-and `machine` are implied by the stream endpoint (`GET /v1/jobs/{id}/events`)
-rather than repeated per line.
+[phases/00-contract-decisions.md](phases/00-contract-decisions.md); the `source`
+(and `job_id`, when applicable) are implied by the stream endpoint
+(`GET /v1/logs/{source}` or `GET /v1/jobs/{id}/events`) rather than repeated per
+line.
 
 Example (durable tier):
 

@@ -260,11 +260,15 @@ endpoints! {
     PrepareExecEp = Post "/machines/{id}/exec" "prepare_exec" "Prepare an exec session (job)",
         body PrepareExecRequest, query (), Json JobView<ExecPlan>;
 
+    ListJobsEp = Get "/jobs" "list_jobs" "List jobs",
+        body (), query JobFilter, Json Vec<JobView>;
     GetJobEp = Get "/jobs/{id}" "get_job" "Get a job",
         body (), query (), Json JobView;
     CancelJobEp = Post "/jobs/{id}/cancel" "cancel_job" "Cancel a job",
         body (), query (), Empty ();
     StreamJobEventsEp = Get "/jobs/{id}/events" "stream_job_events" "Stream job events (NDJSON)",
+        body (), query EventStreamOpts, Ndjson Event;
+    StreamLogsEp = Get "/logs/{source}" "stream_logs" "Stream a log source (NDJSON)",
         body (), query EventStreamOpts, Ndjson Event;
 
     DoctorEp = Get "/doctor" "doctor" "Get cached doctor findings",

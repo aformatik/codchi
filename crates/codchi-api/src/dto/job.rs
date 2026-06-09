@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::dto::config::ConfigResolution;
 use crate::dto::doctor::DoctorReport;
 use crate::dto::exec::ExecPlan;
+use crate::dto::log::{LogSource, LogSourceKind};
 use crate::dto::migration::MigrationSummary;
 use crate::error::ApiError;
 use crate::ids::{EventSeq, GenerationId, JobId, MachineId};
@@ -57,6 +58,10 @@ pub enum JobKind {
     Resolve,
     /// R7: ensure store+machine running, session, env → [`ExecPlan`].
     PrepareExec,
+    /// R11: bring up the store container (a `Store`-subject job).
+    StoreStart,
+    /// R11: bounded store recovery (a `Store`-subject job).
+    StoreRecover,
 }
 
 /// One changed flake input in an `update` job's lock diff.
@@ -145,8 +150,10 @@ job_output_from! {
 pub struct JobView<O = JobOutput> {
     pub id: JobId,
     pub kind: JobKind,
-    #[serde(default)]
-    pub machine: Option<MachineId>,
+    /// The log source this job acts on (R11). Machine-less operations
+    /// (`resolve_config`, `doctor_*`, `migration`) are `Server`-subject; store
+    /// operations are `Store`-subject.
+    pub subject: LogSource,
     pub state: JobState,
     pub created_at: DateTime<Utc>,
     #[serde(default)]
@@ -161,4 +168,20 @@ pub struct JobView<O = JobOutput> {
     pub output: Option<O>,
     /// Highest event sequence emitted so far.
     pub last_event_seq: EventSeq,
+}
+
+/// Query filter for `list_jobs` (R11). All fields optional; omitted ⇒ no
+/// constraint. Fields flatten to query parameters.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct JobFilter {
+    /// Restrict to jobs whose subject is of this kind.
+    #[serde(default)]
+    pub subject: Option<LogSourceKind>,
+    /// Restrict to jobs acting on this specific machine.
+    #[serde(default)]
+    pub machine: Option<MachineId>,
+    /// `true` ⇒ only non-terminal jobs (`Queued`/`Running`/`CancelRequested`/
+    /// `CleaningUp`).
+    #[serde(default)]
+    pub active_only: Option<bool>,
 }

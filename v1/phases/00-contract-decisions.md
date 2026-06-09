@@ -753,6 +753,55 @@ derived (see R9) from `active_generation` + `busy_with`; `busy_with: Some(job)`
 plus the job's `JobKind` describes any in-flight transition. The updated
 `MachineView` / `MachineDetail` sketch is in *Machine + Generation Views* below.
 
+### R11 — Logs are source-keyed; jobs are subject-tagged (adds log sources; revises the Job/Event model)
+
+Raised by the Phase 1 grill (`phases/01-http-vertical-slice.md` D9, recorded
+there as **CR1**). Grounded in the beta (`master`) survey of what emits logs:
+the long-lived emitters are the **server**, the **store container**, and each
+**machine container**; the short-lived emitters (nix builds, control commands)
+are *operations* against one of those.
+
+Model:
+
+- A **log source** is a long-lived entity with a durable log stream:
+  `Server | Store | Machine(MachineId)`. Each gets R8 tiering. The CLI's own
+  per-command terminal output is client-side and is **not** a source.
+- A **job** is an *operation against a source* — it carries an explicit
+  `subject: LogSource`, and its events are written into that source's log,
+  correlated by `job_id`. There is no more machine-only coupling.
+- `stream_logs(source)` = everything the source ever emitted (a job's output
+  *and* ongoing chatter); `stream_job_events(job_id)` = the correlated subset for
+  one operation. Two lenses over one log store. Store startup is a
+  `Store`-subject job; post-startup store chatter is more `Store`-source log
+  with no job id.
+
+Contract changes (this **revises** the Q4 service surface and the Job model;
+expected to trip the `oasdiff` gate as an intentional Phase 0 revision):
+
+- New `LogSource { Server, Store, Machine(MachineId) }` (adjacently tagged
+  `{"type":..,"id":..}` because the `Machine` newtype wraps a transparent
+  string; `Display`/`FromStr` give the `server` / `store` / `machine-<id>` path
+  form). New `LogSourceKind { Server, Store, Machine }` (id-less, for filtering).
+- `JobView.machine: Option<MachineId>` → **`subject: LogSource`** (non-optional;
+  machine-less operations like `resolve_config` / `doctor_*` / `migration` are
+  `Server`-subject, store ops are `Store`-subject).
+- New `JobKind::StoreStart`, `JobKind::StoreRecover` (additive per Q5).
+- New service methods + routes:
+  - `list_jobs(JobFilter) -> Vec<JobView>` — `GET /v1/jobs`, query `JobFilter
+    { subject: Option<LogSourceKind>, machine: Option<MachineId>, active_only:
+    Option<bool> }`. Answers "what is the store/server currently doing".
+  - `stream_logs(LogSource, EventStreamOpts) -> EventStream` — `GET
+    /v1/logs/{source}`, NDJSON `Event`. No separate bounded-query endpoint:
+    `EventStreamOpts.follow = false` already does bounded tail/`since_seq`
+    replay, exactly as for `stream_job_events`.
+- `remoc` is dropped entirely as a transport (doc 01); the beta `ipc`
+  logging/health types are not carried into the v1 contract.
+
+Phasing of the *implementation* (the contract is defined in full now) is in
+`phases/01-http-vertical-slice.md` D14: Phase 1 implements the source side for
+`Server`/`Store` (JSONL + `stream_logs`); jobs → Phase 5, SQLite-indexed tiering
+→ Phase 9, `Machine` source → Phase 7. `ROUTES.len()` becomes **28**.
+
 ## Crate Structure
 
 ```
@@ -882,9 +931,14 @@ pub trait CodchiService: Send + Sync {
     async fn prepare_exec(&self, id: &MachineId, req: PrepareExecRequest) -> Result<JobView<ExecPlan>, ApiError>;
 
     // jobs (kind-erased: get_job returns the default JobView = JobView<JobOutput>)
+    async fn list_jobs(&self, filter: JobFilter) -> Result<Vec<JobView>, ApiError>;       // R11
     async fn get_job(&self, id: &JobId) -> Result<JobView, ApiError>;
     async fn cancel_job(&self, id: &JobId) -> Result<(), ApiError>;
     async fn stream_job_events(&self, id: &JobId, opts: EventStreamOpts)
+        -> Result<BoxStream<'static, Result<Event, ApiError>>, ApiError>;
+
+    // logs (R11): source-keyed stream; stream_job_events is the job-correlated view
+    async fn stream_logs(&self, source: LogSource, opts: EventStreamOpts)
         -> Result<BoxStream<'static, Result<Event, ApiError>>, ApiError>;
 
     // doctor
@@ -938,6 +992,7 @@ pub enum JobKind {
     Migration, DoctorScan, DoctorFix,
     Resolve,       // R3: read-only flake fetch+eval -> ConfigResolution
     PrepareExec,   // R7: ensure store+machine running, session, env -> ExecPlan
+    StoreStart, StoreRecover,  // R11: store-subject jobs
 }
 
 // R1: generic over the success payload `O` (default JobOutput). Kind-specific
@@ -945,7 +1000,7 @@ pub enum JobKind {
 pub struct JobView<O = JobOutput> {
     pub id: JobId,
     pub kind: JobKind,
-    pub machine: Option<MachineId>,
+    pub subject: LogSource,   // R11: was `machine: Option<MachineId>`
     pub state: JobState,
     pub created_at: DateTime<Utc>,
     pub started_at: Option<DateTime<Utc>>,

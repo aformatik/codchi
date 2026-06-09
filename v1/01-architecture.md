@@ -125,9 +125,11 @@ machines and read plaintext secrets.
 
 Open design details:
 
-- Unix socket versus localhost TCP on Linux.
-- Named pipe versus localhost TCP on Windows.
-- Per-user socket permissions.
-- Local auth token or capability file.
-- Restrictions for tray/CLI only.
+- Unix socket versus localhost TCP on Linux. **Decided (Phase 1, D6):** per-user
+  Unix domain socket, chosen so it can later bind-mount into machines. See
+  [phases/01-http-vertical-slice.md](phases/01-http-vertical-slice.md).
+- Named pipe versus localhost TCP on Windows. (Open — Phase 12.)
+- Per-user socket permissions. (Open — Phase 17.)
+- Local auth token or capability file. (Open — Phase 17.)
+- Restrictions for tray/CLI only. (Open — Phase 17.)
 

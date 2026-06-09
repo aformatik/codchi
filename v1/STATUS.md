@@ -4,7 +4,7 @@ Tracks the current state of the v1 reimplementation. This file is expected to
 change often. Stable phase definitions live in [PLAN.md](PLAN.md); locked
 per-phase specs live under [phases/](phases/).
 
-**Last updated:** 2026-06-09 (Phase 0 complete: workspace deactivated to `codchi-api`; CI gates wired — clippy/test/OpenAPI-drift, treefmt formatting, oasdiff breaking-change)
+**Last updated:** 2026-06-09 (Phase 1 spec locked in `phases/01-http-vertical-slice.md`; Phase 0 contract revised by **R11/CR1** — logs are source-keyed and jobs are subject-tagged: `JobView.machine`→`subject: LogSource`, new `LogSource`/`LogSourceKind`/`JobFilter`, `JobKind::StoreStart`/`StoreRecover`, `list_jobs` + `stream_logs` endpoints; `codchi-api` rebuilt + 10 contract tests green + `openapi.json` regenerated)
 
 ## Overall
 
@@ -18,7 +18,7 @@ target is described in [01-architecture.md](01-architecture.md) and
 | # | Phase | Status |
 |---|---|---|
 | 0 | Contract design (`codchi-api` crate) | Done — decisions locked + refined (R1–R10) in `phases/00-contract-decisions.md`; both former open items closed (R8/R9/R10). **Crate created**: `crates/codchi-api` compiles with all DTOs, IDs, `ApiError` catalog, `Event` model, `CodchiService` trait + typed `Endpoint` catalog, `MockCodchiService`, `schemars`+`aide` OpenAPI generation (`gen-openapi` bin), committed `openapi.json`, and contract tests (error-code stability, OpenAPI/route coverage, endpoint-catalog consistency, mock smoke, plus existing serde roundtrips). `JobView` is generic over its success payload (`JobView<O = JobOutput>`): kind-specific methods return narrowed views (`JobView<Rebuilt>`, `JobView<()>`, …), `get_job` returns the kind-erased default; `JobOutput` variants are newtypes over the same payload structs (revised R1). Path params are the canonical identity and are no longer duplicated in request bodies (`rebuild`/`update` take no body; `clone` body is `{ target }`; `exec` body is `{ command }`). URL map is a typed `Endpoint` catalog (`endpoints.rs`, one marker per route) driving routing + OpenAPI; `operation_id`-string dispatch removed (see `06-api-endpoint-codegen.md`). **Deactivation + CI**: the product crates are excluded from the cargo workspace (kept on disk as reference) so the contract crate builds/tests in isolation; CI gates are wired as hermetic nix checks — `checks.codchi-api` (clippy `-D warnings` + `cargo test` + OpenAPI snapshot-drift), `checks.formatting` (treefmt: rustfmt edition-2024 + nixpkgs-fmt), and an `oasdiff` breaking-change gate (`packages.oasdiff`, built from `build/oasdiff.nix`) in `.github/workflows/ci.yml`. Next: Phase 1 generic router/client. |
-| 1 | HTTP API + Linux/Podman vertical slice | Partial — `codchi-server` starts a store and exposes readiness + log streaming; CLI connects but reaches unreachable command dispatch |
+| 1 | HTTP API + Linux/Podman vertical slice | Spec locked (`phases/01-http-vertical-slice.md`, D1–D13); contract revision **R11/CR1** applied to `codchi-api`. Implementation not started — beta `codchi-server` skeleton still on disk pending the `crates/beta/` restructure |
 | 2 | `ServerCore` boundary | Not started |
 | 3 | SQLite foundation | Not started |
 | 4 | Machine state in SQLite | Not started |

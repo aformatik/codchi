@@ -78,7 +78,7 @@ string-keyed `wire_operation`/`summary` matches.
   Rejected; aide's axum feature stays off.
 - **A macro that also generates the trait + dispatch + client** (tarpc-style):
   maximal DRY but high magic; the trait stops being hand-readable and the mock
-  lives downstream of a macro. Not worth it for ~26 internal routes.
+  lives downstream of a macro. Not worth it for ~28 internal routes.
 
 ## Phase 1 plan — generic router and client
 

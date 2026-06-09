@@ -358,7 +358,7 @@ fn endpoint_catalog_is_consistent() {
     use codchi_api::endpoints::{Endpoint, Method, RebuildEp, StreamJobEventsEp, route};
 
     // Every route carries the /v1 prefix and a unique operation id.
-    assert_eq!(ROUTES.len(), 26);
+    assert_eq!(ROUTES.len(), 28);
     let mut ids: Vec<&str> = ROUTES.iter().map(|r| r.operation_id).collect();
     let count = ids.len();
     ids.sort_unstable();
@@ -419,6 +419,7 @@ fn mock_serves_every_endpoint() {
         svc.prepare_exec(&id, PrepareExecRequest { command: None })
             .await
             .unwrap();
+        svc.list_jobs(JobFilter::default()).await.unwrap();
         let job = svc.get_job(&JobId::new()).await.unwrap();
         assert!(job.output.is_some());
         svc.cancel_job(&job.id).await.unwrap();
@@ -437,5 +438,14 @@ fn mock_serves_every_endpoint() {
         let collected: Vec<_> = stream.collect().await;
         assert_eq!(collected.len(), 3);
         assert!(collected.iter().all(|e| e.is_ok()));
+
+        // R11: a source log stream (store) yields canned events too.
+        let logs = svc
+            .stream_logs(LogSource::Store, EventStreamOpts::default())
+            .await
+            .unwrap();
+        let log_lines: Vec<_> = logs.collect().await;
+        assert!(!log_lines.is_empty());
+        assert!(log_lines.iter().all(|e| e.is_ok()));
     });
 }

@@ -83,7 +83,8 @@ fn accepted_job<O>(kind: JobKind, machine: Option<MachineId>) -> JobView<O> {
     JobView {
         id: JobId::new(),
         kind,
-        machine,
+        // R11: a machine-less operation is `Server`-subject in the mock.
+        subject: machine.map(LogSource::Machine).unwrap_or(LogSource::Server),
         state: JobState::Queued,
         created_at: fixed_time(),
         started_at: None,
@@ -244,7 +245,7 @@ impl CodchiService for MockCodchiService {
         Ok(JobView {
             id: *id,
             kind: JobKind::Rebuild,
-            machine: Some(MachineId("demo".to_owned())),
+            subject: LogSource::Machine(MachineId("demo".to_owned())),
             state: JobState::Succeeded,
             created_at: fixed_time(),
             started_at: Some(fixed_time()),
@@ -255,6 +256,26 @@ impl CodchiService for MockCodchiService {
             })),
             last_event_seq: EventSeq(3),
         })
+    }
+
+    async fn list_jobs(&self, _filter: JobFilter) -> Result<Vec<JobView>, ApiError> {
+        // A running store-start job plus a terminal machine rebuild, to show
+        // the subject variety (R11).
+        Ok(vec![
+            JobView {
+                id: JobId::new(),
+                kind: JobKind::StoreStart,
+                subject: LogSource::Store,
+                state: JobState::Running,
+                created_at: fixed_time(),
+                started_at: Some(fixed_time()),
+                finished_at: None,
+                error: None,
+                output: None,
+                last_event_seq: EventSeq(1),
+            },
+            self.get_job(&JobId::new()).await?,
+        ])
     }
 
     async fn cancel_job(&self, _id: &JobId) -> Result<(), ApiError> {
@@ -285,6 +306,30 @@ impl CodchiService for MockCodchiService {
                 ts: fixed_time(),
                 name: "build".to_owned(),
                 status: PhaseStatus::Finished,
+            }),
+        ];
+        Ok(Box::pin(VecEventStream(events.into_iter())))
+    }
+
+    async fn stream_logs(
+        &self,
+        _source: LogSource,
+        _opts: EventStreamOpts,
+    ) -> Result<EventStream, ApiError> {
+        let events = vec![
+            Ok(Event::Log {
+                seq: EventSeq(1),
+                ts: fixed_time(),
+                level: LogLevel::Info,
+                topic: "store".to_owned(),
+                message: "store container started".to_owned(),
+            }),
+            Ok(Event::Log {
+                seq: EventSeq(2),
+                ts: fixed_time(),
+                level: LogLevel::Info,
+                topic: "gc".to_owned(),
+                message: "store gc complete".to_owned(),
             }),
         ];
         Ok(Box::pin(VecEventStream(events.into_iter())))

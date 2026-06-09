@@ -37,14 +37,14 @@ v1 targets:
 |---|---|---:|---|
 | 0 | Contract design (`codchi-api` crate) | 5–8 pd | DTOs, errors, service trait, OpenAPI snapshot, mock. Decisions locked in `phases/00-contract-decisions.md`. |
 | 1 | HTTP API + Linux/Podman vertical slice | 12–18 pd | `axum` server, typed client, readiness, event stream, server-owned Podman store startup. CLI does `status` end-to-end. |
-| 2 | `ServerCore` boundary | 5–8 pd | Move lifecycle/health out of handlers. Define internal service methods for list/init/rebuild/exec-prep/delete/jobs/doctor. |
+| 2 | `ServerCore` boundary | 3–5 pd | Introduce the `ServerCore` struct implementing `CodchiService` and swap it for the Phase 1 mock in `AppState`; define its internal service methods for list/init/rebuild/exec-prep/delete/jobs/doctor. Shrunk because Phase 1 already moved lifecycle/store/health out of handlers. |
 | 3 | SQLite foundation | 6–10 pd | DB module, migrations, schema versioning, transaction helpers, persisted global config. No beta machine import yet. |
 | 4 | Machine state in SQLite | 10–15 pd | Machines, modules, secrets, flake lock content, platform metadata. New v1 machines read/write via SQLite. Beta path stays separate. |
-| 5 | Job system MVP | 12–18 pd | Job table, runner, conflict detection, cancel flags, state machine, bounded event streaming. Rebuild/init/delete become jobs on Linux first. |
+| 5 | Job system MVP | 12–18 pd | Job table, runner, conflict detection, cancel flags, state machine, bounded event streaming. Rebuild/init/delete become jobs on Linux first. Jobs carry a `subject: LogSource` and store start/recover are store-subject jobs (R11). |
 | 6 | Build/update generation model | 12–20 pd | Temp flake dirs, SQLite-owned `flake.lock`, safe commit boundaries, generation records, active-generation pointer, gcroot/profile projection. Acceptance: failed update never advances lock or active generation. |
 | 7 | Linux/Podman machines | 12–18 pd | Server-owned create/start/stop/delete, mounts, boot checks, rebuild/switch, shortcuts. Acceptance: Linux smoke (init, exec env, persistence, rebuild, delete). |
 | 8 | Exec/session model | 8–14 pd | `prepare_exec`, session IDs, env merge, `codchi-session` inside machines. Native `podman exec` / `wsl.exe --exec` only; no HTTP PTY proxy. |
-| 9 | Logs/events | 7–11 pd | Tiered logging (R8): in-memory aggregate progress counter, ~50-line raw-output ring, durable relevant-event JSONL with SQLite index. Tail replay + `since_seq` over the durable tier. Nix progress/eval parsing into event DTOs; build output referenced via `drv` (`nix log`). Flat 30-day retention. |
+| 9 | Logs/events | 7–11 pd | Tiered logging (R8) over source-keyed streams — `Server`/`Store`/`Machine` (R11), not just jobs: in-memory aggregate progress counter, ~50-line raw-output ring, durable relevant-event JSONL with SQLite index. Tail replay + `since_seq` over the durable tier; `stream_logs(source)` and `stream_job_events(job_id)` are two lenses. Nix progress/eval parsing into event DTOs; build output referenced via `drv` (`nix log`). Flat 30-day retention. (Phase 1 ships the `Server`/`Store` source side without the SQLite index; see `phases/01`.) |
 | 10 | Doctor + recovery findings | 8–14 pd | Persistent findings, `codchi doctor`, `--json`, safe `--fix`. Wire store/machine/generation/jobs/logs/migration checks. |
 | 11 | Beta migration | 12–18 pd | Planner, dry-run JSON, backups, idempotency, old config/lock/platform import. Preserve old files. |
 | 12 | Windows/WSL server backend | 18–30 pd | Server-owned store/machine lifecycle on WSL. `codchi-hostctl.exe`, boot spec flow, no independent fallback repair, structured boot failure reporting. |
@@ -73,10 +73,18 @@ The hard release gates, not the only tests:
 
 ## Critical Path and Parallelization
 
-Phase 0 gates everything. Phases 1, 2, 3, 4, 9, 14 can fan out as parallel
-agent tracks against the frozen contract. Phases 6 and 7 need 3 and 5 first.
-Phases 12 and 13 need 5, 6, 7 stable. Tray (15) and tests (16) trail the
-producing phases, but their planning starts earlier.
+Phase 0 gates everything. Phase 1 now also establishes the daemon skeleton, the
+lifecycle state machine, real Podman store startup, and `Server`/`Store` source
+logging, so it is no longer a thin slice — and Phase 2 shrinks accordingly (see
+its row). Against the frozen contract, Phases 3, 4 (STATE) and 5 (jobs) fan out
+as parallel tracks once Phase 1 lands; Phase 14 (CLI parity) trails the feature
+phases. Phase 9 is **not** freely parallel: only its source-streaming slice is,
+and that already ships in Phase 1; its durable SQLite-indexed tiering, `Machine`
+source, and job correlation depend on Phases 3, 5, 7. Phases 6 and 7 need 3 and
+5 first. Phases 12 and 13 need 5, 6, 7 stable, plus the D6 host socket reachable
+from inside a machine (the Phase 1 **T1** probe validates the bind-mount the
+in-machine components rely on). Tray (15) and tests (16) trail the producing
+phases, but their planning starts earlier.
 
 `PLATFORM` and `STATE` are the two long lines. Keep them separated by the
 `CodchiService` trait so platform work cannot contaminate state work and

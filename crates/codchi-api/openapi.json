@@ -732,6 +732,72 @@
         }
       }
     },
+    "/v1/jobs": {
+      "get": {
+        "summary": "List jobs",
+        "operationId": "list_jobs",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "active_only",
+            "schema": {
+              "description": "`true` ⇒ only non-terminal jobs (`Queued`/`Running`/`CancelRequested`/ `CleaningUp`).",
+              "default": null,
+              "type": "boolean",
+              "nullable": true
+            },
+            "style": "form"
+          },
+          {
+            "in": "query",
+            "name": "machine",
+            "schema": {
+              "description": "Restrict to jobs acting on this specific machine.",
+              "default": null,
+              "type": "string",
+              "nullable": true
+            },
+            "style": "form"
+          },
+          {
+            "in": "query",
+            "name": "subject",
+            "schema": {
+              "description": "Restrict to jobs whose subject is of this kind.",
+              "default": null,
+              "$ref": "#/components/schemas/LogSourceKind",
+              "nullable": true
+            },
+            "style": "form"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "List jobs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JobView_for_JobOutput"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/jobs/{id}": {
       "get": {
         "summary": "Get a job",
@@ -865,6 +931,79 @@
           },
           "200": {
             "description": "Stream job events (NDJSON)",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/logs/{source}": {
+      "get": {
+        "summary": "Stream a log source (NDJSON)",
+        "operationId": "stream_logs",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          },
+          {
+            "in": "query",
+            "name": "follow",
+            "schema": {
+              "description": "Keep streaming after the current tail. Default `true`.",
+              "default": true,
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "in": "query",
+            "name": "since_seq",
+            "schema": {
+              "description": "Resume strictly after this sequence (exclusive). Wins over `tail`.",
+              "default": null,
+              "$ref": "#/components/schemas/EventSeq",
+              "nullable": true
+            },
+            "style": "form"
+          },
+          {
+            "in": "query",
+            "name": "tail",
+            "schema": {
+              "description": "Return the last N events before following. Default 200. Ignored if `since_seq` is set (Q2 precedence).",
+              "default": null,
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0,
+              "nullable": true
+            },
+            "style": "form"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Typed API error (ApiError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Stream a log source (NDJSON)",
             "content": {
               "application/x-ndjson": {
                 "schema": {
@@ -1864,6 +2003,30 @@
           }
         }
       },
+      "JobFilter": {
+        "description": "Query filter for `list_jobs` (R11). All fields optional; omitted ⇒ no constraint. Fields flatten to query parameters.",
+        "type": "object",
+        "properties": {
+          "active_only": {
+            "description": "`true` ⇒ only non-terminal jobs (`Queued`/`Running`/`CancelRequested`/ `CleaningUp`).",
+            "default": null,
+            "type": "boolean",
+            "nullable": true
+          },
+          "machine": {
+            "description": "Restrict to jobs acting on this specific machine.",
+            "default": null,
+            "type": "string",
+            "nullable": true
+          },
+          "subject": {
+            "description": "Restrict to jobs whose subject is of this kind.",
+            "default": null,
+            "$ref": "#/components/schemas/LogSourceKind",
+            "nullable": true
+          }
+        }
+      },
       "JobId": {
         "description": "Job identifier (UUID v7).",
         "type": "string",
@@ -1899,6 +2062,20 @@
             "type": "string",
             "enum": [
               "prepare_exec"
+            ]
+          },
+          {
+            "description": "R11: bring up the store container (a `Store`-subject job).",
+            "type": "string",
+            "enum": [
+              "store_start"
+            ]
+          },
+          {
+            "description": "R11: bounded store recovery (a `Store`-subject job).",
+            "type": "string",
+            "enum": [
+              "store_recover"
             ]
           }
         ]
@@ -2121,7 +2298,8 @@
           "id",
           "kind",
           "last_event_seq",
-          "state"
+          "state",
+          "subject"
         ],
         "properties": {
           "created_at": {
@@ -2149,11 +2327,6 @@
           "last_event_seq": {
             "description": "Highest event sequence emitted so far.",
             "$ref": "#/components/schemas/EventSeq"
-          },
-          "machine": {
-            "default": null,
-            "type": "string",
-            "nullable": true
           },
           "output": {
             "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
@@ -2168,6 +2341,10 @@
           },
           "state": {
             "$ref": "#/components/schemas/JobState"
+          },
+          "subject": {
+            "description": "The log source this job acts on (R11). Machine-less operations (`resolve_config`, `doctor_*`, `migration`) are `Server`-subject; store operations are `Store`-subject.",
+            "$ref": "#/components/schemas/LogSource"
           }
         }
       },
@@ -2179,7 +2356,8 @@
           "id",
           "kind",
           "last_event_seq",
-          "state"
+          "state",
+          "subject"
         ],
         "properties": {
           "created_at": {
@@ -2207,11 +2385,6 @@
           "last_event_seq": {
             "description": "Highest event sequence emitted so far.",
             "$ref": "#/components/schemas/EventSeq"
-          },
-          "machine": {
-            "default": null,
-            "type": "string",
-            "nullable": true
           },
           "output": {
             "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
@@ -2226,6 +2399,10 @@
           },
           "state": {
             "$ref": "#/components/schemas/JobState"
+          },
+          "subject": {
+            "description": "The log source this job acts on (R11). Machine-less operations (`resolve_config`, `doctor_*`, `migration`) are `Server`-subject; store operations are `Store`-subject.",
+            "$ref": "#/components/schemas/LogSource"
           }
         }
       },
@@ -2237,7 +2414,8 @@
           "id",
           "kind",
           "last_event_seq",
-          "state"
+          "state",
+          "subject"
         ],
         "properties": {
           "created_at": {
@@ -2265,11 +2443,6 @@
           "last_event_seq": {
             "description": "Highest event sequence emitted so far.",
             "$ref": "#/components/schemas/EventSeq"
-          },
-          "machine": {
-            "default": null,
-            "type": "string",
-            "nullable": true
           },
           "output": {
             "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
@@ -2284,6 +2457,10 @@
           },
           "state": {
             "$ref": "#/components/schemas/JobState"
+          },
+          "subject": {
+            "description": "The log source this job acts on (R11). Machine-less operations (`resolve_config`, `doctor_*`, `migration`) are `Server`-subject; store operations are `Store`-subject.",
+            "$ref": "#/components/schemas/LogSource"
           }
         }
       },
@@ -2295,7 +2472,8 @@
           "id",
           "kind",
           "last_event_seq",
-          "state"
+          "state",
+          "subject"
         ],
         "properties": {
           "created_at": {
@@ -2323,11 +2501,6 @@
           "last_event_seq": {
             "description": "Highest event sequence emitted so far.",
             "$ref": "#/components/schemas/EventSeq"
-          },
-          "machine": {
-            "default": null,
-            "type": "string",
-            "nullable": true
           },
           "output": {
             "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
@@ -2342,6 +2515,10 @@
           },
           "state": {
             "$ref": "#/components/schemas/JobState"
+          },
+          "subject": {
+            "description": "The log source this job acts on (R11). Machine-less operations (`resolve_config`, `doctor_*`, `migration`) are `Server`-subject; store operations are `Store`-subject.",
+            "$ref": "#/components/schemas/LogSource"
           }
         }
       },
@@ -2353,7 +2530,8 @@
           "id",
           "kind",
           "last_event_seq",
-          "state"
+          "state",
+          "subject"
         ],
         "properties": {
           "created_at": {
@@ -2381,11 +2559,6 @@
           "last_event_seq": {
             "description": "Highest event sequence emitted so far.",
             "$ref": "#/components/schemas/EventSeq"
-          },
-          "machine": {
-            "default": null,
-            "type": "string",
-            "nullable": true
           },
           "output": {
             "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
@@ -2400,6 +2573,10 @@
           },
           "state": {
             "$ref": "#/components/schemas/JobState"
+          },
+          "subject": {
+            "description": "The log source this job acts on (R11). Machine-less operations (`resolve_config`, `doctor_*`, `migration`) are `Server`-subject; store operations are `Store`-subject.",
+            "$ref": "#/components/schemas/LogSource"
           }
         }
       },
@@ -2411,7 +2588,8 @@
           "id",
           "kind",
           "last_event_seq",
-          "state"
+          "state",
+          "subject"
         ],
         "properties": {
           "created_at": {
@@ -2439,11 +2617,6 @@
           "last_event_seq": {
             "description": "Highest event sequence emitted so far.",
             "$ref": "#/components/schemas/EventSeq"
-          },
-          "machine": {
-            "default": null,
-            "type": "string",
-            "nullable": true
           },
           "output": {
             "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
@@ -2458,6 +2631,10 @@
           },
           "state": {
             "$ref": "#/components/schemas/JobState"
+          },
+          "subject": {
+            "description": "The log source this job acts on (R11). Machine-less operations (`resolve_config`, `doctor_*`, `migration`) are `Server`-subject; store operations are `Store`-subject.",
+            "$ref": "#/components/schemas/LogSource"
           }
         }
       },
@@ -2469,7 +2646,8 @@
           "id",
           "kind",
           "last_event_seq",
-          "state"
+          "state",
+          "subject"
         ],
         "properties": {
           "created_at": {
@@ -2497,11 +2675,6 @@
           "last_event_seq": {
             "description": "Highest event sequence emitted so far.",
             "$ref": "#/components/schemas/EventSeq"
-          },
-          "machine": {
-            "default": null,
-            "type": "string",
-            "nullable": true
           },
           "output": {
             "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
@@ -2516,6 +2689,10 @@
           },
           "state": {
             "$ref": "#/components/schemas/JobState"
+          },
+          "subject": {
+            "description": "The log source this job acts on (R11). Machine-less operations (`resolve_config`, `doctor_*`, `migration`) are `Server`-subject; store operations are `Store`-subject.",
+            "$ref": "#/components/schemas/LogSource"
           }
         }
       },
@@ -2527,7 +2704,8 @@
           "id",
           "kind",
           "last_event_seq",
-          "state"
+          "state",
+          "subject"
         ],
         "properties": {
           "created_at": {
@@ -2556,11 +2734,6 @@
             "description": "Highest event sequence emitted so far.",
             "$ref": "#/components/schemas/EventSeq"
           },
-          "machine": {
-            "default": null,
-            "type": "string",
-            "nullable": true
-          },
           "output": {
             "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
             "$ref": "#/components/schemas/Updated",
@@ -2574,6 +2747,10 @@
           },
           "state": {
             "$ref": "#/components/schemas/JobState"
+          },
+          "subject": {
+            "description": "The log source this job acts on (R11). Machine-less operations (`resolve_config`, `doctor_*`, `migration`) are `Server`-subject; store operations are `Store`-subject.",
+            "$ref": "#/components/schemas/LogSource"
           }
         }
       },
@@ -2611,6 +2788,69 @@
           "info",
           "warn",
           "error"
+        ]
+      },
+      "LogSource": {
+        "description": "A long-lived log-emitting entity (R11).\n\nAdjacently tagged on the wire — `{\"type\":\"server\"}`, `{\"type\":\"store\"}`, `{\"type\":\"machine\",\"id\":\"foo\"}` — because the `Machine` variant wraps a transparent-string newtype, which serde cannot internally tag.",
+        "oneOf": [
+          {
+            "description": "The `codchi-server` daemon itself.",
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "server"
+                ]
+              }
+            }
+          },
+          {
+            "description": "The store container.",
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "store"
+                ]
+              }
+            }
+          },
+          {
+            "description": "A machine container.",
+            "type": "object",
+            "required": [
+              "id",
+              "type"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "machine"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "LogSourceKind": {
+        "description": "The id-less kind of a [`LogSource`], used to filter `list_jobs`.",
+        "type": "string",
+        "enum": [
+          "server",
+          "store",
+          "machine"
         ]
       },
       "MachineDetail": {

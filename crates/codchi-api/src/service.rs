@@ -76,11 +76,24 @@ pub trait CodchiService: Send + Sync {
     ) -> Result<JobView<ExecPlan>, ApiError>;
 
     // ---- jobs ----
+    /// List jobs across all subjects (R11), newest first; `filter` narrows by
+    /// subject kind / machine / activity.
+    async fn list_jobs(&self, filter: JobFilter) -> Result<Vec<JobView>, ApiError>;
     async fn get_job(&self, id: &JobId) -> Result<JobView, ApiError>;
     async fn cancel_job(&self, id: &JobId) -> Result<(), ApiError>;
     async fn stream_job_events(
         &self,
         id: &JobId,
+        opts: EventStreamOpts,
+    ) -> Result<EventStream, ApiError>;
+
+    // ---- logs (R11) ----
+    /// Stream a log source's durable log — the server, the store, or a machine.
+    /// `stream_job_events` is the job-correlated view over this same store;
+    /// `opts.follow = false` does bounded tail/`since_seq` replay.
+    async fn stream_logs(
+        &self,
+        source: LogSource,
         opts: EventStreamOpts,
     ) -> Result<EventStream, ApiError>;
 
