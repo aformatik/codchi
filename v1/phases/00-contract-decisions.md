@@ -854,6 +854,30 @@ strings), so `openapi.json` is byte-identical and the `oasdiff` gate does **not*
 trip. It is a Rust-contract tightening only — no API major bump (additive per
 Q5 in the wire sense). `ROUTES.len()` is unchanged at **28**.
 
+### R13 — `JobView<O>` deserialize bound override (wire-neutral correctness fix)
+
+Raised during Phase 1 C4 (the typed HTTP client), the first code to *deserialize*
+a typed `JobView<O>` — the mock and the OpenAPI generator only ever serialize or
+schema-gen it. `JobView` carries `#[serde(default)]` on `output: Option<O>`; from
+that, serde's derive infers an over-eager `O: Default` bound on the generated
+`Deserialize` impl (it cannot see that the default it needs is `Option::<O>::None`,
+which requires nothing of `O`). No payload type (`Rebuilt`, `Updated`,
+`ConfigResolution`, `ExecPlan`, `MigrationSummary`, `DoctorReport`, or the erased
+`JobOutput`) is `Default`, so `JobView<O>` was effectively undeserializable — the
+client could not decode any job-returning endpoint.
+
+Decision: pin the deserialize bound explicitly on the struct:
+
+```rust
+#[serde(bound(deserialize = "O: serde::Deserialize<'de>"))]
+pub struct JobView<O = JobOutput> { … }
+```
+
+This is the bound the contract always intended (a typed `JobView<O>` decodes for
+any `O: Deserialize`). It is **wire-neutral**: it touches only the `Deserialize`
+impl, not `Serialize`/`JsonSchema`, so `openapi.json` is byte-identical and the
+`oasdiff` gate does not trip. Locked by a contract test (`typed_job_view_deserializes`).
+
 ## Crate Structure
 
 ```

@@ -6,6 +6,25 @@ rust-version.workspace = true
 
 [dependencies]
 codchi-api.workspace = true
+codchi-shared.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+http-body-util.workspace = true
+bytes.workspace = true
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_urlencoded.workspace = true
+
+[dev-dependencies]
+codchi-server.workspace = true
+axum.workspace = true
+
+[lib]
+name = "codchi_cli"
+path = "src/lib.rs"
 
 [[bin]]
 name = "codchi"

@@ -4,7 +4,7 @@ Tracks the current state of the v1 reimplementation. This file is expected to
 change often. Stable phase definitions live in [PLAN.md](PLAN.md); locked
 per-phase specs live under [phases/](phases/).
 
-**Last updated:** 2026-06-10 (Phase 1 **C2 complete**: the six pre-v1 architecture crates are frozen under `crates/beta/beta-*`; the active workspace is exactly `codchi-api`, `codchi-server`, `codchi-cli`, `codchi-shared`, and `codchi-container-utils`; Linux packaging builds the new server+CLI and the Podman store image with `ndd`; active v1 crate, formatting, OpenAPI, and Nix checks are green)
+**Last updated:** 2026-06-10 (Phase 1 **C3 + C4 complete**: `codchi-server` serves the full 28-route typed API over a per-user Unix socket via generic `mount_json`/`mount_ndjson`/`mount_empty<E>` against `MockCodchiService`; `codchi-cli` ships the typed `HttpClient` implementing `CodchiService` over the socket. Client↔server round-trips JSON/NDJSON/empty/typed-error; real-binary curl smoke passes. Surfaced+fixed a latent contract bug — typed `JobView<O>` was undeserializable (R13). All crates build; clippy clean; `openapi.json` byte-identical; tests green: codchi-api 19, server 2, cli 5)
 
 ## Overall
 
@@ -18,7 +18,7 @@ behavior has not yet been ported.
 | # | Phase | Status |
 |---|---|---|
 | 0 | Contract design (`codchi-api` crate) | Done — decisions locked + refined (R1–R12) in `phases/00-contract-decisions.md`. `codchi-api` provides the DTOs, IDs, error catalog, event model, semantic service trait, typed endpoint catalog, mock, and generated OpenAPI. It has 18 tests and remains independently gated for clippy, tests, and OpenAPI drift. |
-| 1 | HTTP API + Linux/Podman vertical slice | In progress — **C0–C2 complete**. The beta implementation is archived, all five active v1 crates build, and Linux packaging/store-image checks are active. Next: **C3 server skeleton + generic `mount<E>`**; C4 typed HTTP client can proceed in parallel. |
+| 1 | HTTP API + Linux/Podman vertical slice | In progress — **C0–C4 complete**. The HTTP transport is end-to-end over the Unix socket through the generic `Endpoint`-driven router and typed client, against the mock. Next: **C6 real Podman store startup + lifecycle** (then C7 source-log capture), **C5 client spawn + `codchi status` + A1**, and **C8 rootless bind-mount probe**. |
 | 2 | `ServerCore` boundary | Not started |
 | 3 | SQLite foundation | Not started |
 | 4 | Machine state in SQLite | Not started |
@@ -39,8 +39,10 @@ behavior has not yet been ported.
 ## Notes
 
 - **Active workspace:** `codchi-api`, `codchi-server`, `codchi-cli`,
-  `codchi-shared`, and `codchi-container-utils`. The server and CLI are minimal
-  scaffolds depending on `codchi-api`; C3/C4 add their transport behavior.
+  `codchi-shared`, and `codchi-container-utils`. `codchi-server` (axum/tokio over
+  `UnixListener`) and `codchi-cli` (`hyper` typed client) now carry the C3/C4
+  transport; both expose a lib target so the cross-crate round-trip test links
+  them. `codchi-shared` owns the agreed socket path (`server_socket_path`).
 - **Beta reference:** `beta-codchi`, `beta-codchi-server`, `beta-ipc`,
   `beta-shared`, `beta-codchi-gui`, and `beta-codchiw` live under
   `crates/beta/`, are workspace-excluded, and are not expected to compile.

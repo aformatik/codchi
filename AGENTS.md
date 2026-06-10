@@ -34,9 +34,12 @@ The beta (CLI-owned-state) crates are retired under `crates/beta/` with a
 (workspace-excluded). Read them for orientation — especially the Podman store
 work in `beta-codchi-server` — but never link them.
 
-> Status: Phase 1 chunk **C2** is complete. The beta crates are archived and the
-> five crates above are the complete active workspace. C3 adds the HTTP server
-> skeleton; do not assume the scaffolded binaries implement daemon behavior yet.
+> Status: Phase 1 chunks **C0–C4** are complete. The beta crates are archived and
+> the five crates above are the complete active workspace. `codchi-server` serves
+> the full typed API over a per-user Unix socket and `codchi-cli` has a typed
+> client, but **against `MockCodchiService`** — the real Podman store lifecycle
+> (C6), source-log capture (C7), and `codchi status` / daemon spawn (C5) are not
+> built yet, so daemon behavior is still mock data over real transport.
 
 ## Rules for agents
 

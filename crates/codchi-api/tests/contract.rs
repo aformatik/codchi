@@ -157,6 +157,41 @@ fn job_output_variants_roundtrip() {
 }
 
 #[test]
+fn typed_job_view_deserializes() {
+    // Regression: a typed `JobView<O>` must deserialize for any `O: Deserialize`
+    // (the HTTP client decodes these). `#[serde(default)]` on `output` once made
+    // serde infer a spurious `O: Default` bound; the `#[serde(bound)]` override
+    // closes that. No payload type below is `Default`.
+    roundtrip(JobView {
+        id: JobId::new(),
+        kind: JobKind::Rebuild,
+        subject: LogSource::Machine(MachineId("demo".into())),
+        state: JobState::Succeeded,
+        created_at: ts(),
+        started_at: Some(ts()),
+        finished_at: Some(ts()),
+        error: None,
+        output: Some(Rebuilt {
+            generation: GenerationId(2),
+        }),
+        last_event_seq: EventSeq(3),
+    });
+    // The kind-erased default instantiation `JobView<JobOutput>` too.
+    roundtrip(JobView::<JobOutput> {
+        id: JobId::new(),
+        kind: JobKind::StoreStart,
+        subject: LogSource::Store,
+        state: JobState::Running,
+        created_at: ts(),
+        started_at: None,
+        finished_at: None,
+        error: None,
+        output: None,
+        last_event_seq: EventSeq(1),
+    });
+}
+
+#[test]
 fn event_variants_roundtrip() {
     let events = vec![
         Event::Log {

@@ -259,21 +259,22 @@ all new work builds on `codchi-api` with a clean, green workspace.*
 - [x] Treefmt: single `crates/beta/**` exclude; new crates linted/formatted.
 - [x] `cargo build` + `nix flake check` green; all 18 `codchi-api` tests still pass.
 
-### C3 — Server skeleton + generic `mount<E>` (D6, D7) — `[ ]` *(needs C1, C2)*
+### C3 — Server skeleton + generic `mount<E>` (D6, D7) — `[x]` done
 *As a CLI/tray client, I want the daemon to serve the full typed API over a
 per-user Unix socket so I can call any endpoint locally.*
-- [ ] axum over `UnixListener` at `$XDG_RUNTIME_DIR/codchi/server.sock`.
-- [ ] `AppState { Arc<dyn CodchiService>` (= `MockCodchiService`) `+ lifecycle handle }`.
-- [ ] Generic `mount<E>` registers every route through the trait object.
-- [ ] Test asserts the router covers all 28 `ROUTES` (mirror the OpenAPI-coverage test).
-- [ ] `GET /v1/server` returns `ServerStatus` over the socket; JSON / NDJSON / empty shapes all serialize.
+- [x] axum over `UnixListener` at `$XDG_RUNTIME_DIR/codchi/server.sock` (`codchi-shared::server_socket_path`, `CODCHI_SOCKET` override).
+- [x] `AppState { Arc<dyn CodchiService>` (= `MockCodchiService`) `+ LifecycleHandle }` — readiness is infra state, not a service method (D7); the handle is the C6 seam.
+- [x] Generic per-shape `mount_json`/`mount_ndjson`/`mount_empty<E>` register every route through the trait object; path params validated via the C1 `PathParams::parse` off axum `RawPathParams` (no axum dep in `codchi-api`).
+- [x] `router_covers_all_routes` asserts the live router mounts all 28 `ROUTES` (in-process `oneshot`, mirrors the OpenAPI-coverage test).
+- [x] `GET /v1/server` returns `ServerStatus`; JSON / NDJSON / empty shapes all serialize (`response_shapes_serialize`, plus a real-binary curl smoke).
 
-### C4 — Typed HTTP client (D6, doc 06) — `[ ]` *(needs C1, C2; ∥ C3)*
+### C4 — Typed HTTP client (D6, doc 06) — `[x]` done
 *As the CLI, I want a typed client implementing `CodchiService` over the socket
 so command code calls semantic methods, not URLs.*
-- [ ] Generic `call<E>` over a Unix-socket connector (`hyperlocal`/custom).
-- [ ] `impl CodchiService for HttpClient` (one-liners) for every method.
-- [ ] Integration test: client ↔ C3 server round-trips JSON, NDJSON, and empty responses.
+- [x] Generic `call_json`/`call_ndjson`/`call_empty<E>` over a per-request Unix-socket `hyper` http1 connection (`hyper-util` `TokioIo`; no `hyperlocal` dep).
+- [x] `impl CodchiService for HttpClient` (one-liners) for every method.
+- [x] Integration test: client ↔ C3 server round-trips JSON, NDJSON, empty, **and** the typed-error path; connection-refused surfaces a structured error (C5 hang-guard foundation).
+- [x] Surfaced + fixed a latent contract bug: typed `JobView<O>` was undeserializable (spurious serde `O: Default` bound) — see **R13** in `phases/00`. Wire-neutral; `oasdiff` unaffected.
 
 ### C5 — Client-initiated spawn + `codchi status` + A1 (D8) — `[ ]` *(needs C3, C4)*
 *As a codchi user, I want `codchi status` to just work — starting the daemon if
@@ -314,10 +315,10 @@ it's load-bearing.*
 ### Dependency graph
 ```
 C0 ✅
- ├─ C1 ─┐
- └─ C2 ─┴─ C3 ─┬─ C5 (status/spawn/A1)
-        C4 ────┘
-        C3 ──── C6 (store) ──── C7 (logs)
+ ├─ C1 ✅─┐
+ └─ C2 ✅─┴─ C3 ✅─┬─ C5 (status/spawn/A1)
+        C4 ✅──────┘
+        C3 ✅──── C6 (store) ──── C7 (logs)
 C8 (probe) — anytime, early
 ```
 Critical path: **C2 → C3 → C6 → C7**. C1 ∥ C2; C4 ∥ C3; C5 and C6→C7 split along

@@ -147,6 +147,13 @@ job_output_from! {
 /// output), while the kind-erased [`crate::service::CodchiService::get_job`]
 /// returns the default `JobView` = `JobView<JobOutput>`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+// `#[serde(default)]` on `output: Option<O>` makes serde infer an over-eager
+// `O: Default` bound on the generated `Deserialize` impl (it can't see that the
+// default it needs is `Option::<O>::None`). That bound is spurious — no payload
+// type is `Default` — and would make typed `JobView<O>` undeserializable by the
+// HTTP client. Override it to the correct `O: Deserialize<'de>`. Wire form,
+// OpenAPI, and the `Serialize` side are unchanged.
+#[serde(bound(deserialize = "O: serde::Deserialize<'de>"))]
 pub struct JobView<O = JobOutput> {
     pub id: JobId,
     pub kind: JobKind,

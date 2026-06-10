@@ -18,7 +18,17 @@ rust-version = "1.88.0"
 
 [workspace.dependencies]
 codchi-api = { path = "./codchi-api" }
+codchi-shared = { path = "./codchi-shared" }
+codchi-server = { path = "./codchi-server" }
 async-trait = "0.1"
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "signal", "time"] }
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
+serde_urlencoded = "0.7"
+tower = { version = "0.5", features = ["util"] }
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock", "std"] }
 uuid = { version = "1", features = ["v7", "serde"] }
 schemars = { version = "0.8", features = ["chrono", "uuid1", "derive"] }
