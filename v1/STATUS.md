@@ -4,7 +4,7 @@ Tracks the current state of the v1 reimplementation. This file is expected to
 change often. Stable phase definitions live in [PLAN.md](PLAN.md); locked
 per-phase specs live under [phases/](phases/).
 
-**Last updated:** 2026-06-10 (Phase 1 **C3 + C4 complete**: `codchi-server` serves the full 28-route typed API over a per-user Unix socket via generic `mount_json`/`mount_ndjson`/`mount_empty<E>` against `MockCodchiService`; `codchi-cli` ships the typed `HttpClient` implementing `CodchiService` over the socket. Client↔server round-trips JSON/NDJSON/empty/typed-error; real-binary curl smoke passes. Surfaced+fixed a latent contract bug — typed `JobView<O>` was undeserializable (R13). All crates build; clippy clean; `openapi.json` byte-identical; tests green: codchi-api 19, server 2, cli 5)
+**Last updated:** 2026-06-10 (Phase 1 **C5 complete**: `codchi status` works end to end — the CLI dials the per-user socket and, if no daemon is reachable, spawns `codchi-server` detached and waits with a **bounded** readiness poll (`codchi-cli::daemon`); the wait's outer timeout is the A1 hang-forever guard. Closed the D7 wiring: `server_status` now overlays the real `LifecycleHandle` so readiness reports the daemon's true `Starting/Ready/Degraded`. clap surface with a default `Status` subcommand + `--json`. Verified by `tests/spawn.rs` (4 A1 cases) and a real auto-spawn smoke. All crates build; clippy clean workspace-wide; tests green: codchi-api 19, server 2, cli 9. Prior: C3+C4 typed HTTP transport over the socket against the mock.)
 
 ## Overall
 
@@ -18,7 +18,7 @@ behavior has not yet been ported.
 | # | Phase | Status |
 |---|---|---|
 | 0 | Contract design (`codchi-api` crate) | Done — decisions locked + refined (R1–R12) in `phases/00-contract-decisions.md`. `codchi-api` provides the DTOs, IDs, error catalog, event model, semantic service trait, typed endpoint catalog, mock, and generated OpenAPI. It has 18 tests and remains independently gated for clippy, tests, and OpenAPI drift. |
-| 1 | HTTP API + Linux/Podman vertical slice | In progress — **C0–C4 complete**. The HTTP transport is end-to-end over the Unix socket through the generic `Endpoint`-driven router and typed client, against the mock. Next: **C6 real Podman store startup + lifecycle** (then C7 source-log capture), **C5 client spawn + `codchi status` + A1**, and **C8 rootless bind-mount probe**. |
+| 1 | HTTP API + Linux/Podman vertical slice | In progress — **C0–C5 complete**. HTTP transport is end-to-end over the Unix socket (generic router + typed client, against the mock); `codchi status` auto-spawns the daemon with a bounded, non-hanging readiness wait (A1) and renders lifecycle + store + mock machines. The `STATE` side of the slice is done. Next on the critical path: **C6 real Podman store startup + lifecycle**, then **C7 source-log capture**; plus the independent **C8 rootless bind-mount probe**. |
 | 2 | `ServerCore` boundary | Not started |
 | 3 | SQLite foundation | Not started |
 | 4 | Machine state in SQLite | Not started |
@@ -40,9 +40,13 @@ behavior has not yet been ported.
 
 - **Active workspace:** `codchi-api`, `codchi-server`, `codchi-cli`,
   `codchi-shared`, and `codchi-container-utils`. `codchi-server` (axum/tokio over
-  `UnixListener`) and `codchi-cli` (`hyper` typed client) now carry the C3/C4
-  transport; both expose a lib target so the cross-crate round-trip test links
-  them. `codchi-shared` owns the agreed socket path (`server_socket_path`).
+  `UnixListener`) and `codchi-cli` (`hyper` typed client) carry the C3/C4
+  transport; both expose a lib target so the cross-crate tests link them.
+  `codchi-cli` adds the C5 `daemon` module (spawn + bounded `await_ready`), a
+  clap command surface (default `status`, `--json`), and the `status` renderer.
+  Readiness is real daemon state: the `server_status` handler overlays the
+  `LifecycleHandle` (D7). `codchi-shared` owns the agreed socket path
+  (`server_socket_path`).
 - **Beta reference:** `beta-codchi`, `beta-codchi-server`, `beta-ipc`,
   `beta-shared`, `beta-codchi-gui`, and `beta-codchiw` live under
   `crates/beta/`, are workspace-excluded, and are not expected to compile.

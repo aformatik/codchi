@@ -276,12 +276,13 @@ so command code calls semantic methods, not URLs.*
 - [x] Integration test: client ↔ C3 server round-trips JSON, NDJSON, empty, **and** the typed-error path; connection-refused surfaces a structured error (C5 hang-guard foundation).
 - [x] Surfaced + fixed a latent contract bug: typed `JobView<O>` was undeserializable (spurious serde `O: Default` bound) — see **R13** in `phases/00`. Wire-neutral; `oasdiff` unaffected.
 
-### C5 — Client-initiated spawn + `codchi status` + A1 (D8) — `[ ]` *(needs C3, C4)*
+### C5 — Client-initiated spawn + `codchi status` + A1 (D8) — `[x]` done
 *As a codchi user, I want `codchi status` to just work — starting the daemon if
 needed and never hanging — so I can see daemon/store/machine state.*
-- [ ] CLI dials; spawns `codchi-server` detached on absent socket; bounded readiness poll (`server_status`); retry.
-- [ ] `codchi status` renders lifecycle + store state + (mock) machine list.
-- [ ] **A1:** server stalled/killed mid-startup → CLI exits with a structured error within the timeout, no hang (acceptance test).
+- [x] CLI dials; spawns `codchi-server` detached on absent socket (`codchi-cli::daemon`, `CODCHI_SERVER_BIN` override → exe-sibling → `PATH`); bounded readiness poll (`await_ready` over `server_status`); fast-path skip when already reachable.
+- [x] `codchi status` renders lifecycle + store state + (mock) machine list (clap surface, default subcommand; `--json` for the raw `ServerStatus` + machines).
+- [x] **D7 wiring closed:** the `server_status` handler now overlays the real `LifecycleHandle` onto the service's `ServerStatus`, so readiness reports the daemon's true `Starting/Ready/Degraded` — the basis for a meaningful poll and the C6 seam.
+- [x] **A1:** `await_ready` is bounded by an outer `tokio::time::timeout` (the load-bearing guard); stalled (`Starting`), absent-socket, and `Degraded` servers all resolve to a structured `StartupError` within the bound — acceptance test `tests/spawn.rs` (4 cases). Real auto-spawn smoke-tested end to end over a temp socket.
 
 ### C6 — Real Podman store startup + lifecycle (D10, D11) — `[ ]` *(needs C3; uses C2 image)*
 *As a codchi user, I want the daemon to own the Podman store lifecycle so my
@@ -316,10 +317,12 @@ it's load-bearing.*
 ```
 C0 ✅
  ├─ C1 ✅─┐
- └─ C2 ✅─┴─ C3 ✅─┬─ C5 (status/spawn/A1)
+ └─ C2 ✅─┴─ C3 ✅─┬─ C5 ✅ (status/spawn/A1)
         C4 ✅──────┘
         C3 ✅──── C6 (store) ──── C7 (logs)
 C8 (probe) — anytime, early
 ```
 Critical path: **C2 → C3 → C6 → C7**. C1 ∥ C2; C4 ∥ C3; C5 and C6→C7 split along
-the `STATE` / `PLATFORM` seam once C3 lands.
+the `STATE` / `PLATFORM` seam once C3 lands. With C5 done, the `STATE` side of
+the slice is complete; the remaining critical path is **C6 → C7** (real store +
+source-log capture), plus the independent C8 probe.

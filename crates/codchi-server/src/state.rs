@@ -33,7 +33,15 @@ impl AppState {
     /// The Phase 1 wiring: machine-data endpoints are served by
     /// [`MockCodchiService`] (D7). Real machine data arrives with `ServerCore`
     /// in Phase 2.
+    ///
+    /// A mock-backed daemon has no real store to bring up, so it is `Ready`
+    /// immediately — the readiness endpoint overlays this (D7), so transport
+    /// tests and a mock-backed `codchi status` both observe `Ready` without the
+    /// caller flipping the handle. The real `main` keeps the honest
+    /// `Starting → Ready` progression via [`AppState::new`].
     pub fn with_mock() -> Self {
-        Self::new(Arc::new(MockCodchiService::new()))
+        let state = Self::new(Arc::new(MockCodchiService::new()));
+        state.lifecycle.set(codchi_api::dto::ServerLifecycle::Ready);
+        state
     }
 }

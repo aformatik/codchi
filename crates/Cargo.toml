@@ -22,6 +22,7 @@ codchi-shared = { path = "./codchi-shared" }
 codchi-server = { path = "./codchi-server" }
 async-trait = "0.1"
 axum = "0.8"
+clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "signal", "time"] }
 hyper = { version = "1", features = ["client", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }

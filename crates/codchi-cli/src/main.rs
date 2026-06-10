@@ -1,17 +1,39 @@
 //! `codchi` binary entry point.
 //!
-//! Phase 1 (C4) ships the typed [`HttpClient`](codchi_cli::HttpClient) but not
-//! yet the command surface: client-initiated daemon spawn and `codchi status`
-//! are C5. For now the binary reports where it would dial so the wiring is
-//! observable end to end.
+//! Parses the command line, ensures a ready `codchi-server` (spawning it if
+//! needed, with a bounded readiness wait — D8), then dispatches. Phase 1 (C5)
+//! ships `codchi status`, the default command.
 
-use codchi_cli::HttpClient;
+use std::process::ExitCode;
 
-fn main() {
-    let client = HttpClient::connect_default();
-    eprintln!(
-        "codchi {} — would dial codchi-server at {} (commands land in Phase 1 C5)",
-        codchi_api::API_VERSION,
-        client.socket().display(),
-    );
+use clap::Parser;
+use codchi_cli::cli::{Cli, Command};
+use codchi_cli::daemon::{StartupConfig, connect_or_spawn};
+use codchi_cli::status;
+
+#[tokio::main]
+async fn main() -> ExitCode {
+    let cli = Cli::parse();
+
+    // Every command needs a ready daemon; resolve it once, up front. A failure
+    // here is a structured startup error (never a hang — D8).
+    let client = match connect_or_spawn(&StartupConfig::default()).await {
+        Ok(client) => client,
+        Err(err) => {
+            eprintln!("codchi: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let result = match cli.command.unwrap_or_default() {
+        Command::Status => status::run(&client, cli.json).await,
+    };
+
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("codchi: {err}");
+            ExitCode::FAILURE
+        }
+    }
 }

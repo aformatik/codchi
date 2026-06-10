@@ -22,8 +22,15 @@ pub fn build_router(state: AppState) -> Router {
     let router: Router<AppState> = Router::new();
 
     // ---- server lifecycle ----
+    // Readiness is server-infrastructure state, not a service method (D7): the
+    // service supplies the bulk of `ServerStatus` (store/schema/findings), but
+    // the headline `lifecycle` is overlaid from the daemon's own
+    // `LifecycleHandle` so the readiness endpoint reports the *real* state the
+    // client polls during spawn (C5) and that C6 will drive off store bring-up.
     let router = mount_json::<ServerStatusEp, _, _>(router, |s, _p, _q, _b| async move {
-        s.service.server_status().await
+        let mut status = s.service.server_status().await?;
+        status.lifecycle = s.lifecycle.current();
+        Ok(status)
     });
 
     // ---- machines ----

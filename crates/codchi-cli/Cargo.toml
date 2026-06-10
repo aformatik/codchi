@@ -8,6 +8,7 @@ rust-version.workspace = true
 codchi-api.workspace = true
 codchi-shared.workspace = true
 async-trait.workspace = true
+clap.workspace = true
 tokio.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
