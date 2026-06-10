@@ -29,6 +29,9 @@ in
     };
 
     networking.dhcpcd.enable = false; # dhcp is handled by windows
+    # DNS/resolv.conf is handled by windows (see environment.etc below), so the
+    # resolvconf service must be off — nixpkgs now asserts the two can't coexist.
+    networking.resolvconf.enable = lib.mkDefault false;
 
     # Otherwise WSL fails to login as root with "initgroups failed 5"
     # TODO check if still issue with systemd

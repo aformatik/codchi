@@ -1,5 +1,5 @@
 [package]
-name = "codchi"
+name = "beta-codchi"
 build = "build/main.rs"
 version.workspace = true
 edition.workspace = true

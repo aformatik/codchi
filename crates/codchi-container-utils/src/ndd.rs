@@ -1,16 +1,14 @@
 use std::io::{self, BufRead, BufReader, Read, Write};
-use std::process::{exit, Child, Command, Stdio};
+use std::process::{Child, Command, Stdio, exit};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::{env, thread};
 use sysinfo::{CpuRefreshKind, Networks, RefreshKind, System};
 
-/// Nix dont deadlock
-/// A wrapper for nix which monitors it for deadlocks (CPU & network usage). If a deadlock is
-/// detected, the nix child command is restarted (this is ok because nix will continue with the
-/// build where it left)
+// Nix don't deadlock.
+// This wrapper monitors nix for deadlocks through CPU and network usage. If a
+// deadlock is detected, the child is restarted and nix resumes the build.
 
-const NIX_LOG_ERR: u64 = 0;
 const NIX_LOG_WARN: u64 = 1;
 // const NIX_LOG_DEBUG: u64 = 3;
 const NIX_LOG_TRACE: u64 = 4;
@@ -50,7 +48,7 @@ fn main() {
             exit(status.code().unwrap_or(1))
         } else {
             let cpu_usage = sys.global_cpu_info().cpu_usage();
-            let network_usage_kbs = net.iter().map(|(_, net)| net.received()).sum::<u64>() / 1_000; // 1 KB
+            let network_usage_kbs = net.values().map(|net| net.received()).sum::<u64>() / 1_000;
             let stdout_inactivity =
                 Instant::now().duration_since(*stdout_last_activity.lock().unwrap());
 

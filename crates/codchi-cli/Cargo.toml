@@ -1,5 +1,5 @@
 [package]
-name = "codchi-server"
+name = "codchi-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,5 +8,5 @@ rust-version.workspace = true
 codchi-api.workspace = true
 
 [[bin]]
-name = "codchi-server"
+name = "codchi"
 path = "src/main.rs"

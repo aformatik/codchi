@@ -4,21 +4,21 @@ Tracks the current state of the v1 reimplementation. This file is expected to
 change often. Stable phase definitions live in [PLAN.md](PLAN.md); locked
 per-phase specs live under [phases/](phases/).
 
-**Last updated:** 2026-06-10 (Phase 1 **C1 complete + refined**: every endpoint declares a typed `Endpoint::Path`; transport-neutral `PathParams`/`PathSegment` render and parse the catalog templates — encoding via the `percent-encoding` crate, infallible render, ordered (not name-keyed) parse — incl. `LogSource`'s `server`/`store`/`machine-<id>` forms; the secret `{key}` segment is now the validated **`SecretName`** newtype, not raw `String` (contract revision **R12**, wire-compatible, `oasdiff` unaffected); all 28 routes have render+parse coverage plus `proptest` round-trip properties; `codchi-api` has 18 green tests (14 contract + 4 property), clean clippy, no OpenAPI drift)
+**Last updated:** 2026-06-10 (Phase 1 **C2 complete**: the six pre-v1 architecture crates are frozen under `crates/beta/beta-*`; the active workspace is exactly `codchi-api`, `codchi-server`, `codchi-cli`, `codchi-shared`, and `codchi-container-utils`; Linux packaging builds the new server+CLI and the Podman store image with `ndd`; active v1 crate, formatting, OpenAPI, and Nix checks are green)
 
 ## Overall
 
-The repo is on the `server` branch, an early skeleton of the v1 architecture.
-The beta architecture (CLI-owned state) still drives end-user behavior. The v1
-target is described in [01-architecture.md](01-architecture.md) and
-[README.md](README.md).
+The repo is on the `server` branch. The beta CLI-owned implementation and the
+early remoc/Podman server skeleton are frozen under `crates/beta/` as reference.
+The active v1 server and CLI are clean scaffolds on `codchi-api`; end-user
+behavior has not yet been ported.
 
 ## Phase Status
 
 | # | Phase | Status |
 |---|---|---|
-| 0 | Contract design (`codchi-api` crate) | Done — decisions locked + refined (R1–R10) in `phases/00-contract-decisions.md`; both former open items closed (R8/R9/R10). **Crate created**: `crates/codchi-api` compiles with all DTOs, IDs, `ApiError` catalog, `Event` model, `CodchiService` trait + typed `Endpoint` catalog, `MockCodchiService`, `schemars`+`aide` OpenAPI generation (`gen-openapi` bin), committed `openapi.json`, and contract tests (error-code stability, OpenAPI/route coverage, endpoint-catalog consistency, mock smoke, plus existing serde roundtrips). `JobView` is generic over its success payload (`JobView<O = JobOutput>`): kind-specific methods return narrowed views (`JobView<Rebuilt>`, `JobView<()>`, …), `get_job` returns the kind-erased default; `JobOutput` variants are newtypes over the same payload structs (revised R1). Path params are the canonical identity and are no longer duplicated in request bodies (`rebuild`/`update` take no body; `clone` body is `{ target }`; `exec` body is `{ command }`). URL map is a typed `Endpoint` catalog (`endpoints.rs`, one marker per route) driving routing + OpenAPI; `operation_id`-string dispatch removed (see `06-api-endpoint-codegen.md`). **Deactivation + CI**: the product crates are excluded from the cargo workspace (kept on disk as reference) so the contract crate builds/tests in isolation; CI gates are wired as hermetic nix checks — `checks.codchi-api` (clippy `-D warnings` + `cargo test` + OpenAPI snapshot-drift), `checks.formatting` (treefmt: rustfmt edition-2024 + nixpkgs-fmt), and an `oasdiff` breaking-change gate (`packages.oasdiff`, built from `build/oasdiff.nix`) in `.github/workflows/ci.yml`. Next: Phase 1 C2 crate restructure. |
-| 1 | HTTP API + Linux/Podman vertical slice | In progress — **C1 typed path parameters complete** (`Endpoint::Path`, render/parse traits, all-route + `proptest` tests; secret key is the validated `SecretName` newtype per **R12**). Contract revisions **R11/CR1** and **R12** are applied. Next dependency chunk is C2, the `crates/beta/` restructure + fresh v1 crate scaffolding/nix repoint. |
+| 0 | Contract design (`codchi-api` crate) | Done — decisions locked + refined (R1–R12) in `phases/00-contract-decisions.md`. `codchi-api` provides the DTOs, IDs, error catalog, event model, semantic service trait, typed endpoint catalog, mock, and generated OpenAPI. It has 18 tests and remains independently gated for clippy, tests, and OpenAPI drift. |
+| 1 | HTTP API + Linux/Podman vertical slice | In progress — **C0–C2 complete**. The beta implementation is archived, all five active v1 crates build, and Linux packaging/store-image checks are active. Next: **C3 server skeleton + generic `mount<E>`**; C4 typed HTTP client can proceed in parallel. |
 | 2 | `ServerCore` boundary | Not started |
 | 3 | SQLite foundation | Not started |
 | 4 | Machine state in SQLite | Not started |
@@ -38,26 +38,17 @@ target is described in [01-architecture.md](01-architecture.md) and
 
 ## Notes
 
-- The `codchi-api` shared crate now exists (`crates/codchi-api`). HTTP/DTO work
-  in `codchi-server` and `codchi` should now build on it (the existing `ipc`
-  types remain provisional and still need to be reconciled with / replaced by
-  the `codchi-api` contract). Dependency choices: `schemars` 0.8 + `aide` 0.14
-  (axum optional, disabled here), `chrono`, `uuid` v7, `async-trait`,
-  `futures-core`.
-- **Workspace deactivation (Phase 0):** `crates/Cargo.toml` now lists only
-  `codchi-api` as a workspace member; the product crates (`codchi`, `codchiw`,
-  `codchi-server`, `codchi-gui`, `shared`, `ipc`, `utils`) are in `exclude` and
-  kept on disk as reference. The trimmed `[workspace.dependencies]` keeps only
-  `codchi-api`'s deps; restore the rest when reactivating a crate. The nix
-  product builds (`packages.default`/`.windows`, container tarballs) and the
-  `populate-cache` product inputs are commented out until reactivation; the
-  release workflow (`build-windows.yml`, tag-triggered) is unchanged and will
-  fail until the product compiles again.
-- **CI (Phase 0):** `.github/workflows/ci.yml` runs on push (`master`/`server`)
-  and PRs: hermetic `checks.codchi-api` + `checks.formatting`, plus an
-  `oasdiff` breaking-change gate on PRs. `nix-cache.yml` warms cachix from the
-  trimmed `populate-cache`. `test.yml` is now only the post-release Windows
-  Pester smoke. Per guidance, serde serialization-roundtrip coverage is left as
-  the existing in-crate tests and not expanded (serde is trusted on its own).
-- Machine state is not yet server-owned; the CLI still manipulates it directly.
+- **Active workspace:** `codchi-api`, `codchi-server`, `codchi-cli`,
+  `codchi-shared`, and `codchi-container-utils`. The server and CLI are minimal
+  scaffolds depending on `codchi-api`; C3/C4 add their transport behavior.
+- **Beta reference:** `beta-codchi`, `beta-codchi-server`, `beta-ipc`,
+  `beta-shared`, `beta-codchi-gui`, and `beta-codchiw` live under
+  `crates/beta/`, are workspace-excluded, and are not expected to compile.
+- **Linux packaging/CI:** `packages.default` contains `codchi-server` and
+  `codchi`; `store-podman-image` embeds `codchi-container-utils`'s `ndd`.
+  Hermetic checks cover the API/OpenAPI contract, active server/CLI/shared
+  crates, and formatting. Windows/WSL packaging remains deferred; the
+  tag-triggered release workflow is unchanged and will fail until Phase 12+.
+- Machine state is not yet server-owned; no active v1 machine workflow exists.
+  The archived beta CLI remains the reference for the old direct-ownership path.
 - Tray client is currently disabled.

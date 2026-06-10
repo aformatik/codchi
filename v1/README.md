@@ -88,13 +88,16 @@ inputs for that phase; changes require an explicit revision of the spec.
 
 ## Current Branch Context
 
-The current `server` branch is an early skeleton:
+The current `server` branch has completed the contract and crate-restructure
+foundation:
 
-- `codchi-server` starts a store and exposes readiness/log streaming.
-- The IPC API only has readiness and log streaming.
+- The beta CLI-owned implementation and early remoc/Podman server are frozen
+  under `crates/beta/`.
+- `codchi-api` is the active v1 contract.
+- The new `codchi-server`, `codchi-cli`, and `codchi-shared` are minimal
+  scaffolds; HTTP transport and daemon behavior have not landed yet.
+- Linux packaging builds both binaries and the Podman store image.
 - Machine state is not yet server-owned.
-- The CLI currently connects to the server and then reaches unreachable command
-  dispatch code.
 
-The v1 design below is a target architecture, not a description of the current
-implementation state.
+The v1 design remains a target architecture, not a description of behavior that
+already exists.

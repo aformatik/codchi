@@ -1,20 +1,14 @@
 [workspace]
 resolver = "2"
-# Phase 0 deactivates the beta/v1 product crates from compilation so the v1
-# contract crate (`codchi-api`) builds and tests in isolation. The crates below
-# are kept on disk as reference and are re-added to `members` as each is
-# migrated onto the `codchi-api` contract. See v1/STATUS.md.
 members = [
-    "codchi-api"
+    "codchi-api",
+    "codchi-server",
+    "codchi-cli",
+    "codchi-shared",
+    "codchi-container-utils",
 ]
 exclude = [
-    "codchi",
-    "codchiw",
-    "codchi-server",
-    "codchi-gui",
-    "shared",
-    "ipc",
-    "utils",
+    "beta/*",
 ]
 
 [workspace.package]
@@ -22,10 +16,8 @@ version = "0.4.0"
 edition = "2024"
 rust-version = "1.88.0"
 
-# Only the `codchi-api` dependencies remain active. The deactivated crates above
-# carry their own (now-dangling) workspace dep references; restore the relevant
-# entries here when re-activating a crate.
 [workspace.dependencies]
+codchi-api = { path = "./codchi-api" }
 async-trait = "0.1"
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock", "std"] }
 uuid = { version = "1", features = ["v7", "serde"] }
@@ -43,4 +35,3 @@ proptest = "1"
 [profile.release]
 lto = true
 strip = true
-

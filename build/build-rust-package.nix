@@ -179,37 +179,43 @@ let
         rustPlatform = rustPlatformOrig;
       };
       nativeBuildInputs = [
-        pkg-config
         nix-git
         makeWrapper
-        pandoc
-        installShellFiles
+        # GUI (codchi-gui) and the man-page/completion/usage-doc generation
+        # return in later phases; restore alongside them:
+        # pkg-config
+        # pandoc
+        # installShellFiles
       ];
-      buildInputs = [
-        gtk3
-        libayatana-appindicator.out
-        libxkbcommon.out
-        libGL.out
-        libGLU.out
-      ];
+      # GUI/tray link deps — restored with codchi-gui in Phase 15:
+      # buildInputs = [
+      #   gtk3
+      #   libayatana-appindicator.out
+      #   libxkbcommon.out
+      #   libGL.out
+      #   libGLU.out
+      # ];
 
-      outputs = [ "out" "docs" ];
+      # outputs = [ "out" "docs" ];
 
-      postInstall = ''
-        installManPage ./target/codchi/man/*
-        installShellCompletion --cmd codchi \
-          --bash ./target/codchi/completions/codchi.bash \
-          --fish ./target/codchi/completions/codchi.fish \
-          --zsh  ./target/codchi/completions/_codchi
+      # The v1 CLI does not yet generate man pages, completions or usage docs,
+      # so there is nothing to install here. Restore with the doc-generation
+      # step in a later phase:
+      # postInstall = ''
+      #   installManPage ./target/codchi/man/*
+      #   installShellCompletion --cmd codchi \
+      #     --bash ./target/codchi/completions/codchi.bash \
+      #     --fish ./target/codchi/completions/codchi.fish \
+      #     --zsh  ./target/codchi/completions/_codchi
+      #
+      #   mkdir -p $docs
+      #   cp -r ./target/codchi/md $docs/usage
+      # '';
 
-        mkdir -p $docs
-        cp -r ./target/codchi/md $docs/usage
-      '';
-
+      # The server now owns the Podman store, so it is the binary that needs the
+      # store-image path. The GUI rpath patch returns with codchi-gui (Phase 15).
       postFixup = ''
-        patchelf "$out/bin/codchi" \
-          --add-rpath ${lib.makeLibraryPath buildInputs}
-        wrapProgram "$out/bin/codchi" \
+        wrapProgram "$out/bin/codchi-server" \
           --set CODCHI_PODMAN_STORE_IMAGE $CODCHI_PODMAN_STORE_IMAGE
       '';
     };

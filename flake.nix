@@ -37,8 +37,7 @@
               inherit (inputs) self;
             };
             codchi = self.callPackage ./crates { targetPlatform = "linux"; };
-            codchi-windows = self.callPackage ./crates { targetPlatform = "windows"; };
-            codchi-utils = self.callPackage ./crates/utils { };
+            codchi-container-utils = self.callPackage ./crates/codchi-container-utils { };
 
             mkContainer = type: driver: (import ./nix/container
               {
@@ -55,18 +54,9 @@
             );
             store-podman = self.mkContainer "store" "podman";
             store-podman-image = self.store-podman.config.build.dockerImage;
-            store-wsl = self.mkContainer "store" "wsl";
-            store-wsl-tarball = self.store-wsl.config.build.tarball;
-
-            machine-lxd = self.mkContainer "machine" "lxd";
-            machine-lxd-tarball = self.machine-lxd.config.build.tarball;
-            machine-wsl = self.mkContainer "machine" "wsl";
-            machine-wsl-tarball = self.machine-wsl.config.build.tarball;
-
-
-            # nixvim = { inherit (inputs.nixvim.legacyPackages.${system}) makeNixvim; };
+            # Windows/WSL product and container packaging returns in Phases 12/13.
+            # The tray is recreated in Phase 15. Linux LXD is outside v1 scope.
           })
-          #(inputs.nixvim.overlays.default)
         ];
         config.allowUnfree = true;
       };
@@ -84,22 +74,14 @@
         programs.rustfmt.enable = true;
         programs.rustfmt.edition = "2024";
         programs.nixpkgs-fmt.enable = true;
-        # Phase 0 formats only the active surface: the v1 contract crate
-        # (codchi-api), the root flake, and build/ helpers. The deactivated
-        # product crates (reference-only) and the legacy nix tree are excluded
-        # to avoid churn; re-include each as it is reactivated.
+        # Retired beta crates are read-only reference. Active v1 crates and
+        # packaging are formatted.
         settings.global.excludes = [
           "*.lock"
           "*.json"
           "*.md"
           "crates/target/**"
-          "crates/codchi/**"
-          "crates/codchiw/**"
-          "crates/codchi-server/**"
-          "crates/codchi-gui/**"
-          "crates/shared/**"
-          "crates/ipc/**"
-          "crates/utils/**"
+          "crates/beta/**"
           "nix/**"
           "docs/**"
           "configuration.nix"
@@ -115,6 +97,15 @@
       ciRust = pkgs.rust-bin.selectLatestNightlyWith (toolchain:
         toolchain.default.override { extensions = [ "rust-src" ]; });
       ciRustPlatform = pkgs.makeRustPlatform { cargo = ciRust; rustc = ciRust; };
+      activeCrateSource = nixpkgs.lib.sourceByRegex ./crates [
+        "^codchi-api.*$"
+        "^codchi-server.*$"
+        "^codchi-cli.*$"
+        "^codchi-shared.*$"
+        "^codchi-container-utils.*$"
+        "^Cargo\\.toml$"
+        "^Cargo\\.lock$"
+      ];
 
     in
     mergeAttrList
@@ -131,38 +122,24 @@
           };
 
           packages.${system} = {
-            inherit (pkgs) store-podman store-podman-image store-wsl machine-lxd machine-wsl codchi-utils;
+            inherit (pkgs) store-podman-image codchi-container-utils;
             default = pkgs.codchi;
-            windows = pkgs.codchi-windows;
             # oasdiff powers the OpenAPI breaking-change gate (not in nixpkgs).
             oasdiff = pkgs.callPackage ./build/oasdiff.nix { };
             inherit (pkgs.pkgsStatic) busybox;
-            # editor = pkgs.nixvim.makeNixvim (import ./editor.nix);
-            foo = pkgs.dockerTools.buildImage {
-              name = "hello";
-              tag = "latest";
-              copyToRoot = pkgs.hello;
-              config = { cmd = [ "/bin/hello" ]; };
-            };
           };
 
           devShells.${system} = {
             default = pkgs.callPackage ./crates/shell.nix { targetPlatform = "linux"; };
-            windows = pkgs.callPackage ./crates/shell.nix { targetPlatform = "windows"; codchi = pkgs.codchi-windows; };
           };
 
           checks.${system} = {
-            # Phase 0 contract gate: lint, test, and verify the committed
-            # OpenAPI snapshot for codchi-api, hermetically and without the GUI
-            # dev shell.
+            # Contract gate: lint, test, and verify the committed OpenAPI
+            # snapshot for codchi-api.
             codchi-api = ciRustPlatform.buildRustPackage {
               pname = "codchi-api-checks";
               version = (nixpkgs.lib.importTOML ./crates/Cargo.toml).workspace.package.version;
-              src = nixpkgs.lib.sourceByRegex ./crates [
-                "^codchi-api.*$"
-                "^Cargo\\.toml$"
-                "^Cargo\\.lock$"
-              ];
+              src = activeCrateSource;
               cargoLock.lockFile = ./crates/Cargo.lock;
               nativeBuildInputs = [ ciRust ];
               buildPhase = ''
@@ -188,25 +165,40 @@
               '';
             };
 
+            v1-crates = ciRustPlatform.buildRustPackage {
+              pname = "codchi-v1-crate-checks";
+              version = (nixpkgs.lib.importTOML ./crates/Cargo.toml).workspace.package.version;
+              src = activeCrateSource;
+              cargoLock.lockFile = ./crates/Cargo.lock;
+              nativeBuildInputs = [ ciRust ];
+              buildPhase = ''
+                runHook preBuild
+                cargo clippy -p codchi-server -p codchi-cli -p codchi-shared \
+                  --all-targets --offline -- -D warnings
+                runHook postBuild
+              '';
+              checkPhase = ''
+                runHook preCheck
+                cargo test -p codchi-server -p codchi-cli -p codchi-shared --offline
+                runHook postCheck
+              '';
+              installPhase = ''
+                runHook preInstall
+                mkdir -p $out
+                touch $out/passed
+                runHook postInstall
+              '';
+            };
+
             formatting = treefmtEval.config.build.check self;
 
             populate-cache =
               let
-                # container = base: [
-                #   base.config.build.tarball.passthru.createFiles
-                #   base.config.build.runtime
-                # ];
                 buildInputs = [
-                  # Phase 0: the product crates are excluded from the cargo
-                  # workspace, so the rust product and its containers cannot
-                  # build. Restore these as crates are reactivated (see
-                  # v1/STATUS.md):
-                  #   self.packages.${system}.default
-                  #   self.packages.${system}.windows
-                  #   ++ container self.packages.${system}.store-wsl
-                  #   ++ container self.packages.${system}.machine-lxd
-                  #   ++ container self.packages.${system}.machine-wsl
+                  self.packages.${system}.default
+                  self.packages.${system}.store-podman-image
                   self.checks.${system}.codchi-api
+                  self.checks.${system}.v1-crates
                   self.checks.${system}.formatting
                   self.packages.${system}.oasdiff
                 ];

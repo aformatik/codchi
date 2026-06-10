@@ -1,5 +1,5 @@
 [package]
-name = "codchiw"
+name = "beta-codchiw"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1,9 +1,7 @@
 name: ci
 
-# Phase 0 contract CI for the v1 `codchi-api` crate. The product crates are
-# deactivated from the cargo workspace during the migration (see v1/STATUS.md),
-# so this gates only what is active: lint, tests, the committed OpenAPI snapshot,
-# formatting, and OpenAPI breaking-change classification.
+# Active v1 crate checks, committed OpenAPI snapshot, formatting, and OpenAPI
+# breaking-change classification.
 on:
   pull_request:
   push:
@@ -26,6 +24,8 @@ jobs:
       # clippy (-D warnings) + cargo test + OpenAPI snapshot-drift, hermetically.
       - name: codchi-api contract checks
         run: nix build -L --accept-flake-config .#checks.x86_64-linux.codchi-api
+      - name: v1 server, CLI, and shared checks
+        run: nix build -L --accept-flake-config .#checks.x86_64-linux.v1-crates
       # rustfmt (edition 2024) + nixpkgs-fmt over the active surface.
       - name: formatting
         run: nix build -L --accept-flake-config .#checks.x86_64-linux.formatting

@@ -2,8 +2,8 @@
 
 Codchi is being reimplemented from the beta CLI-owned architecture to a v1
 architecture with a central, per-user `codchi-server` and SQLite-owned state.
-The repo is mid-migration: the `server` branch carries an early skeleton, but
-end-user behavior is still driven by the beta path.
+The repo is mid-migration: the `server` branch has the v1 contract and clean
+crate scaffolding, but end-user behavior has not yet been ported from beta.
 
 Read these before making changes:
 
@@ -34,10 +34,9 @@ The beta (CLI-owned-state) crates are retired under `crates/beta/` with a
 (workspace-excluded). Read them for orientation — especially the Podman store
 work in `beta-codchi-server` — but never link them.
 
-> Status: the `crates/beta/` move + new-crate scaffolding is Phase 1 chunk **C2**
-> (`v1/phases/01-http-vertical-slice.md` D1–D5). Until it lands, the beta crates
-> still sit at their old `crates/<name>` paths and `codchi-api` is the only built
-> v1 crate. Verify the layout on disk before relying on it.
+> Status: Phase 1 chunk **C2** is complete. The beta crates are archived and the
+> five crates above are the complete active workspace. C3 adds the HTTP server
+> skeleton; do not assume the scaffolded binaries implement daemon behavior yet.
 
 ## Rules for agents
 

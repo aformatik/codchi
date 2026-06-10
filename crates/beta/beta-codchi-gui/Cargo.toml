@@ -1,5 +1,5 @@
 [package]
-name = "codchi-gui"
+name = "beta-codchi-gui"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

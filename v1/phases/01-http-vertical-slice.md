@@ -250,14 +250,14 @@ the router and client share one render/parse and can't drift.*
   `String` — closes the last raw-`String` path param (contract revision **R12**
   in `phases/00`; wire-compatible, `oasdiff` unaffected).
 
-### C2 — Crate restructure + nix repoint (D1–D5, D12–D13) — `[ ]`
+### C2 — Crate restructure + nix repoint (D1–D5, D12–D13) — `[x]` done
 *As a maintainer, I want the beta crates retired and the v1 crates scaffolded so
 all new work builds on `codchi-api` with a clean, green workspace.*
-- [ ] Beta crates moved to `crates/beta/`, renamed `beta-*`, in cargo `exclude`.
-- [ ] `codchi-server`, `codchi-cli` (`[[bin]] codchi`), `codchi-shared`, `codchi-container-utils` scaffolded; `members` = the 5 active crates.
-- [ ] Nix repointed: store image builds, `packages.default` builds server+cli, `codchi-utils`→`codchi-container-utils`.
-- [ ] Treefmt: single `crates/beta/**` exclude; new crates linted/formatted.
-- [ ] `cargo build` + `nix flake check` green; `codchi-api` 12 tests still pass.
+- [x] Beta crates moved to `crates/beta/`, renamed `beta-*`, in cargo `exclude`.
+- [x] `codchi-server`, `codchi-cli` (`[[bin]] codchi`), `codchi-shared`, `codchi-container-utils` scaffolded; `members` = the 5 active crates.
+- [x] Nix repointed: store image builds, `packages.default` builds server+cli, `codchi-utils`→`codchi-container-utils`.
+- [x] Treefmt: single `crates/beta/**` exclude; new crates linted/formatted.
+- [x] `cargo build` + `nix flake check` green; all 18 `codchi-api` tests still pass.
 
 ### C3 — Server skeleton + generic `mount<E>` (D6, D7) — `[ ]` *(needs C1, C2)*
 *As a CLI/tray client, I want the daemon to serve the full typed API over a

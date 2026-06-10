@@ -1,12 +1,7 @@
 [package]
-name = "codchi-server"
+name = "codchi-shared"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-codchi-api.workspace = true
-
-[[bin]]
-name = "codchi-server"
-path = "src/main.rs"
