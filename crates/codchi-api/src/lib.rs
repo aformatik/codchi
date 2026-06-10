@@ -21,7 +21,9 @@ pub mod testing;
 pub mod version;
 
 // Flat re-exports of the most-used items.
-pub use endpoints::{Endpoint, Method, ROUTES, ResponseShape, Route, route};
+pub use endpoints::{
+    Endpoint, Method, PathParams, PathSegment, ROUTES, ResponseShape, Route, route,
+};
 pub use error::ApiError;
 pub use events::{Event, EventStreamOpts, LogLevel, NixBuildStatus, PhaseStatus};
 pub use ids::{EventSeq, FindingId, GenerationId, JobId, MachineId, StoreGenerationId};

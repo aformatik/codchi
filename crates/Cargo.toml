@@ -5,7 +5,7 @@ resolver = "2"
 # are kept on disk as reference and are re-added to `members` as each is
 # migrated onto the `codchi-api` contract. See v1/STATUS.md.
 members = [
-    "codchi-api",
+    "codchi-api"
 ]
 exclude = [
     "codchi",
@@ -33,10 +33,12 @@ schemars = { version = "0.8", features = ["chrono", "uuid1", "derive"] }
 aide = { version = "0.14", default-features = false }
 futures-core = "0.3"
 indexmap = "2"
+percent-encoding = "2"
 serde = "1"
 serde_json = "1"
 thiserror = "2.0"
 futures = "0.3"
+proptest = "1"
 
 [profile.release]
 lto = true

@@ -43,10 +43,15 @@ pub trait CodchiService: Send + Sync {
 
     // ---- modules / config / secrets ----
     async fn set_modules(&self, id: &MachineId, req: SetModulesRequest) -> Result<(), ApiError>;
-    async fn set_secret(&self, id: &MachineId, key: String, value: String) -> Result<(), ApiError>;
-    async fn get_secret(&self, id: &MachineId, key: String) -> Result<String, ApiError>;
+    async fn set_secret(
+        &self,
+        id: &MachineId,
+        key: SecretName,
+        value: String,
+    ) -> Result<(), ApiError>;
+    async fn get_secret(&self, id: &MachineId, key: SecretName) -> Result<String, ApiError>;
     async fn list_secrets(&self, id: &MachineId) -> Result<Vec<SecretKey>, ApiError>;
-    async fn delete_secret(&self, id: &MachineId, key: String) -> Result<(), ApiError>;
+    async fn delete_secret(&self, id: &MachineId, key: SecretName) -> Result<(), ApiError>;
 
     // ---- build / update / activation ----
     async fn rebuild(&self, id: &MachineId) -> Result<JobView<Rebuilt>, ApiError>;

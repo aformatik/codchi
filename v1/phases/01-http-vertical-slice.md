@@ -179,6 +179,21 @@ server-owned Podman store startup; **CLI does `status` end-to-end**.
   `shared::consts` / `CommandExt` into `codchi-shared`. **The `linux-lxd` impl is
   dropped** (out of v1 scope; Podman is its replacement — started but unfinished
   in beta, to be completed here). `beta-codchi-server` is never a dependency.
+  - **Platform-naming seam: the `codchi-machine-` prefix lives *only* here.**
+    `MachineId` is carried bare everywhere above the platform trait (Q1); the
+    qualified resource name is derived at the seam by a single
+    `machine_resource_name(&MachineId) -> String` (+ inverse
+    `machine_id_from_resource(&str) -> Option<MachineId>`) in `codchi-shared`
+    consts — the v1 successor to the beta's `consts::machine::machine_name`
+    (`codchi-{name}`), now `codchi-machine-{id}`. Only the `podman` / `wsl`
+    impls call it; `ServerCore`, the API, the CLI, SQLite, and the source logs
+    never see the prefix. The store/server get their own fixed resource names
+    (no machine prefix), so the `codchi-*` namespace is type-partitioned without
+    the beta's `codchistore` collision dodge. The one deliberate exception is
+    `ExecPlan.target`, which the **server** fills via `machine_resource_name` so
+    the exec client never reconstructs the scheme. Because the prefix differs
+    from the beta (`codchi-` → `codchi-machine-`), the beta→v1 migration phase
+    owns renaming/recreating the underlying container/distro.
 
 ## Nix packaging & build wiring
 
@@ -221,13 +236,19 @@ frozen contract, so server and clients share one model before fanning out.*
 - [x] `list_jobs` + `stream_logs` in `CodchiService` + endpoint catalog (`ROUTES` = 28).
 - [x] mock + contract tests updated (10 green); `openapi.json` regenerated; `phases/00` R11 recorded.
 
-### C1 — Typed path parameters (`codchi-api`) — `[ ]`
+### C1 — Typed path parameters (`codchi-api`) — `[x]` done
 *As a contributor, I want each route's path params modeled as a typed value so
 the router and client share one render/parse and can't drift.*
-- [ ] `Endpoint::Path` associated type (tuple of typed ids) added per route.
-- [ ] A render/parse trait: tuple → `PATH` template, and axum matched-params → tuple.
-- [ ] `LogSource` round-trips through the `{source}` segment (`server`/`store`/`machine-<id>`).
-- [ ] Unit test renders **and** parses every `ROUTES` entry's params.
+- [x] `Endpoint::Path` associated type (tuple of typed ids) added per route.
+- [x] A render/parse trait: tuple → `PATH` template, and axum matched-params → tuple.
+- [x] `LogSource` round-trips through the `{source}` segment (`server`/`store`/`machine-<id>`).
+- [x] Unit test renders **and** parses every `ROUTES` entry's params.
+- [x] Path-segment encoding via the `percent-encoding` crate (no hand-rolled
+  encoder); render is infallible, `parse` takes the transport's matched values
+  **in template order** (no name-keyed reorder).
+- [x] Secret `{key}` segment is the validated `SecretName` newtype, not raw
+  `String` — closes the last raw-`String` path param (contract revision **R12**
+  in `phases/00`; wire-compatible, `oasdiff` unaffected).
 
 ### C2 — Crate restructure + nix repoint (D1–D5, D12–D13) — `[ ]`
 *As a maintainer, I want the beta crates retired and the v1 crates scaffolded so
@@ -236,7 +257,7 @@ all new work builds on `codchi-api` with a clean, green workspace.*
 - [ ] `codchi-server`, `codchi-cli` (`[[bin]] codchi`), `codchi-shared`, `codchi-container-utils` scaffolded; `members` = the 5 active crates.
 - [ ] Nix repointed: store image builds, `packages.default` builds server+cli, `codchi-utils`→`codchi-container-utils`.
 - [ ] Treefmt: single `crates/beta/**` exclude; new crates linted/formatted.
-- [ ] `cargo build` + `nix flake check` green; `codchi-api` 10 tests still pass.
+- [ ] `cargo build` + `nix flake check` green; `codchi-api` 12 tests still pass.
 
 ### C3 — Server skeleton + generic `mount<E>` (D6, D7) — `[ ]` *(needs C1, C2)*
 *As a CLI/tray client, I want the daemon to serve the full typed API over a

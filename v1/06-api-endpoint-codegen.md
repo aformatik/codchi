@@ -45,6 +45,7 @@ pub trait Endpoint {
     const RESPONSE: ResponseShape;   // Json | Ndjson | Empty
     const ROUTE: Route;              // derived cheap metadata
 
+    type Path;       // typed tuple in template order; () ⇒ no params
     type Body;       // request DTO; () ⇒ no body
     type Query;      // query struct; () ⇒ none; fields become query params
     type Response;   // success DTO; () ⇒ empty; element type for NDJSON
@@ -113,19 +114,25 @@ shape and the `JobView<O>` typing flow through unchanged.
 **`CodchiService` and the mock stay hand-written.** They are the readable
 semantic surface and the test double; nothing generates them.
 
-### What the catalog still needs for Phase 1
+### Typed path parameters (Phase 1 C1)
 
-The Phase 0 catalog models `Body`, `Query`, `Response`. To fully drive transport
-generically, Phase 1 must also model **path parameters** as a type (today they
-are derived from the `{name}` segments of `PATH` as untyped strings):
+Phase 1 C1 adds **path parameters** as a type alongside `Body`, `Query`, and
+`Response`:
 
 ```rust
-type Path;   // e.g. (MachineId,) or (MachineId, SecretKey) or (JobId,)
+type Path;   // e.g. (MachineId,) or (MachineId, SecretName) or (JobId,)
 ```
 
-with a small trait to render the tuple into the path template and parse it back
-out of axum's matched params. This is the one piece of additional machinery D
-needs beyond the Phase 0 surface.
+`PathParams` renders a tuple into the endpoint template (percent-encoding each
+segment via the `percent-encoding` crate, so a free-form value such as a secret
+key can't escape its `{…}` slot) and parses the decoded segment values — **in
+template order** — back into the tuple. The API stays transport-neutral: the
+axum layer feeds the ordered matched values (e.g. from
+`Path<Vec<(String, String)>>`) without `codchi-api` depending on axum. Typed
+ids carry their own validation through `PathSegment`, so a malformed segment
+surfaces as a typed `ApiError::Validation`. The path catalog is covered
+exhaustively in the contract tests, including `LogSource`'s
+`server` / `store` / `machine-<id>` forms.
 
 ### The residual glue (and why it stays)
 
@@ -141,6 +148,7 @@ debuggable; a `ROUTES`-coverage test keeps it honest.
 - **Implemented in Phase 0:** the `Endpoint` trait + marker catalog, `ROUTES`,
   `route()`, OpenAPI generation driven off the catalog, query-param
   introspection, and removal of `operation_id`-string dispatch.
-- **Deferred to Phase 1:** `type Path` + the render/parse trait, the generic
-  `mount<E>` / `call<E>` helpers, and the `HttpClient` `CodchiService` impl. See
-  [PLAN.md](PLAN.md) Phase 1.
+- **Implemented in Phase 1 C1:** `type Path` + the transport-neutral
+  render/parse traits and exhaustive route tests.
+- **Remaining in Phase 1:** the generic `mount<E>` / `call<E>` helpers and the
+  `HttpClient` `CodchiService` impl. See [PLAN.md](PLAN.md) Phase 1.

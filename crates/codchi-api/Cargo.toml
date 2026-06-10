@@ -19,9 +19,13 @@ schemars.workspace = true
 aide.workspace = true
 futures-core.workspace = true
 indexmap.workspace = true
+percent-encoding.workspace = true
 
 [dev-dependencies]
 futures = { workspace = true }
+proptest = { workspace = true }
+# normal dep above; also needed directly by the integration tests
+percent-encoding.workspace = true
 
 [[bin]]
 name = "gen-openapi"

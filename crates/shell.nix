@@ -1,6 +1,7 @@
 { mkShell
 , writeShellScriptBin
 , lib
+, fetchurl
   # , buildFHSUserEnv
   # , system
   # , fetchFromGitHub
@@ -49,11 +50,14 @@ let
       ];
     };
     linux = {
-      inherit (codchi) CODCHI_PODMAN_STORE_IMAGE;
+      # inherit (codchi) CODCHI_PODMAN_STORE_IMAGE;
       LD_LIBRARY_PATH = lib.makeLibraryPath codchi.buildInputs;
     };
   };
   target = platforms.${targetPlatform};
+
+
+  rustPlatform = codchi.passthru.rust;
 
 in
 mkShell (lib.recursiveUpdate target {
@@ -69,13 +73,13 @@ mkShell (lib.recursiveUpdate target {
     gdb
     gdbgui
 
-    # (jetbrains.rust-rover.overrideAttrs (_: {
-    #   src = fetchTarball {
-    #     url = "https://download.jetbrains.com/rustrover/RustRover-233.11799.284.tar.gz";
-    #     sha256 = "sha256:0nq62y0cqvhx8a81c7wc1zrm9bp00ljrh96qlsvmy0mwn3s278ym";
-    #   };
-    # }))
-    jetbrains.rust-rover
+    (jetbrains.rust-rover.overrideAttrs (_: rec {
+      version = "2026.1.3";
+      src = fetchurl {
+        url = "https://download.jetbrains.com/rustrover/RustRover-${version}.tar.gz";
+        hash = "sha256-0+v05zxvFqXV13c8oV9dTTwtO+shgywD75cwUiZAab0=";
+      };
+    }))
 
     cargo-bloat
     # cargo-deps
@@ -119,6 +123,16 @@ mkShell (lib.recursiveUpdate target {
     # export CODCHI_DATA_DIR="$(git rev-parse --show-toplevel)/.codchi/data"
     # export CODCHI_RUNTIME_DIR="$(git rev-parse --show-toplevel)/.codchi/runtime"
     # export CODCHI_NIX_DIR="$(git rev-parse --show-toplevel)/.codchi/nix"
+
+    mkdir -p ~/.rust-rover/toolchain
+
+    # Only touch the symlinks when the toolchain actually changed: `ln -sfn`
+    # unlinks + recreates them, which RustRover sees as a root change and
+    # re-triggers its (race-prone) library re-scan on every shell entry.
+    [ "$(readlink ~/.rust-rover/toolchain/lib)" = "${rustPlatform}/lib" ] || ln -sfn ${rustPlatform}/lib ~/.rust-rover/toolchain
+    [ "$(readlink ~/.rust-rover/toolchain/bin)" = "${rustPlatform}/bin" ] || ln -sfn ${rustPlatform}/bin ~/.rust-rover/toolchain
+
+    export RUST_SRC_PATH="$HOME/.rust-rover/toolchain/lib/rustlib/src/rust/library"
   '' + (target.shellHook or "");
 
   inherit (codchi) CARGO_BUILD_TARGET;

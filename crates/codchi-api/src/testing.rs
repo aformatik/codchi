@@ -44,7 +44,7 @@ fn sample_module() -> ModuleSpec {
 
 fn sample_secret() -> SecretKey {
     SecretKey {
-        name: "GITHUB_TOKEN".to_owned(),
+        name: SecretName("GITHUB_TOKEN".to_owned()),
         description: "Token used to fetch private flakes".to_owned(),
         has_value: true,
     }
@@ -171,14 +171,14 @@ impl CodchiService for MockCodchiService {
     async fn set_secret(
         &self,
         id: &MachineId,
-        _key: String,
+        _key: SecretName,
         _value: String,
     ) -> Result<(), ApiError> {
         id.validate("id")?;
         Ok(())
     }
 
-    async fn get_secret(&self, _id: &MachineId, _key: String) -> Result<String, ApiError> {
+    async fn get_secret(&self, _id: &MachineId, _key: SecretName) -> Result<String, ApiError> {
         Ok("mock-secret-value".to_owned())
     }
 
@@ -186,7 +186,7 @@ impl CodchiService for MockCodchiService {
         Ok(vec![sample_secret()])
     }
 
-    async fn delete_secret(&self, _id: &MachineId, _key: String) -> Result<(), ApiError> {
+    async fn delete_secret(&self, _id: &MachineId, _key: SecretName) -> Result<(), ApiError> {
         Ok(())
     }
 

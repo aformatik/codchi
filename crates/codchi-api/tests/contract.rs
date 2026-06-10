@@ -61,7 +61,7 @@ fn api_error_variants_roundtrip() {
         ApiError::MissingRequiredSecrets {
             machine,
             keys: vec![SecretKey {
-                name: "TOKEN".to_owned(),
+                name: SecretName("TOKEN".to_owned()),
                 description: "desc".to_owned(),
                 has_value: false,
             }],
@@ -374,6 +374,215 @@ fn endpoint_catalog_is_consistent() {
     assert!(route("does_not_exist").is_none());
 }
 
+/// Render `path` into the endpoint template and parse the matched segment
+/// values (given **in template order**, as the transport supplies them) back
+/// into it — the C1 "render and parse every route" round-trip. Returns the
+/// operation id so the coverage test can prove it ran for every catalog route.
+fn roundtrip_path<E>(path: E::Path, values: &[&str], expected: &str) -> &'static str
+where
+    E: codchi_api::Endpoint,
+    E::Path: Debug + PartialEq,
+{
+    use codchi_api::PathParams;
+
+    assert_eq!(
+        path.render(E::PATH),
+        expected,
+        "{} rendered the wrong path",
+        E::OPERATION_ID
+    );
+    let parsed = E::Path::parse(E::PATH, values).expect("parse matched path parameters");
+    assert_eq!(
+        parsed,
+        path,
+        "{} did not round-trip its path parameters",
+        E::OPERATION_ID
+    );
+    E::OPERATION_ID
+}
+
+/// C1 acceptance: every `ROUTES` entry's typed `Path` renders to its template
+/// and parses back, with no route left out.
+#[test]
+fn every_route_path_round_trips() {
+    use codchi_api::endpoints::*;
+
+    let m = || MachineId("demo".to_owned());
+    let job = JobId::new();
+    let job = job.to_string();
+    let finding = FindingId::new();
+    let finding = finding.to_string();
+    let mut covered = Vec::new();
+
+    macro_rules! check {
+        ($ep:ty, $path:expr, $values:expr, $expected:expr) => {
+            covered.push(roundtrip_path::<$ep>($path, $values, $expected));
+        };
+    }
+
+    // No-parameter routes.
+    check!(ServerStatusEp, (), &[], "/v1/server");
+    check!(ListMachinesEp, (), &[], "/v1/machines");
+    check!(CreateMachineEp, (), &[], "/v1/machines");
+    check!(ListStoreGenerationsEp, (), &[], "/v1/store/generations");
+    check!(ResolveConfigEp, (), &[], "/v1/resolve-config");
+    check!(ListJobsEp, (), &[], "/v1/jobs");
+    check!(DoctorEp, (), &[], "/v1/doctor");
+    check!(DoctorScanEp, (), &[], "/v1/doctor/scan");
+    check!(MigrationPlanEp, (), &[], "/v1/migration/plan");
+    check!(MigrationRunEp, (), &[], "/v1/migration/run");
+
+    // Single `{id}` machine routes.
+    check!(GetMachineEp, (m(),), &["demo"], "/v1/machines/demo");
+    check!(DeleteMachineEp, (m(),), &["demo"], "/v1/machines/demo");
+    check!(CloneMachineEp, (m(),), &["demo"], "/v1/machines/demo/clone");
+    check!(SetModulesEp, (m(),), &["demo"], "/v1/machines/demo/modules");
+    check!(
+        ListSecretsEp,
+        (m(),),
+        &["demo"],
+        "/v1/machines/demo/secrets"
+    );
+    check!(RebuildEp, (m(),), &["demo"], "/v1/machines/demo/rebuild");
+    check!(UpdateEp, (m(),), &["demo"], "/v1/machines/demo/update");
+    check!(
+        ListGenerationsEp,
+        (m(),),
+        &["demo"],
+        "/v1/machines/demo/generations"
+    );
+    check!(PrepareExecEp, (m(),), &["demo"], "/v1/machines/demo/exec");
+
+    // Two-parameter routes (in template order).
+    check!(
+        GetSecretEp,
+        (m(), SecretName("GITHUB_TOKEN".to_owned())),
+        &["demo", "GITHUB_TOKEN"],
+        "/v1/machines/demo/secrets/GITHUB_TOKEN"
+    );
+    check!(
+        SetSecretEp,
+        (m(), SecretName("GITHUB_TOKEN".to_owned())),
+        &["demo", "GITHUB_TOKEN"],
+        "/v1/machines/demo/secrets/GITHUB_TOKEN"
+    );
+    check!(
+        DeleteSecretEp,
+        (m(), SecretName("GITHUB_TOKEN".to_owned())),
+        &["demo", "GITHUB_TOKEN"],
+        "/v1/machines/demo/secrets/GITHUB_TOKEN"
+    );
+    check!(
+        ActivateGenerationEp,
+        (m(), GenerationId(42)),
+        &["demo", "42"],
+        "/v1/machines/demo/generations/42/activate"
+    );
+
+    // UUID-keyed job / finding routes.
+    check!(
+        GetJobEp,
+        (JobId(job.parse().unwrap()),),
+        &[job.as_str()],
+        &format!("/v1/jobs/{job}")
+    );
+    check!(
+        CancelJobEp,
+        (JobId(job.parse().unwrap()),),
+        &[job.as_str()],
+        &format!("/v1/jobs/{job}/cancel")
+    );
+    check!(
+        StreamJobEventsEp,
+        (JobId(job.parse().unwrap()),),
+        &[job.as_str()],
+        &format!("/v1/jobs/{job}/events")
+    );
+    check!(
+        DoctorFixEp,
+        (FindingId(finding.parse().unwrap()),),
+        &[finding.as_str()],
+        &format!("/v1/doctor/findings/{finding}/fix")
+    );
+
+    // The `{source}` log route (machine form; the others are covered below).
+    check!(
+        StreamLogsEp,
+        (LogSource::Machine(m()),),
+        &["machine-demo"],
+        "/v1/logs/machine-demo"
+    );
+
+    covered.sort_unstable();
+    let mut expected: Vec<&str> = ROUTES.iter().map(|r| r.operation_id).collect();
+    expected.sort_unstable();
+    assert_eq!(covered, expected, "every catalog route must be covered");
+}
+
+/// C1 acceptance: `LogSource` round-trips through the `{source}` segment in all
+/// three of its `server` / `store` / `machine-<id>` forms.
+#[test]
+fn log_source_segment_round_trips() {
+    use codchi_api::endpoints::StreamLogsEp;
+
+    for (source, segment) in [
+        (LogSource::Server, "server"),
+        (LogSource::Store, "store"),
+        (
+            LogSource::Machine(MachineId("demo".to_owned())),
+            "machine-demo",
+        ),
+    ] {
+        roundtrip_path::<StreamLogsEp>((source,), &[segment], &format!("/v1/logs/{segment}"));
+    }
+}
+
+/// Parsing untrusted matched params (the server's real input path) rejects
+/// malformed segments with a typed `Validation` error carrying the param name.
+#[test]
+fn path_parse_rejects_malformed_segments() {
+    use codchi_api::Endpoint;
+    use codchi_api::PathParams;
+    use codchi_api::endpoints::{GetJobEp, GetMachineEp, StreamLogsEp};
+
+    let bad_uuid = <GetJobEp as codchi_api::Endpoint>::Path::parse(GetJobEp::PATH, &["not-a-uuid"]);
+    assert!(matches!(bad_uuid, Err(ApiError::Validation { ref field, .. }) if field == "id"));
+
+    let reserved = <GetMachineEp as codchi_api::Endpoint>::Path::parse(
+        GetMachineEp::PATH,
+        &["codchi-machine-x"],
+    );
+    assert!(matches!(reserved, Err(ApiError::Validation { ref field, .. }) if field == "id"));
+
+    let unknown =
+        <StreamLogsEp as codchi_api::Endpoint>::Path::parse(StreamLogsEp::PATH, &["bogus"]);
+    assert!(matches!(unknown, Err(ApiError::Validation { ref field, .. }) if field == "source"));
+}
+
+/// A secret-name segment percent-encodes its reserved characters: a declared
+/// name may contain `:` (legal per the `codchi.secrets.env` schema), which must
+/// render as `%3A` so it can't be misread in the path, and round-trip back.
+#[test]
+fn secret_name_segment_encodes_reserved_chars() {
+    use codchi_api::Endpoint;
+    use codchi_api::PathParams;
+    use codchi_api::endpoints::GetSecretEp;
+
+    let path = (
+        MachineId("demo".to_owned()),
+        SecretName("FOO:BAR".to_owned()),
+    );
+    assert_eq!(
+        path.render(GetSecretEp::PATH),
+        "/v1/machines/demo/secrets/FOO%3ABAR"
+    );
+    // The transport percent-decodes before matching; parsing the decoded value
+    // recovers the same name.
+    let parsed = <GetSecretEp as Endpoint>::Path::parse(GetSecretEp::PATH, &["demo", "FOO:BAR"])
+        .expect("parse secret name");
+    assert_eq!(parsed, path);
+}
+
 #[test]
 fn mock_serves_every_endpoint() {
     futures::executor::block_on(async {
@@ -402,10 +611,14 @@ fn mock_serves_every_endpoint() {
         svc.set_modules(&id, SetModulesRequest { modules: vec![] })
             .await
             .unwrap();
-        svc.set_secret(&id, "K".into(), "V".into()).await.unwrap();
-        svc.get_secret(&id, "K".into()).await.unwrap();
+        svc.set_secret(&id, SecretName("K".into()), "V".into())
+            .await
+            .unwrap();
+        svc.get_secret(&id, SecretName("K".into())).await.unwrap();
         svc.list_secrets(&id).await.unwrap();
-        svc.delete_secret(&id, "K".into()).await.unwrap();
+        svc.delete_secret(&id, SecretName("K".into()))
+            .await
+            .unwrap();
         svc.rebuild(&id).await.unwrap();
         svc.update(&id).await.unwrap();
         svc.list_generations(&id).await.unwrap();

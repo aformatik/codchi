@@ -10,24 +10,44 @@ Changes require an explicit revision of this document and an API major bump
 
 Rules:
 
-- `MachineId` is exactly the permanent machine name. One identifier across the
-  API, CLI, errors, events, and platform resources.
+- `MachineId` is exactly the permanent machine name, carried **bare** as the one
+  identifier across the API, CLI, errors, events, SQLite, and logs.
 - URL shape: `/v1/machines/foo`.
-- Platform resource naming derives directly: `codchi-machine-foo` (Podman
-  container, WSL distro).
+- The `codchi-machine-` prefix is **not** part of the identity. It is a
+  *derived* platform-resource name (`codchi-machine-foo` for the Podman
+  container / WSL distro), produced **only at the platform seam** — never stored
+  or carried above it. See the platform-naming seam in
+  `phases/01-http-vertical-slice.md` D11. The bare id is the source of truth;
+  the qualified name crosses the API in exactly one place, `ExecPlan.target`
+  (server-derived, so the client never hardcodes the scheme).
+- The prefix partitions the `codchi-*` resource namespace by *type*
+  (`codchi-machine-<id>` machines, store/server their own fixed names),
+  mirroring the `LogSource` taxonomy (R11) and avoiding the beta's
+  `codchistore`-style collision dodge.
 - Machine names are **stable identities** and **cannot be renamed**.
 - Renaming a machine is unsupported. The supported path is
   `codchi clone foo bar`, which creates a new machine.
 - Beta migration imports each beta machine's existing name as its `MachineId`.
+  Note the platform scheme **differs** from the beta (beta named containers
+  `codchi-<name>`, v1 uses `codchi-machine-<name>`), so migration must
+  rename/recreate the underlying container/distro, not assume the old name.
 - Migration fails loudly on duplicate or invalid names; it does not silently
   rewrite them.
 
 Validation:
 
 - `MachineId` is a newtype around `String`.
-- Validation rules to be defined in the crate (length, character set, reserved
-  prefixes). Must accept all current beta machine names that exist in the wild;
-  must produce a usable container/WSL/gcroot/profile name without escaping.
+- Implemented rules (`ids.rs`): length `1..=63`, ASCII, charset
+  `^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,61}[A-Za-z0-9])?$`, and a case-insensitive
+  reject of the reserved `codchi-machine-` prefix. Must accept all current beta
+  machine names that exist in the wild; must produce a usable
+  container/WSL/gcroot/profile name without escaping.
+- The reserved-prefix reject is **hygiene, not a correctness invariant**: the
+  `codchi-machine-<id>` derivation is reversible regardless, so the reject only
+  stops a machine name from masquerading as a fully-qualified resource (operator
+  confusion in `podman ps`) and guards against double-prefix bugs. It is the one
+  rule that can clash with "accept all beta names" — a beta machine literally
+  named `codchi-machine-*` would fail migration loudly (vanishingly unlikely).
 
 API consequences:
 
@@ -596,8 +616,9 @@ build/eval**, so the four secret endpoints stay genuine **sync** SQLite ops
 (honoring the P6 no-probe invariant). The schema is refreshed only by a build
 (rebuild) job.
 
-`SecretKey { name, description, has_value }`. `set_secret` validates the key
-against the cached schema → `ApiError::Validation` on unknown keys.
+`SecretKey { name: SecretName, description, has_value }` (R12). `set_secret`
+validates the key against the cached schema → `ApiError::Validation` on unknown
+keys; `SecretName` adds a syntactic boundary guard ahead of that (R12).
 
 ### R5 — All secrets required; enforced at start, never at build (refines Q3/Q4)
 
@@ -802,6 +823,37 @@ Phasing of the *implementation* (the contract is defined in full now) is in
 `Server`/`Store` (JSONL + `stream_logs`); jobs → Phase 5, SQLite-indexed tiering
 → Phase 9, `Machine` source → Phase 7. `ROUTES.len()` becomes **28**.
 
+### R12 — Secret key is a validated `SecretName` newtype (tightens R4; satisfies P3/P4)
+
+Raised during the Phase 1 C1 path-parameter work: the three secret endpoints
+(`get`/`set`/`delete_secret`) carried their key as a raw `String` in both the
+`CodchiService` surface and the `{key}` path segment, violating the P3/P4
+newtype rule ("raw `String` / `Uuid` must not appear in the contract"). It was
+also the *only* path segment whose value can contain a **reserved** URI
+character: the NixOS `codchi.secrets.env` option validates names against
+`strMatching "^[a-zA-Z0-9:_.-]*$"`, so a declared name may legitimately contain
+`:` — which the path renderer must percent-encode (`%3A`) rather than emit raw.
+
+Decision: introduce **`SecretName`** — a `#[serde(transparent)]` newtype over
+`String` (in `dto/secret.rs`), mirroring `MachineId`:
+
+- `SecretName::new` / `validate(field)` enforce the syntactic shape (non-empty,
+  ≤255 chars, charset `[A-Za-z0-9:_.-]`, mirroring the Nix module). As with
+  `MachineId`, validation is **not** run in `Deserialize`, so malformed input
+  surfaces as a typed `ApiError::Validation` at the boundary. This is a
+  *syntactic* guard; the authoritative check stays schema membership (R4),
+  performed by the server.
+- `SecretKey.name: SecretName` (was `String`); the three service methods take
+  `key: SecretName` (was `String`); the `{key}` path segment is typed
+  `SecretName`. The `PathSegment` impl for raw `String` is removed, so **no**
+  path segment is an unvalidated `String`.
+
+This is **wire-compatible**: `#[serde(transparent)]` keeps `SecretName` a plain
+string on the wire and inlines it in OpenAPI (path params are already generic
+strings), so `openapi.json` is byte-identical and the `oasdiff` gate does **not**
+trip. It is a Rust-contract tightening only — no API major bump (additive per
+Q5 in the wire sense). `ROUTES.len()` is unchanged at **28**.
+
 ## Crate Structure
 
 ```
@@ -909,10 +961,10 @@ pub trait CodchiService: Send + Sync {
 
     // modules / config / secrets
     async fn set_modules(&self, id: &MachineId, req: SetModulesRequest) -> Result<(), ApiError>;
-    async fn set_secret(&self, id: &MachineId, key: String, value: String) -> Result<(), ApiError>;
-    async fn get_secret(&self, id: &MachineId, key: String) -> Result<String, ApiError>;
+    async fn set_secret(&self, id: &MachineId, key: SecretName, value: String) -> Result<(), ApiError>; // R12
+    async fn get_secret(&self, id: &MachineId, key: SecretName) -> Result<String, ApiError>;            // R12
     async fn list_secrets(&self, id: &MachineId) -> Result<Vec<SecretKey>, ApiError>;
-    async fn delete_secret(&self, id: &MachineId, key: String) -> Result<(), ApiError>;
+    async fn delete_secret(&self, id: &MachineId, key: SecretName) -> Result<(), ApiError>;             // R12
 
     // build / update / activation
     // id is the {id} path segment; rebuild/update take no body
@@ -1083,7 +1135,7 @@ pub enum UpdateStatus { UpToDate, NeedsRebuild, UpdatesAvailable }
 pub struct MachineDetail {
     pub view: MachineView,                        // carries active findings (R10)
     pub modules: Vec<ModuleSpec>,
-    pub secrets: Vec<SecretKey>, // SecretKey { name, description, has_value }; R4/R5
+    pub secrets: Vec<SecretKey>, // SecretKey { name: SecretName, description, has_value }; R4/R5/R12
     pub flake_lock_hash: String,
     pub generations: Vec<GenerationView>,
 }

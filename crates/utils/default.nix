@@ -34,7 +34,7 @@ rustPlatform.buildRustPackage rec {
   ];
   cargoLock.lockFile = ../Cargo.lock;
   cargoLock.outputHashes = {
-    "git-url-parse-0.4.5" = "sha256-q3lrdWE+WpAI0FSbpzUabk9aPCjzoqIHvNoDmqRl2BY=";
+    # "git-url-parse-0.4.5" = "sha256-q3lrdWE+WpAI0FSbpzUabk9aPCjzoqIHvNoDmqRl2BY=";
   };
 
   CARGO_BUILD_RUSTFLAGS = [ "-C" "target-feature=+crt-static" ];

@@ -7,18 +7,22 @@
 //!   for routing and lookup;
 //! - the OpenAPI document ([`crate::openapi`] consumes [`build_operations`]);
 //! - and, in Phase 1, the `axum` router and the typed HTTP client, which are
-//!   generic over `E: Endpoint` and read its associated `Body` / `Query` /
-//!   `Response` types (see `v1/06-api-endpoint-codegen.md`).
+//!   generic over `E: Endpoint` and read its associated `Path` / `Body` /
+//!   `Query` / `Response` types (see `v1/06-api-endpoint-codegen.md`).
 //!
 //! Endpoints are matched by **type**, not by stringly-typed `operation_id`
 //! comparisons: adding a route is one entry here, and forgetting to wire its
 //! request/response is a compile error, not a runtime panic.
 
 use aide::openapi::{Operation, ReferenceOr, SchemaObject};
+use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use schemars::r#gen::SchemaGenerator;
+use uuid::Uuid;
 
+use crate::ApiError;
 use crate::dto::*;
 use crate::events::{Event, EventStreamOpts};
+use crate::ids::{FindingId, GenerationId, JobId, MachineId};
 use crate::openapi::{path_param, path_params};
 
 /// HTTP method for a [`Route`]. Only the methods the contract uses.
@@ -63,12 +67,196 @@ pub struct Route {
     pub summary: &'static str,
 }
 
+/// Percent-encode set for one URI path segment: everything that is *not* an
+/// RFC 3986 unreserved character (`ALPHA` / `DIGIT` / `-` `.` `_` `~`). Every
+/// typed id renders to unreserved characters already, so this is a no-op for
+/// them; it is real insurance only for the free-form secret-key segment, where
+/// it stops a stray `/` from escaping its `{key}` slot.
+const PATH_SEGMENT: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'_')
+    .remove(b'~');
+
+/// One typed value carried in a `{param}` path segment.
+///
+/// [`render`](PathSegment::render) percent-encodes the value for a URI path;
+/// [`parse`](PathSegment::parse) receives an already percent-decoded value from
+/// the transport (e.g. axum's matched params) and returns the wire validation
+/// error for a malformed segment. `field` is the template parameter name, used
+/// as the error's field path.
+pub trait PathSegment: Sized {
+    fn render(&self) -> String;
+    fn parse(field: &str, value: &str) -> Result<Self, ApiError>;
+}
+
+fn encode(value: &str) -> String {
+    utf8_percent_encode(value, PATH_SEGMENT).to_string()
+}
+
+fn invalid_segment(field: &str, error: impl std::fmt::Display) -> ApiError {
+    ApiError::Validation {
+        field: field.to_owned(),
+        message: format!("invalid path parameter: {error}"),
+    }
+}
+
+impl PathSegment for SecretName {
+    fn render(&self) -> String {
+        // Real work, not a no-op: a declared name may contain `:` (reserved),
+        // which percent-encodes to `%3A` so it can't be misread in the path.
+        encode(self.as_str())
+    }
+    fn parse(field: &str, value: &str) -> Result<Self, ApiError> {
+        SecretName::new(value, field)
+    }
+}
+
+impl PathSegment for MachineId {
+    fn render(&self) -> String {
+        encode(self.as_str())
+    }
+    fn parse(field: &str, value: &str) -> Result<Self, ApiError> {
+        MachineId::new(value, field)
+    }
+}
+
+impl PathSegment for JobId {
+    fn render(&self) -> String {
+        encode(&self.to_string())
+    }
+    fn parse(field: &str, value: &str) -> Result<Self, ApiError> {
+        Uuid::parse_str(value)
+            .map(JobId)
+            .map_err(|e| invalid_segment(field, e))
+    }
+}
+
+impl PathSegment for FindingId {
+    fn render(&self) -> String {
+        encode(&self.to_string())
+    }
+    fn parse(field: &str, value: &str) -> Result<Self, ApiError> {
+        Uuid::parse_str(value)
+            .map(FindingId)
+            .map_err(|e| invalid_segment(field, e))
+    }
+}
+
+impl PathSegment for GenerationId {
+    fn render(&self) -> String {
+        self.0.to_string()
+    }
+    fn parse(field: &str, value: &str) -> Result<Self, ApiError> {
+        value
+            .parse()
+            .map(GenerationId)
+            .map_err(|e| invalid_segment(field, e))
+    }
+}
+
+impl PathSegment for LogSource {
+    fn render(&self) -> String {
+        encode(&self.to_string())
+    }
+    fn parse(field: &str, value: &str) -> Result<Self, ApiError> {
+        // `LogSource::from_str` already yields a `Validation` error; realign its
+        // field to this segment's name (e.g. `source`).
+        value.parse().map_err(|e| match e {
+            ApiError::Validation { message, .. } => ApiError::Validation {
+                field: field.to_owned(),
+                message,
+            },
+            other => other,
+        })
+    }
+}
+
+/// Typed path arguments for an [`Endpoint`], in template order.
+///
+/// Implemented for `()` and 1- or 2-tuples of [`PathSegment`], covering the
+/// whole v1 catalog. [`render`](PathParams::render) fills the endpoint
+/// template; [`parse`](PathParams::parse) reads the transport's matched segment
+/// values **in template order**, so the server hands axum's ordered matched
+/// params straight through without `codchi-api` depending on axum.
+pub trait PathParams: Sized {
+    fn render(&self, template: &str) -> String;
+    fn parse(template: &str, values: &[&str]) -> Result<Self, ApiError>;
+}
+
+/// Substitute `values` into the `{param}` holes of an endpoint template, in
+/// order. Templates are `const` and their arity is fixed by the [`PathParams`]
+/// impl and checked by the catalog coverage test, so a shape mismatch is an
+/// authoring bug caught in CI, not a runtime condition.
+fn render_template(template: &str, values: &[String]) -> String {
+    let mut out = String::with_capacity(template.len());
+    let mut values = values.iter();
+    let mut rest = template;
+    while let Some((before, after)) = rest.split_once('{') {
+        let (_, after) = after
+            .split_once('}')
+            .expect("balanced braces in endpoint template");
+        out.push_str(before);
+        out.push_str(values.next().expect("one value per template parameter"));
+        rest = after;
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Guard that the transport supplied exactly the segment count the `Path` tuple
+/// expects. A mismatch means the router and catalog disagree — a server bug.
+fn check_arity(template: &str, values: &[&str], expected: usize) -> Result<(), ApiError> {
+    if values.len() == expected {
+        Ok(())
+    } else {
+        Err(ApiError::internal(format!(
+            "endpoint path '{template}' expects {expected} path parameter(s) but the transport supplied {}",
+            values.len()
+        )))
+    }
+}
+
+impl PathParams for () {
+    fn render(&self, template: &str) -> String {
+        render_template(template, &[])
+    }
+    fn parse(template: &str, values: &[&str]) -> Result<Self, ApiError> {
+        check_arity(template, values, 0)
+    }
+}
+
+impl<A: PathSegment> PathParams for (A,) {
+    fn render(&self, template: &str) -> String {
+        render_template(template, &[self.0.render()])
+    }
+    fn parse(template: &str, values: &[&str]) -> Result<Self, ApiError> {
+        check_arity(template, values, 1)?;
+        let names = path_params(template);
+        Ok((A::parse(names[0], values[0])?,))
+    }
+}
+
+impl<A: PathSegment, B: PathSegment> PathParams for (A, B) {
+    fn render(&self, template: &str) -> String {
+        render_template(template, &[self.0.render(), self.1.render()])
+    }
+    fn parse(template: &str, values: &[&str]) -> Result<Self, ApiError> {
+        check_arity(template, values, 2)?;
+        let names = path_params(template);
+        Ok((
+            A::parse(names[0], values[0])?,
+            B::parse(names[1], values[1])?,
+        ))
+    }
+}
+
 /// A typed API endpoint. One zero-sized marker type per route implements this.
 ///
-/// The associated types name the request body, query, and success payload so
-/// that transport code (OpenAPI now; the `axum` router and typed client in
-/// Phase 1) can be generic over `E: Endpoint` instead of matching on strings.
-/// `()` is the sentinel for "no body" / "no query" / "empty response".
+/// The associated types name the typed path arguments, request body, query, and
+/// success payload so transport code can be generic over `E: Endpoint` instead
+/// of matching on strings. `()` is the sentinel for "no path" / "no body" /
+/// "no query" / "empty response".
 pub trait Endpoint {
     const METHOD: Method;
     const PATH: &'static str;
@@ -77,6 +265,8 @@ pub trait Endpoint {
     const SUCCESS_STATUS: u16;
     const RESPONSE: ResponseShape;
 
+    /// Typed path arguments in template order; `()` ⇒ no path parameters.
+    type Path: PathParams;
     /// Request body DTO; `()` ⇒ no body.
     type Body;
     /// Query-parameter struct; `()` ⇒ none. Its fields become query params.
@@ -151,7 +341,7 @@ macro_rules! op_resp {
 macro_rules! endpoints {
     ($(
         $marker:ident = $method:ident $path:literal $op:literal $summary:literal,
-            body $body:tt, query $query:tt, $shape:ident $resp:ty
+            path $path_ty:ty, body $body:tt, query $query:tt, $shape:ident $resp:ty
     );+ $(;)?) => {
         $(
             #[doc = concat!("Endpoint marker for `", $op, "` (`", $path, "`).")]
@@ -165,6 +355,7 @@ macro_rules! endpoints {
                 const SUMMARY: &'static str = $summary;
                 const SUCCESS_STATUS: u16 = status_for!($shape);
                 const RESPONSE: ResponseShape = ResponseShape::$shape;
+                type Path = $path_ty;
                 type Body = $body;
                 type Query = $query;
                 type Response = $resp;
@@ -219,69 +410,69 @@ macro_rules! endpoints {
 
 endpoints! {
     ServerStatusEp = Get "/server" "server_status" "Get server status",
-        body (), query (), Json ServerStatus;
+        path (), body (), query (), Json ServerStatus;
 
     ListMachinesEp = Get "/machines" "list_machines" "List machines",
-        body (), query (), Json Vec<MachineView>;
+        path (), body (), query (), Json Vec<MachineView>;
     CreateMachineEp = Post "/machines" "create_machine" "Create a machine (job)",
-        body CreateMachineRequest, query (), Json JobView<()>;
+        path (), body CreateMachineRequest, query (), Json JobView<()>;
     GetMachineEp = Get "/machines/{id}" "get_machine" "Get a machine",
-        body (), query (), Json MachineDetail;
+        path (MachineId,), body (), query (), Json MachineDetail;
     DeleteMachineEp = Delete "/machines/{id}" "delete_machine" "Delete a machine (job)",
-        body (), query (), Json JobView<()>;
+        path (MachineId,), body (), query (), Json JobView<()>;
     CloneMachineEp = Post "/machines/{id}/clone" "clone_machine" "Clone a machine (job)",
-        body CloneMachineRequest, query (), Json JobView<()>;
+        path (MachineId,), body CloneMachineRequest, query (), Json JobView<()>;
 
     SetModulesEp = Post "/machines/{id}/modules" "set_modules" "Set a machine's modules",
-        body SetModulesRequest, query (), Empty ();
+        path (MachineId,), body SetModulesRequest, query (), Empty ();
     ListSecretsEp = Get "/machines/{id}/secrets" "list_secrets" "List declared secret keys",
-        body (), query (), Json Vec<SecretKey>;
+        path (MachineId,), body (), query (), Json Vec<SecretKey>;
     GetSecretEp = Get "/machines/{id}/secrets/{key}" "get_secret" "Get a secret value",
-        body (), query (), Json String;
+        path (MachineId, SecretName), body (), query (), Json String;
     SetSecretEp = Post "/machines/{id}/secrets/{key}" "set_secret" "Set a secret value",
-        body SetSecretRequest, query (), Empty ();
+        path (MachineId, SecretName), body SetSecretRequest, query (), Empty ();
     DeleteSecretEp = Delete "/machines/{id}/secrets/{key}" "delete_secret" "Delete a secret",
-        body (), query (), Empty ();
+        path (MachineId, SecretName), body (), query (), Empty ();
 
     RebuildEp = Post "/machines/{id}/rebuild" "rebuild" "Rebuild a machine (job)",
-        body (), query (), Json JobView<Rebuilt>;
+        path (MachineId,), body (), query (), Json JobView<Rebuilt>;
     UpdateEp = Post "/machines/{id}/update" "update" "Update a machine (job)",
-        body (), query (), Json JobView<Updated>;
+        path (MachineId,), body (), query (), Json JobView<Updated>;
     ListGenerationsEp = Get "/machines/{id}/generations" "list_generations" "List machine generations",
-        body (), query (), Json Vec<GenerationView>;
+        path (MachineId,), body (), query (), Json Vec<GenerationView>;
     ActivateGenerationEp = Post "/machines/{id}/generations/{generation}/activate" "activate_generation" "Activate a generation (job)",
-        body (), query (), Json JobView<()>;
+        path (MachineId, GenerationId), body (), query (), Json JobView<()>;
 
     ListStoreGenerationsEp = Get "/store/generations" "list_store_generations" "List store generations",
-        body (), query (), Json Vec<StoreGenerationView>;
+        path (), body (), query (), Json Vec<StoreGenerationView>;
 
     ResolveConfigEp = Post "/resolve-config" "resolve_config" "Resolve a flake's modules (job)",
-        body ResolveConfigRequest, query (), Json JobView<ConfigResolution>;
+        path (), body ResolveConfigRequest, query (), Json JobView<ConfigResolution>;
     PrepareExecEp = Post "/machines/{id}/exec" "prepare_exec" "Prepare an exec session (job)",
-        body PrepareExecRequest, query (), Json JobView<ExecPlan>;
+        path (MachineId,), body PrepareExecRequest, query (), Json JobView<ExecPlan>;
 
     ListJobsEp = Get "/jobs" "list_jobs" "List jobs",
-        body (), query JobFilter, Json Vec<JobView>;
+        path (), body (), query JobFilter, Json Vec<JobView>;
     GetJobEp = Get "/jobs/{id}" "get_job" "Get a job",
-        body (), query (), Json JobView;
+        path (JobId,), body (), query (), Json JobView;
     CancelJobEp = Post "/jobs/{id}/cancel" "cancel_job" "Cancel a job",
-        body (), query (), Empty ();
+        path (JobId,), body (), query (), Empty ();
     StreamJobEventsEp = Get "/jobs/{id}/events" "stream_job_events" "Stream job events (NDJSON)",
-        body (), query EventStreamOpts, Ndjson Event;
+        path (JobId,), body (), query EventStreamOpts, Ndjson Event;
     StreamLogsEp = Get "/logs/{source}" "stream_logs" "Stream a log source (NDJSON)",
-        body (), query EventStreamOpts, Ndjson Event;
+        path (LogSource,), body (), query EventStreamOpts, Ndjson Event;
 
     DoctorEp = Get "/doctor" "doctor" "Get cached doctor findings",
-        body (), query DoctorOpts, Json DoctorReport;
+        path (), body (), query DoctorOpts, Json DoctorReport;
     DoctorScanEp = Post "/doctor/scan" "doctor_scan" "Run a doctor scan (job)",
-        body DoctorOpts, query (), Json JobView<DoctorReport>;
+        path (), body DoctorOpts, query (), Json JobView<DoctorReport>;
     DoctorFixEp = Post "/doctor/findings/{id}/fix" "doctor_fix" "Fix a finding (job)",
-        body (), query (), Json JobView<()>;
+        path (FindingId,), body (), query (), Json JobView<()>;
 
     MigrationPlanEp = Get "/migration/plan" "migration_plan" "Get the beta migration plan",
-        body (), query (), Json MigrationPlan;
+        path (), body (), query (), Json MigrationPlan;
     MigrationRunEp = Post "/migration/run" "migration_run" "Run beta migration (job)",
-        body MigrationOpts, query (), Json JobView<MigrationSummary>;
+        path (), body MigrationOpts, query (), Json JobView<MigrationSummary>;
 }
 
 /// Look up a route by its operation id.
