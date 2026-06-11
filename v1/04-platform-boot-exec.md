@@ -62,6 +62,20 @@ The init binary should be small and conservative:
 - atomic writes
 - clear failure path
 
+### Shared store/machine init binary (forward note from the store phase)
+
+The **store** container has the same need for a thin PID-1 init (prepare
+filesystem/mounts → bring up its long-lived service). For the Podman slice that
+init is trivial enough to stay Nix-built bash (`v1/phases/01-podman-store.md`
+S9). When WSL lands, fold both into **one small static Rust init binary** —
+`codchi-store-init` and `codchi-machine-init` sharing the conservative contract
+above (bounded, atomic, clear failure path) and the WSL specifics (bind-mounts,
+bridge/NAT, the `codchi-hostctl.exe` boot-spec call). Note the asymmetry: the
+store is *only ever* started by `codchi-server` (Store Authority), so its init can
+be driven/pushed; a machine may boot on its own and must *pull* a boot spec. The
+WSL keep-alive uses the persistent `codchi-server` holding the launching
+`wsl.exe` subprocess open rather than in-distro `daemonize` (store-phase S10).
+
 ## Windows WSL Boot Failure Path
 
 Starting a WSL instance does not guarantee an attached terminal.

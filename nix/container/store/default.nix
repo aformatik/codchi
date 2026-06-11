@@ -39,11 +39,12 @@ in
 
       name = "store";
 
-      runtimePackages = with pkgs; [
-        coreutils
-        git
-        openssh
-      ];
+      # v1 (01-podman-store.md S3): the store ships static `nix` only as its
+      # substantive runtime. git/openssh/coreutils are NOT baked — nix's built-in
+      # fetchers (libcurl/libgit2/libssh2) cover flake inputs, and the rare
+      # dirty-local-config case is served on demand via `nix shell` (S3a). With
+      # nothing installed at runtime, `runtimePackages` is empty.
+      runtimePackages = [ ];
 
       build.shellInit = /* bash */ ''
         set -euo pipefail
@@ -162,72 +163,18 @@ in
       '';
     }
     {
-
-      store.init.runtime = /* bash */ ''
-        # use nix daemon to prevent locks
-        unset NIX_REMOTE
-        # nix daemon &
-        # NIX_DAEMON_PID=$!
-        # export NIX_REMOTE="daemon"
-
-        if [ ! -f "${consts.store.DIR_CONFIG_STORE}/flake.nix" ]; then
-          logE "Stores' flake.nix missing!"
-          exit 1
-        fi
-
-        if ! command -v git &> /dev/null; then
-          mkdir -p "${consts.store.DIR_CONFIG_STORE}"
-          # git is needed for first `nix profile install` from flake
-          nix $NIX_VERBOSITY profile install nixpkgs#git
-        fi
-        if [ ! -d "${consts.store.DIR_CONFIG_STORE}/.git" ]; then
-          logE "Initializing store..."
-          ( cd "${consts.store.DIR_CONFIG_STORE}"
-            git init -q
-            git add flake.*
-          )
-        fi
-        if [ -n "$(git -C "${consts.store.DIR_CONFIG_STORE}" diff)" ]; then
-          logE "Checking for updates..."
-          ( cd "${consts.store.DIR_CONFIG_STORE}"
-            nix $NIX_VERBOSITY flake update
-            git add flake.*
-          )
-        fi
-
-        if ! nix $NIX_VERBOSITY profile list --profile "${consts.store.PROFILE_STORE}" | grep "${consts.store.DIR_CONFIG_STORE}"; then
-          logE "Installing store..."
-          mkdir -p "${consts.store.DIR_CONFIG_STORE}"
-          ndd $NIX_VERBOSITY profile install --profile "${consts.store.PROFILE_STORE}" "${consts.store.DIR_CONFIG_STORE}"
-
-          # remove impure git from default profile
-          nix $NIX_VERBOSITY profile remove '.*'
-          nix $NIX_VERBOSITY profile wipe-history
-        else
-          logE "Updating store..."
-          nix flake update $NIX_VERBOSITY --flake "${consts.store.DIR_CONFIG_STORE}"
-          ndd $NIX_VERBOSITY profile upgrade --profile "${consts.store.PROFILE_STORE}" --all
-        fi
-
-        # kill $NIX_DAEMON_PID
-        # unset NIX_REMOTE
-      '';
-    }
-
-    (
-      let program = config.build.tarball.passthru.createFiles;
-      in {
-        runtimePackages = [ program ];
-        store.init.files = /* bash */ ''
-          cd /
-          ${program.meta.mainProgram}
-        '';
-      }
-    )
-
-    {
+      # v1 (01-podman-store.md S1/S2): no runtime provisioning. The image is
+      # fully self-contained — there is no host-written flake.nix, no
+      # `nix profile install` from github, no `create-files` at init. The
+      # `runtime` and `files` init stages stay empty; `create-files` is a
+      # build-time step only (the tarball already bakes /etc, /sbin/init, …).
       store.init.services = lib.mkAfter /* bash */ ''
-        nix daemon
+        # The store's /nix may be a fresh named volume (Podman) or persistent
+        # VHD (WSL). `nix daemon` initializes the db on first start.
+        # shellInit exports NIX_REMOTE=daemon for *clients*; the daemon itself
+        # must open the local store directly.
+        unset NIX_REMOTE
+        exec nix daemon
       '';
     }
   ]);

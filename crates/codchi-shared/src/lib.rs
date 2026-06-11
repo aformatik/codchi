@@ -5,6 +5,10 @@
 //! `codchi-api`; this crate holds host-side common code such as the per-user
 //! transport path both the server and its clients must agree on.
 
+pub mod command;
 pub mod paths;
 
-pub use paths::{runtime_dir, server_socket_path};
+pub use command::{CommandError, CommandExt};
+pub use paths::{
+    STORE_CONTAINER_NAME, STORE_NIX_DIR, STORE_NIX_VOLUME_NAME, runtime_dir, server_socket_path,
+};

@@ -13,6 +13,16 @@ use std::path::PathBuf;
 /// computed default.
 const SOCKET_ENV: &str = "CODCHI_SOCKET";
 
+/// Fixed v1 Podman resource names. Machine resources use their own
+/// `codchi-machine-*` namespace at the platform boundary.
+pub const STORE_CONTAINER_NAME: &str = "codchi-store";
+pub const STORE_NIX_VOLUME_NAME: &str = "codchi-store-nix";
+
+/// The store's shared Nix store, the one Podman named volume that must survive
+/// container recreation (`v1/phases/01-podman-store.md` S4). Must match
+/// `nix/container/consts.nix`.
+pub const STORE_NIX_DIR: &str = "/nix";
+
 /// The per-user Codchi runtime directory (`$XDG_RUNTIME_DIR/codchi`, else
 /// `<tmp>/codchi`). The server is responsible for creating it.
 pub fn runtime_dir() -> PathBuf {

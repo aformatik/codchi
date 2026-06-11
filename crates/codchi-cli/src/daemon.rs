@@ -39,7 +39,10 @@ pub struct StartupConfig {
 impl Default for StartupConfig {
     fn default() -> Self {
         StartupConfig {
-            timeout: Duration::from_secs(30),
+            // First-time store initialization may need to populate its Nix
+            // runtime. Keep the wait bounded (A1), but aligned with the
+            // server's five-minute store-startup bound.
+            timeout: Duration::from_secs(5 * 60 + 5),
             poll_interval: Duration::from_millis(100),
         }
     }

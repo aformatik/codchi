@@ -1,6 +1,7 @@
 { lib
 , makeRustPlatform
 , rust-bin
+, removeReferencesTo
 , ...
 }:
 let
@@ -54,4 +55,16 @@ rustPlatform.buildRustPackage rec {
     runHook postInstall
   '';
 
+  nativeBuildInputs = [ removeReferencesTo ];
+
+  # ndd is a static-musl binary, but the `rust-src` extension bakes std
+  # panic-location source paths (".../rust-default-*/lib/rustlib/src/...") into
+  # it as string data. Stripping leaves them, so Nix retains a ~1.8 GB reference
+  # to the whole Rust toolchain. The paths are display-only; null them out so the
+  # deployed/closure footprint is just the static binary (S8).
+  postInstall = ''
+    remove-references-to -t ${rust} $out/bin/ndd
+  '';
+
+  disallowedReferences = [ rust ];
 }

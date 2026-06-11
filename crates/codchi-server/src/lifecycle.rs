@@ -5,10 +5,9 @@
 //! lifecycle is `Starting → Healthcheck → Ready/Degraded` (no `Migrating` until
 //! SQLite in Phase 3; `Stopping` is minimal).
 //!
-//! In C3 this is a thin, shared handle that the binary flips to `Ready` after
-//! binding the socket. **C6 makes it load-bearing**: it will drive the state off
-//! the real Podman store bring-up and the readiness endpoint will report *this*
-//! rather than the mock's canned `Ready`.
+//! C6 makes this handle load-bearing: the store manager drives it from the real
+//! Podman store bring-up and the readiness endpoint reports it rather than the
+//! mock service's canned lifecycle.
 //!
 //! [`AppState`]: crate::AppState
 //! [`CodchiService`]: codchi_api::CodchiService

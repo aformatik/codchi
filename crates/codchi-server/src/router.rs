@@ -29,7 +29,15 @@ pub fn build_router(state: AppState) -> Router {
     // client polls during spawn (C5) and that C6 will drive off store bring-up.
     let router = mount_json::<ServerStatusEp, _, _>(router, |s, _p, _q, _b| async move {
         let mut status = s.service.server_status().await?;
+        let infrastructure = s.infrastructure.snapshot();
         status.lifecycle = s.lifecycle.current();
+        status.store = infrastructure.store;
+        let infrastructure_summary = codchi_api::dto::FindingsSummary::of(&infrastructure.findings);
+        status.findings_summary.critical += infrastructure_summary.critical;
+        status.findings_summary.error += infrastructure_summary.error;
+        status.findings_summary.warning += infrastructure_summary.warning;
+        status.findings_summary.info += infrastructure_summary.info;
+        status.startup_error = infrastructure.startup_error;
         Ok(status)
     });
 
@@ -117,7 +125,10 @@ pub fn build_router(state: AppState) -> Router {
 
     // ---- doctor ----
     let router = mount_json::<DoctorEp, _, _>(router, |s, _p, query, _b| async move {
-        s.service.doctor(query).await
+        let mut report = s.service.doctor(query).await?;
+        report.findings.extend(s.infrastructure.snapshot().findings);
+        report.generated_at = chrono::Utc::now();
+        Ok(report)
     });
     let router = mount_json::<DoctorScanEp, _, _>(router, |s, _p, _q, body| async move {
         s.service.doctor_scan(body).await

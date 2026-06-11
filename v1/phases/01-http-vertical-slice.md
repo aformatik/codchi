@@ -284,14 +284,14 @@ needed and never hanging — so I can see daemon/store/machine state.*
 - [x] **D7 wiring closed:** the `server_status` handler now overlays the real `LifecycleHandle` onto the service's `ServerStatus`, so readiness reports the daemon's true `Starting/Ready/Degraded` — the basis for a meaningful poll and the C6 seam.
 - [x] **A1:** `await_ready` is bounded by an outer `tokio::time::timeout` (the load-bearing guard); stalled (`Starting`), absent-socket, and `Degraded` servers all resolve to a structured `StartupError` within the bound — acceptance test `tests/spawn.rs` (4 cases). Real auto-spawn smoke-tested end to end over a temp socket.
 
-### C6 — Real Podman store startup + lifecycle (D10, D11) — `[ ]` *(needs C3; uses C2 image)*
+### C6 — Real Podman store startup + lifecycle (D10, D11) — `[x]` done
 *As a codchi user, I want the daemon to own the Podman store lifecycle so my
 machines have a running store without me managing containers.*
-- [ ] `Store` trait + `podman::StoreImpl` + startup sequence ported, decoupled from `ipc`/`remoc`/LXD, behind the `Arc<dyn>` seam.
-- [ ] Needed consts/`CommandExt` pulled into `codchi-shared`.
-- [ ] Server start drives the real `Starting → Healthcheck → Ready/Degraded` off actual store bring-up.
-- [ ] Store-down → `Degraded` + `store.unavailable` finding; readiness reflects real state.
-- [ ] No `linux-lxd` impl present in `codchi-server`.
+- [x] `Store` trait + `podman::PodmanStore` + startup sequence ported, decoupled from `ipc`/`remoc`/LXD, behind the `Arc<dyn>` seam.
+- [x] Needed consts/`CommandExt` pulled into `codchi-shared`.
+- [x] Server start drives the real `Starting → Healthcheck → Ready/Degraded` off actual store bring-up.
+- [x] Store-down → `Degraded` + `store.unavailable` finding; readiness reflects real state.
+- [x] No `linux-lxd` impl present in `codchi-server`.
 
 ### C7 — Source-log capture + `stream_logs` (D9, D14) — `[ ]` *(needs C3, C6)*
 *As a codchi user/contributor, I want to introspect server and store logs so I

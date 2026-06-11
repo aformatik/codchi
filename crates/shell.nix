@@ -50,7 +50,7 @@ let
       ];
     };
     linux = {
-      # inherit (codchi) CODCHI_PODMAN_STORE_IMAGE;
+      inherit (codchi) CODCHI_PODMAN_STORE_IMAGE;
       LD_LIBRARY_PATH = lib.makeLibraryPath codchi.buildInputs;
     };
   };

@@ -55,3 +55,35 @@ Makes "what is the store/server currently doing" answerable via
 ### topic
 A sub-classifier *within* a source's log stream (e.g. `build`, `gc`), carried on
 `Event::Log`. Not a source — a source can emit many topics.
+
+### Store container
+The single per-user Podman container (`codchi-store`) that runs `nix-daemon` and
+holds the shared Nix store all [[machine|machines]] build against. Only
+`codchi-server` ever starts it (Store Authority). Distinct from a *machine
+container*, which runs a user's environment. See `v1/phases/01-podman-store.md`.
+
+### Store image
+The Nix-built, **fully self-contained** image that *defines* the [[store-container]]:
+bootstrap + all runtime tools, all static, baked at codchi-build time. In v1 the
+store has no separate provisioning step — the image is the whole definition, and a
+store **update** is a recreation of the container from a new image. Its path is
+baked into `codchi-server` (`CODCHI_PODMAN_STORE_IMAGE`), so dev == release.
+
+### Bootstrap
+The minimal static layer of the [[store-image]] sufficient to run `nix` and
+`nix-daemon` (`nix-everything-static`, `busybox`, `ndd`, `/sbin/init`, `/etc`).
+Historically (beta) the bootstrap was shipped and the **runtime** was fetched
+separately; in v1 they are merged into one [[store-image]].
+
+### Store runtime
+The toolchain the store needs to build machines and serve `nix-daemon`: full
+`nix`, `git`, `openssh`, `coreutils`. In the beta this was a `nix profile`
+installed at container start from a github flake; in v1 it is **static and baked
+into the [[store-image]]**, never fetched. Not to be confused with a Nix
+"runtime closure".
+
+### Provisioning
+(Retired concept.) The beta's in-container self-install of the [[store-runtime]]
+(`git init` + `nix profile install`/`upgrade` from a host-written `flake.nix`).
+Deleted in v1 (`v1/phases/01-podman-store.md` S2): the store is image-defined, so
+there is nothing to provision at runtime.

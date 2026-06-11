@@ -31,6 +31,7 @@
         inherit system;
         overlays = [
           (import rust-overlay)
+          (import ./nix/overlays/daemonize-static.nix)
           (self: _: {
             buildRustCodchi = targetPlatform: self.callPackage ./build/build-rust-package.nix {
               inherit targetPlatform;
@@ -123,6 +124,8 @@
 
           packages.${system} = {
             inherit (pkgs) store-podman-image codchi-container-utils;
+            daemonize-static = pkgs.pkgsStatic.daemonize;
+            store-podman = pkgs.store-podman.config.build.runtime;
             default = pkgs.codchi;
             # oasdiff powers the OpenAPI breaking-change gate (not in nixpkgs).
             oasdiff = pkgs.callPackage ./build/oasdiff.nix { };
@@ -134,6 +137,8 @@
           };
 
           checks.${system} = {
+            daemonize-static = self.packages.${system}.daemonize-static;
+
             # Contract gate: lint, test, and verify the committed OpenAPI
             # snapshot for codchi-api.
             codchi-api = ciRustPlatform.buildRustPackage {
@@ -196,6 +201,7 @@
               let
                 buildInputs = [
                   self.packages.${system}.default
+                  self.packages.${system}.store-podman
                   self.packages.${system}.store-podman-image
                   self.checks.${system}.codchi-api
                   self.checks.${system}.v1-crates
