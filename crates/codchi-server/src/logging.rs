@@ -1,19 +1,28 @@
-//! Process-wide tracing setup for `codchi-server`, writing to stderr.
+//! Process-wide tracing setup for `codchi-server` (C7 / D9).
 //!
-//! This is the "basic stdio logging" slice of C7 (D9): the daemon's own
-//! lifecycle and store bring-up become visible on the console. C7 proper will
-//! add a second `tracing` layer here that fans `Server`/`Store` source events
-//! into durable source logs + the in-memory ring behind `stream_logs` — so the
-//! init point stays here and call sites (plain `tracing` macros) don't change.
+//! Two sinks, each with its **own** filter so they don't constrain each other:
+//! - a human-readable stderr console, gated by `RUST_LOG` / `CODCHI_DEBUG`
+//!   (operator-facing verbosity);
+//! - the [`ServerLogLayer`], which fans `codchi_server` events at `INFO`+ into
+//!   the durable `Server` source log — independent of console verbosity, so the
+//!   log stays stable whatever `RUST_LOG` is set to.
+//!
+//! Because the filters are per-layer (not a global registry filter), turning the
+//! console down to `warn` does not starve the `Server` log of `info` lines.
 
+use tracing::Level;
+use tracing_subscriber::filter::filter_fn;
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
-/// Install the global subscriber. Verbosity follows `RUST_LOG`; absent that,
-/// `CODCHI_DEBUG` (the same switch the store image's init honors) bumps the
-/// default to `debug`, else `info`. Idempotent-ish: a second call is ignored
-/// because the global default can only be set once.
-pub fn init() {
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+use crate::logs::{LogStore, ServerLogLayer};
+
+/// Install the global subscriber, fanning the daemon's events to stderr and to
+/// the `Server` source log. Idempotent-ish: a second call is ignored (the global
+/// default can only be set once).
+pub fn init(logs: LogStore) {
+    // Console verbosity: explicit `RUST_LOG` wins; else `CODCHI_DEBUG` (the same
+    // switch the store image's init honors) bumps our crate to debug; else info.
+    let console_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         let default = if std::env::var_os("CODCHI_DEBUG").is_some() {
             "codchi_server=debug,info"
         } else {
@@ -22,9 +31,14 @@ pub fn init() {
         EnvFilter::new(default)
     });
 
+    // Durable Server log: our crate's own narrative at info+, always. (`Level`
+    // orders ERROR < WARN < INFO < DEBUG < TRACE, so `<= INFO` is info+severe.)
+    let capture_filter = filter_fn(|meta| {
+        meta.target().starts_with("codchi_server") && *meta.level() <= Level::INFO
+    });
+
     let _ = tracing_subscriber::registry()
-        .with(filter)
-        .with(fmt::layer().with_writer(std::io::stderr))
-        // C7: `.with(source_log_layer)` slots in here.
+        .with(fmt::layer().with_writer(std::io::stderr).with_filter(console_filter))
+        .with(ServerLogLayer::new(logs).with_filter(capture_filter))
         .try_init();
 }

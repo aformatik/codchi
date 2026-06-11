@@ -50,10 +50,6 @@ fn api_error_variants_roundtrip() {
             current: 1,
             required: 2,
         },
-        ApiError::ResumeGapTooLarge {
-            requested: EventSeq(10),
-            oldest: EventSeq(42),
-        },
         ApiError::ApiVersionMismatch {
             client: 1,
             server: 2,
@@ -301,7 +297,6 @@ fn core_views_roundtrip() {
 
     roundtrip(EventStreamOpts {
         tail: Some(50),
-        since_seq: Some(EventSeq(7)),
         follow: false,
     });
 }

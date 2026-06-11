@@ -11,14 +11,19 @@ use std::sync::Arc;
 use axum::serve;
 use codchi_api::dto::ServerLifecycle;
 use codchi_api::testing::MockCodchiService;
-use codchi_server::{AppState, PodmanStore, StoreManager, StoreManagerConfig, build_router, logging};
-use codchi_shared::server_socket_path;
+use codchi_server::{
+    AppState, LogStore, PodmanStore, StoreManager, StoreManagerConfig, build_router, logging,
+};
+use codchi_shared::{logs_dir, server_socket_path};
 use tokio::net::UnixListener;
 use tracing::{error, info};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    logging::init();
+    // Build the log store first: the tracing layer writes the `Server` source,
+    // and `AppState` serves it — both must share this one instance.
+    let logs = LogStore::new(&logs_dir());
+    logging::init(logs.clone());
 
     let socket = server_socket_path();
     if let Some(parent) = socket.parent() {
@@ -31,7 +36,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         std::fs::remove_file(&socket)?;
     }
 
-    let state = AppState::new(Arc::new(MockCodchiService::new()));
+    let state = AppState::new(Arc::new(MockCodchiService::new()), logs);
     let listener = UnixListener::bind(&socket)?;
 
     match PodmanStore::from_env() {

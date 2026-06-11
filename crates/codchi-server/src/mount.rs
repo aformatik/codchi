@@ -96,7 +96,7 @@ where
 
 /// Register an NDJSON-streaming endpoint (Q2). The glue resolves an
 /// [`EventStream`]; the initial `Result` becomes the HTTP status (e.g. a
-/// `resume_gap_too_large` error), then a 200 `application/x-ndjson` body streams
+/// `store_unavailable` error), then a 200 `application/x-ndjson` body streams
 /// one JSON object per line.
 pub fn mount_ndjson<E, F, Fut>(router: Router<AppState>, glue: F) -> Router<AppState>
 where

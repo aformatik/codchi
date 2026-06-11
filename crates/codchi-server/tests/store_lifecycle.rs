@@ -7,8 +7,8 @@ use codchi_api::ApiError;
 use codchi_api::dto::{DoctorReport, ServerLifecycle, ServerStatus, StoreState};
 use codchi_api::testing::MockCodchiService;
 use codchi_server::{
-    AppState, Store, StoreError, StoreManager, StoreManagerConfig, StorePlatformStatus,
-    build_router,
+    AppState, LogStore, Store, StoreError, StoreLogStream, StoreManager, StoreManagerConfig,
+    StorePlatformStatus, build_router,
 };
 use http_body_util::BodyExt;
 use tower::ServiceExt;
@@ -68,6 +68,12 @@ impl Store for FakeStore {
         *self.status.lock().unwrap() = StorePlatformStatus::Stopped;
         Ok(())
     }
+
+    fn attach(&self) -> Result<StoreLogStream, StoreError> {
+        self.calls.lock().unwrap().push("attach");
+        // The fake has no process to follow; an empty stream ends immediately.
+        Ok(StoreLogStream::Empty)
+    }
 }
 
 fn test_config() -> StoreManagerConfig {
@@ -79,7 +85,7 @@ fn test_config() -> StoreManagerConfig {
 }
 
 fn test_state() -> AppState {
-    AppState::new(Arc::new(MockCodchiService::new()))
+    AppState::new(Arc::new(MockCodchiService::new()), LogStore::memory())
 }
 
 async fn get_json<T: serde::de::DeserializeOwned>(state: AppState, path: &str) -> T {
@@ -102,7 +108,7 @@ async fn missing_store_is_registered_started_and_reported_ready() {
 
     assert_eq!(
         store.calls(),
-        ["status", "register", "start", "probe_health"]
+        ["status", "register", "start", "probe_health", "attach"]
     );
 
     let status: ServerStatus = get_json(state.clone(), "/v1/server").await;
@@ -128,7 +134,7 @@ async fn existing_stopped_store_is_started_without_reregister() {
 
     manager.start().await.expect("store starts");
 
-    assert_eq!(store.calls(), ["status", "start", "probe_health"]);
+    assert_eq!(store.calls(), ["status", "start", "probe_health", "attach"]);
     let status: ServerStatus = get_json(state, "/v1/server").await;
     assert_eq!(status.lifecycle, ServerLifecycle::Ready);
     assert_eq!(status.store.state, StoreState::Up);
@@ -145,7 +151,7 @@ async fn already_running_store_is_only_health_probed() {
 
     manager.start().await.expect("store starts");
 
-    assert_eq!(store.calls(), ["status", "probe_health"]);
+    assert_eq!(store.calls(), ["status", "probe_health", "attach"]);
     let status: ServerStatus = get_json(state, "/v1/server").await;
     assert_eq!(status.lifecycle, ServerLifecycle::Ready);
     assert_eq!(status.store.state, StoreState::Up);

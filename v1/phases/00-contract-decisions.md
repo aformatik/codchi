@@ -59,6 +59,10 @@ API consequences:
 
 **Decision: Option C. Chunked NDJSON over HTTP.**
 
+> **Revised by R14:** `since_seq` resume and the `410 ResumeGapTooLarge` gap
+> error are dropped — the query surface is just `tail` + `follow`. The struck
+> rules below are retained for history; see R14 for the rationale.
+
 Rules:
 
 - Content type: `application/x-ndjson`.
@@ -66,14 +70,15 @@ Rules:
 - Endpoint: `GET /v1/jobs/{id}/events`.
 - Query parameters:
   - `tail=<N>` — return the last N events before following (default 200).
-  - `since_seq=<N>` — resume strictly after sequence N. **Exclusive**:
-    `since_seq=42` returns events with `seq >= 43`.
+  - ~~`since_seq=<N>` — resume strictly after sequence N. **Exclusive**:
+    `since_seq=42` returns events with `seq >= 43`.~~ *(dropped, R14)*
   - `follow=<bool>` — keep streaming after the current tail. Default `true`.
-- Precedence: if both `tail` and `since_seq` are supplied, `since_seq` wins and
-  `tail` is ignored.
-- Retention gap: if the requested `since_seq` is older than available
+- ~~Precedence: if both `tail` and `since_seq` are supplied, `since_seq` wins and
+  `tail` is ignored.~~ *(dropped, R14)*
+- ~~Retention gap: if the requested `since_seq` is older than available
   retention, respond with **`410 Gone`** and an `ApiError::ResumeGapTooLarge`
-  body. Clients must treat this as a hard error and re-subscribe from `tail`.
+  body.~~ *(dropped, R14)* On any hard stream error the client re-subscribes
+  from `tail`.
 - Client disconnect: server drops the stream subscription. No keepalive
   protocol beyond TCP/socket level for v1.
 - Multiple concurrent followers per job are supported.
@@ -535,9 +540,10 @@ by a single job class, tiered logging (most output is in-memory or referenced
 via `nix log`), and a flat 30-day-after-completion window. See R8 for the
 current rules.
 
-The only part retained verbatim is the **resume-error behavior**:
+The only part retained verbatim is the resume-error behavior — ~~`410 Gone`
+`ResumeGapTooLarge` (job exists, requested events pruned)~~ *(dropped with
+`since_seq`, R14)* and:
 
-- `410 Gone` `ResumeGapTooLarge` — job exists, requested events were pruned.
 - `404 Not Found` — job metadata was pruned.
 
 ## Phase 0 Refinements — R1–R10 (Jobs, Exec, Secrets)
@@ -685,18 +691,18 @@ Rules:
 - Raw build output is **live-only** (the ring). It is not written to JSONL and
   not in replay; historic build logs are fetched via the persisted `drv`
   reference. The structured messages carry the context that matters.
-- **Replay semantics (refines Q2):** a live follower sees raw build output from
-  the ring; a `tail` / `since_seq` replay returns only the persisted relevant
-  events (+ eval errors + `drv` refs), never the raw build firehose. Consistent
-  with R2 (streams are informational).
+- **Replay semantics (refines Q2; `since_seq` dropped by R14):** a live follower
+  sees raw build output from the ring; a `tail` replay returns only the persisted
+  relevant events (+ eval errors + `drv` refs), never the raw build firehose.
+  Consistent with R2 (streams are informational).
 - **Retention: a flat time window.** Every job's persisted log + metadata is
   kept **30 days after the job reaches a terminal state**, then pruned —
   regardless of kind or outcome. Running jobs are retained until they finish.
   Because the persisted set is tiny, P8's 64 MiB rotation, 10 GiB cap, and
   oldest-first pruning are **dropped**; a small safety cap may bound pathological
   cases but is not the primary mechanism.
-- `410 Gone` `ResumeGapTooLarge` and `404 Not Found` (Q2 / P8 resume errors)
-  still apply, against the persisted relevant-event stream.
+- `404 Not Found` (job/source absent) still applies. ~~`410 Gone`
+  `ResumeGapTooLarge`~~ was dropped with `since_seq` (R14).
 
 This **supersedes P8** (durable/ephemeral classes, 64 MiB rotation, 10 GiB cap,
 oldest-first prune) and **refines Q2** (replay returns the persisted tier, not
@@ -813,8 +819,8 @@ expected to trip the `oasdiff` gate as an intentional Phase 0 revision):
     Option<bool> }`. Answers "what is the store/server currently doing".
   - `stream_logs(LogSource, EventStreamOpts) -> EventStream` — `GET
     /v1/logs/{source}`, NDJSON `Event`. No separate bounded-query endpoint:
-    `EventStreamOpts.follow = false` already does bounded tail/`since_seq`
-    replay, exactly as for `stream_job_events`.
+    `EventStreamOpts.follow = false` already does a bounded `tail` replay
+    (R14 dropped `since_seq`), exactly as for `stream_job_events`.
 - `remoc` is dropped entirely as a transport (doc 01); the beta `ipc`
   logging/health types are not carried into the v1 contract.
 
@@ -878,6 +884,46 @@ any `O: Deserialize`). It is **wire-neutral**: it touches only the `Deserialize`
 impl, not `Serialize`/`JsonSchema`, so `openapi.json` is byte-identical and the
 `oasdiff` gate does not trip. Locked by a contract test (`typed_job_view_deserializes`).
 
+### R14 — Drop `since_seq` resume and `ResumeGapTooLarge` (simplifies Q2; revises R8)
+
+Raised during Phase 1 C7 (source-log capture). The original Q2 stream contract
+carried three knobs — `tail`, `since_seq`, `follow` — plus a `410 Gone`
+`ResumeGapTooLarge` for a resume cursor that fell off retention. `since_seq` is a
+*reconnect-without-gap* cursor: its only value is resuming a **dropped
+connection** mid-stream. That scenario does not meaningfully exist for v1's
+clients:
+
+- Every stream is followed over a **per-user Unix domain socket** (D6), which
+  does not transiently blip the way a networked HTTP connection does — the
+  connection holds until one side deliberately closes.
+- A **daemon restart** is not resumable by design: the socket dies, seq is
+  per-run (it never persisted a global cursor), and the contract already says a
+  client must re-subscribe from `tail` after a hard stream error. So `since_seq`
+  could never bridge a restart anyway.
+- The realistic clients are the local CLI (runs a command, follows until the job
+  ends or `Ctrl+C`) and the tray (Phase 15). Neither needs a byte-exact resume;
+  both are well served by `tail` (backfill the last N on attach) + `follow`.
+
+Decision: **remove `since_seq` from `EventStreamOpts`** (leaving `{ tail,
+follow }`) and **remove the `ResumeGapTooLarge` error variant**, which had no
+trigger other than a `since_seq` resume past retention. `EventSeq` is **kept** —
+every `Event` still carries a monotonic `seq` for NDJSON ordering and to anchor
+`tail`'s "last N". The two streaming endpoints (`stream_job_events`,
+`stream_logs`) lose `since_seq` together, since they share `EventStreamOpts`.
+
+Consequences:
+
+- `tail` + `follow` are the whole stream contract. `follow: false` does a
+  bounded `tail` replay and then ends (finite NDJSON); `follow: true` backfills
+  `tail` then keeps streaming. No retention-gap error path remains.
+- This **supersedes the Q2 `since_seq` / `410 ResumeGapTooLarge` rules** and the
+  R8 bullet that referenced `tail` / `since_seq` replay + `410`. R8's tiering
+  (in-memory ring vs. durable JSONL) is otherwise unchanged; what's persisted is
+  still the relevant-event tier, now replayed by `tail` alone.
+- **Breaking wire change**: drops a query param and an error code, so it trips
+  the `oasdiff` gate. Annotated as an intentional Phase 0 revision, like R11.
+  `openapi.json` regenerated.
+
 ## Crate Structure
 
 ```
@@ -939,7 +985,7 @@ pub struct MachineId(pub String);      // user-visible name, see Q1
 pub struct JobId(pub Uuid);
 pub struct GenerationId(pub u64);      // monotonic per machine
 pub struct StoreGenerationId(pub u64);
-pub struct EventSeq(pub u64);          // per-job monotonic
+pub struct EventSeq(pub u64);          // per-job / per-source monotonic (R11)
 pub struct FindingId(pub Uuid);
 ```
 
@@ -955,7 +1001,6 @@ pub enum ApiError {
     StoreUnavailable { reason: String },
     StoreBusy { job: JobId },
     SchemaMigrationRequired { current: u32, required: u32 },
-    ResumeGapTooLarge { requested: EventSeq, oldest: EventSeq },
     ApiVersionMismatch { client: u32, server: u32 },
     MissingRequiredSecrets { machine: MachineId, keys: Vec<SecretKey> }, // R5
     Validation { field: String, message: String },
@@ -1115,9 +1160,8 @@ pub enum Event {
     HealthFinding { seq: EventSeq, ts: DateTime<Utc>, finding: FindingId },
 }
 
-pub struct EventStreamOpts {
-    pub tail: Option<u32>,           // default 200; ignored if since_seq is set (Q2)
-    pub since_seq: Option<EventSeq>, // exclusive (Q2)
+pub struct EventStreamOpts {       // R14: since_seq dropped
+    pub tail: Option<u32>,           // default 200 (Q2)
     pub follow: bool,                // default true
 }
 ```

@@ -9,13 +9,13 @@
 
 use std::ffi::OsString;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use codchi_shared::{
     CommandError, CommandExt, STORE_CONTAINER_NAME, STORE_NIX_DIR, STORE_NIX_VOLUME_NAME,
 };
 
-use super::{Store, StoreError, StorePlatformStatus};
+use super::{Store, StoreError, StoreLogStream, StorePlatformStatus};
 
 const STORE_IMAGE_ENV: &str = "CODCHI_PODMAN_STORE_IMAGE";
 
@@ -153,5 +153,26 @@ impl Store for PodmanStore {
             .args(["stop", STORE_CONTAINER_NAME])
             .wait_ok()
             .map_err(Into::into)
+    }
+
+    fn attach(&self) -> Result<StoreLogStream, StoreError> {
+        // `podman logs --follow` replays the container's output from the start
+        // and then tails it live, so attaching just after `start` still captures
+        // the daemon's startup lines. The detached container's lifetime is
+        // independent of this follower, so killing it on drop (below) only ends
+        // the capture — `stop` is what stops the store (the WSL backend will use
+        // the same handle as the store process itself; see the trait docs).
+        let child = tokio::process::Command::new(&self.podman)
+            .args(["logs", "--follow", STORE_CONTAINER_NAME])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|source| CommandError::Spawn {
+                command: format!("{:?} logs --follow {STORE_CONTAINER_NAME}", self.podman),
+                source,
+            })?;
+        StoreLogStream::from_child(child)
     }
 }

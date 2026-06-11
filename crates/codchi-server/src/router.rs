@@ -119,8 +119,14 @@ pub fn build_router(state: AppState) -> Router {
     });
 
     // ---- logs (R11) ----
+    // `Server`/`Store` are real server-owned sources (C7); `Machine` is still
+    // mock data on the service until Phase 7. The source decides the backend.
     let router = mount_ndjson::<StreamLogsEp, _, _>(router, |s, p, query, _b| async move {
-        s.service.stream_logs(p.0, query).await
+        if matches!(p.0, codchi_api::LogSource::Machine(_)) {
+            s.service.stream_logs(p.0, query).await
+        } else {
+            s.logs.stream(p.0, query)
+        }
     });
 
     // ---- doctor ----

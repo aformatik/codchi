@@ -74,7 +74,7 @@ Supported log replay:
 ```text
 GET /v1/jobs/{id}/events?tail=200
 GET /v1/jobs/{id}/events?tail=1000
-GET /v1/jobs/{id}/events?since_seq=1842
+GET /v1/jobs/{id}/events?tail=200&follow=false
 ```
 
 Default replay should be a bounded tail, for example the last 200 events.
@@ -134,8 +134,8 @@ Example (durable tier):
 {"kind": "log",       "seq": 1842, "ts": "2026-05-13T12:34:56.789Z", "level": "error", "topic": "eval", "message": "..."}
 ```
 
-Replay (`tail` / `since_seq`) returns this durable tier only; the raw build
-firehose is live-only. Retention is a flat **30 days after job completion**
+Replay (`tail`; `since_seq` dropped by R14) returns this durable tier only; the
+raw build firehose is live-only. Retention is a flat **30 days after job completion**
 (R8); since the persisted set is tiny, no log rotation or global byte cap is
 needed.
 

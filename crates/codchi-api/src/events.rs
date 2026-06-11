@@ -104,16 +104,17 @@ impl Event {
     }
 }
 
-/// Query options for `stream_job_events` (Q2).
+/// Query options for `stream_job_events` and `stream_logs` (Q2, R14).
+///
+/// R14 dropped `since_seq` resume: streams are followed over a per-user Unix
+/// socket that doesn't transiently reconnect, so the only knobs are how much
+/// history to backfill on attach (`tail`) and whether to keep following
+/// (`follow`). `seq` still orders the NDJSON and anchors `tail`'s "last N".
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct EventStreamOpts {
-    /// Return the last N events before following. Default 200. Ignored if
-    /// `since_seq` is set (Q2 precedence).
+    /// Backfill the last N events before following. Default [`DEFAULT_TAIL`].
     #[serde(default)]
     pub tail: Option<u32>,
-    /// Resume strictly after this sequence (exclusive). Wins over `tail`.
-    #[serde(default)]
-    pub since_seq: Option<EventSeq>,
     /// Keep streaming after the current tail. Default `true`.
     #[serde(default = "default_follow")]
     pub follow: bool,
@@ -127,11 +128,10 @@ impl Default for EventStreamOpts {
     fn default() -> Self {
         EventStreamOpts {
             tail: None,
-            since_seq: None,
             follow: true,
         }
     }
 }
 
-/// Default tail length when neither `tail` nor `since_seq` is given (Q2).
+/// Default tail length when `tail` is not given (Q2).
 pub const DEFAULT_TAIL: u32 = 200;

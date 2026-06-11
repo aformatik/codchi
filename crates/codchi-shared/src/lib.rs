@@ -10,5 +10,6 @@ pub mod paths;
 
 pub use command::{CommandError, CommandExt};
 pub use paths::{
-    STORE_CONTAINER_NAME, STORE_NIX_DIR, STORE_NIX_VOLUME_NAME, runtime_dir, server_socket_path,
+    STORE_CONTAINER_NAME, STORE_NIX_DIR, STORE_NIX_VOLUME_NAME, data_dir, logs_dir, runtime_dir,
+    server_socket_path,
 };

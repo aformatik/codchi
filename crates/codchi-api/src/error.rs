@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::dto::job::JobState;
 use crate::dto::secret::SecretKey;
-use crate::ids::{EventSeq, JobId, MachineId};
+use crate::ids::{JobId, MachineId};
 
 /// Typed API error. Serialized as an internally-tagged object with a stable
 /// `code` discriminator, e.g. `{"code":"machine_not_found","machine":"foo"}`.
@@ -44,13 +44,6 @@ pub enum ApiError {
     #[error("schema migration required: current {current}, required {required}")]
     SchemaMigrationRequired { current: u32, required: u32 },
 
-    /// Requested `since_seq` is older than retained events (Q2 → `410 Gone`).
-    #[error("resume gap too large: requested {requested}, oldest {oldest}")]
-    ResumeGapTooLarge {
-        requested: EventSeq,
-        oldest: EventSeq,
-    },
-
     /// The client and server disagree on the API major version (Q5).
     #[error("API version mismatch: client v{client}, server v{server}")]
     ApiVersionMismatch { client: u32, server: u32 },
@@ -83,7 +76,6 @@ impl ApiError {
             ApiError::StoreUnavailable { .. } => "store_unavailable",
             ApiError::StoreBusy { .. } => "store_busy",
             ApiError::SchemaMigrationRequired { .. } => "schema_migration_required",
-            ApiError::ResumeGapTooLarge { .. } => "resume_gap_too_large",
             ApiError::ApiVersionMismatch { .. } => "api_version_mismatch",
             ApiError::MissingRequiredSecrets { .. } => "missing_required_secrets",
             ApiError::Validation { .. } => "validation",
@@ -96,7 +88,6 @@ impl ApiError {
     pub fn http_status(&self) -> u16 {
         match self {
             ApiError::MachineNotFound { .. } | ApiError::JobNotFound { .. } => 404,
-            ApiError::ResumeGapTooLarge { .. } => 410,
             ApiError::MachineBusy { .. }
             | ApiError::StoreBusy { .. }
             | ApiError::JobNotCancellable { .. } => 409,

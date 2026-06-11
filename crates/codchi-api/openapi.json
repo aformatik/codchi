@@ -895,20 +895,9 @@
           },
           {
             "in": "query",
-            "name": "since_seq",
-            "schema": {
-              "description": "Resume strictly after this sequence (exclusive). Wins over `tail`.",
-              "default": null,
-              "$ref": "#/components/schemas/EventSeq",
-              "nullable": true
-            },
-            "style": "form"
-          },
-          {
-            "in": "query",
             "name": "tail",
             "schema": {
-              "description": "Return the last N events before following. Default 200. Ignored if `since_seq` is set (Q2 precedence).",
+              "description": "Backfill the last N events before following. Default [`DEFAULT_TAIL`].",
               "default": null,
               "type": "integer",
               "format": "uint32",
@@ -968,20 +957,9 @@
           },
           {
             "in": "query",
-            "name": "since_seq",
-            "schema": {
-              "description": "Resume strictly after this sequence (exclusive). Wins over `tail`.",
-              "default": null,
-              "$ref": "#/components/schemas/EventSeq",
-              "nullable": true
-            },
-            "style": "form"
-          },
-          {
-            "in": "query",
             "name": "tail",
             "schema": {
-              "description": "Return the last N events before following. Default 200. Ignored if `since_seq` is set (Q2 precedence).",
+              "description": "Backfill the last N events before following. Default [`DEFAULT_TAIL`].",
               "default": null,
               "type": "integer",
               "format": "uint32",
@@ -1351,29 +1329,6 @@
                 "type": "integer",
                 "format": "uint32",
                 "minimum": 0.0
-              }
-            }
-          },
-          {
-            "description": "Requested `since_seq` is older than retained events (Q2 → `410 Gone`).",
-            "type": "object",
-            "required": [
-              "code",
-              "oldest",
-              "requested"
-            ],
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "resume_gap_too_large"
-                ]
-              },
-              "oldest": {
-                "$ref": "#/components/schemas/EventSeq"
-              },
-              "requested": {
-                "$ref": "#/components/schemas/EventSeq"
               }
             }
           },
@@ -1777,7 +1732,7 @@
         "minimum": 0.0
       },
       "EventStreamOpts": {
-        "description": "Query options for `stream_job_events` (Q2).",
+        "description": "Query options for `stream_job_events` and `stream_logs` (Q2, R14).\n\nR14 dropped `since_seq` resume: streams are followed over a per-user Unix socket that doesn't transiently reconnect, so the only knobs are how much history to backfill on attach (`tail`) and whether to keep following (`follow`). `seq` still orders the NDJSON and anchors `tail`'s \"last N\".",
         "type": "object",
         "properties": {
           "follow": {
@@ -1785,14 +1740,8 @@
             "default": true,
             "type": "boolean"
           },
-          "since_seq": {
-            "description": "Resume strictly after this sequence (exclusive). Wins over `tail`.",
-            "default": null,
-            "$ref": "#/components/schemas/EventSeq",
-            "nullable": true
-          },
           "tail": {
-            "description": "Return the last N events before following. Default 200. Ignored if `since_seq` is set (Q2 precedence).",
+            "description": "Backfill the last N events before following. Default [`DEFAULT_TAIL`].",
             "default": null,
             "type": "integer",
             "format": "uint32",

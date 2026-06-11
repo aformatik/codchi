@@ -8,6 +8,7 @@ use codchi_api::testing::MockCodchiService;
 use codchi_api::{ApiError, CodchiService, FindingId};
 
 use crate::lifecycle::LifecycleHandle;
+use crate::logs::LogStore;
 
 /// The single shared state handle threaded through every handler.
 ///
@@ -23,15 +24,21 @@ pub struct AppState {
     pub lifecycle: LifecycleHandle,
     /// Cheap in-memory store/finding snapshot maintained by infrastructure.
     pub infrastructure: InfrastructureHandle,
+    /// Server-owned `Server`/`Store` source logs (the C7 seam). `Machine` logs
+    /// stay on `service` until Phase 7; the router branches on the source.
+    pub logs: LogStore,
 }
 
 impl AppState {
-    /// Build state from any service implementation.
-    pub fn new(service: Arc<dyn CodchiService>) -> Self {
+    /// Build state from a service implementation and the server-owned log store.
+    /// `main` passes the same [`LogStore`] the [`crate::logging`] layer writes
+    /// to, so the `Server` source and the daemon's stderr share one emit path.
+    pub fn new(service: Arc<dyn CodchiService>, logs: LogStore) -> Self {
         AppState {
             service,
             lifecycle: LifecycleHandle::new(),
             infrastructure: InfrastructureHandle::new(),
+            logs,
         }
     }
 
@@ -44,10 +51,28 @@ impl AppState {
     /// tests and a mock-backed `codchi status` both observe `Ready` without the
     /// caller flipping the handle. The real `main` keeps the honest
     /// `Starting → Ready` progression via [`AppState::new`].
+    ///
+    /// The `Server`/`Store` source logs are seeded with a couple of demo lines
+    /// so a mock-backed `codchi logs store` (and the NDJSON shape tests) have
+    /// something to stream; the real daemon fills these from the tracing layer
+    /// and the store-output capture instead.
     pub fn with_mock() -> Self {
-        let state = Self::new(Arc::new(MockCodchiService::new()));
+        use codchi_api::{LogLevel, LogSource};
+        let state = Self::new(Arc::new(MockCodchiService::new()), LogStore::memory());
         state.infrastructure.store_up();
         state.lifecycle.set(codchi_api::dto::ServerLifecycle::Ready);
+        state
+            .logs
+            .append(LogSource::Server, LogLevel::Info, "main", "mock daemon ready");
+        state.logs.append(
+            LogSource::Store,
+            LogLevel::Info,
+            "store",
+            "store container started",
+        );
+        state
+            .logs
+            .append(LogSource::Store, LogLevel::Info, "gc", "store gc complete");
         state
     }
 }

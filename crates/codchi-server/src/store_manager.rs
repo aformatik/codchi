@@ -6,6 +6,7 @@ use std::time::Duration;
 use codchi_api::dto::ServerLifecycle;
 use tracing::{debug, error, info, warn};
 
+use crate::logs::capture_store_logs;
 use crate::platform::{Store, StoreError, StorePlatformStatus};
 use crate::state::AppState;
 
@@ -56,6 +57,7 @@ impl StoreManager {
                 info!("store is ready");
                 self.state.infrastructure.store_up();
                 self.state.lifecycle.set(ServerLifecycle::Ready);
+                self.spawn_log_capture();
                 Ok(())
             }
             Err(error) => {
@@ -97,6 +99,21 @@ impl StoreManager {
                     tokio::time::sleep(self.config.probe_interval).await;
                 }
                 Err(error) => return Err(error),
+            }
+        }
+    }
+
+    /// Attach to the now-running store and stream its output into the `Store`
+    /// source log. Called once, on the successful-start path (C7). Attaching is
+    /// best-effort: if the follower can't be opened the store still runs, we
+    /// just have no store logs this run.
+    fn spawn_log_capture(&self) {
+        match self.store.attach() {
+            Ok(stream) => {
+                tokio::spawn(capture_store_logs(stream, self.state.logs.clone()));
+            }
+            Err(error) => {
+                warn!(%error, "could not attach to store output; store logs unavailable");
             }
         }
     }

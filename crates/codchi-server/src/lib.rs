@@ -13,6 +13,7 @@
 
 pub mod lifecycle;
 pub mod logging;
+pub mod logs;
 pub mod mount;
 pub mod platform;
 pub mod router;
@@ -20,9 +21,10 @@ pub mod state;
 pub mod store_manager;
 
 pub use lifecycle::LifecycleHandle;
+pub use logs::LogStore;
 #[cfg(unix)]
 pub use platform::PodmanStore;
-pub use platform::{Store, StoreError, StorePlatformStatus};
+pub use platform::{Store, StoreError, StoreLogStream, StorePlatformStatus};
 pub use router::build_router;
 pub use state::{AppState, InfrastructureHandle, InfrastructureSnapshot};
 pub use store_manager::{StoreManager, StoreManagerConfig};

@@ -138,9 +138,9 @@ server-owned Podman store startup; **CLI does `status` end-to-end**.
   - Add `list_jobs(filter)` to `CodchiService`.
   - Add source-scoped `stream_logs(source, EventStreamOpts)`;
     `stream_job_events(job_id)` becomes the job-correlated view over the same
-    store. No separate bounded-query endpoint: `EventStreamOpts` already has
-    `tail` / `since_seq` / `follow`, so `follow: false` does bounded tail/replay
-    (finite NDJSON), same as `stream_job_events`.
+    store. No separate bounded-query endpoint: `EventStreamOpts` has
+    `tail` / `follow` (R14 dropped `since_seq`), so `follow: false` does a bounded
+    `tail` replay (finite NDJSON), same as `stream_job_events`.
   - Add store/server `JobKind`s (e.g. `StoreStart`, store recovery).
   - This is a breaking contract change, expected to trip the `oasdiff` gate;
     annotate it as an intentional Phase 0 revision.
@@ -293,13 +293,13 @@ machines have a running store without me managing containers.*
 - [x] Store-down → `Degraded` + `store.unavailable` finding; readiness reflects real state.
 - [x] No `linux-lxd` impl present in `codchi-server`.
 
-### C7 — Source-log capture + `stream_logs` (D9, D14) — `[ ]` *(needs C3, C6)*
+### C7 — Source-log capture + `stream_logs` (D9, D14) — *in progress (needs C3, C6)*
 *As a codchi user/contributor, I want to introspect server and store logs so I
 can see what the daemon and store are doing.*
-- [ ] `Server` + `Store` source logs → append-only JSONL + in-memory ring.
-- [ ] `stream_logs(Server|Store)` honors `tail` / `since_seq` / `follow` (incl. bounded `follow:false`).
-- [ ] Store-container output captured (port `parse_container_log`) into the `Store` source log.
-- [ ] `stream_logs(Store)` streams **real** store-startup output — the slice's true NDJSON proof.
+- [x] `Server` + `Store` source logs → append-only JSONL (`data_dir()/logs/*.jsonl`) + in-memory ring (`LogStore`, source-keyed; router branches `Server`/`Store` → real, `Machine` → mock).
+- [x] `stream_logs(Server|Store)` honors `tail` / `follow` (incl. bounded `follow:false`; `since_seq` dropped by R14) — backfill-then-follow over the ring + a `broadcast` fan-out, deduped by `seq` (`tests/source_logs.rs`).
+- [x] `Server` fed by a `tracing` layer (no duplicate call sites); `Store` fed by the `Store::attach()` supervised follower (`podman logs --follow`, `kill_on_drop`) → `classify_store_line` (the v1 `parse_container_log`; full nix-JSON parse deferred to Phase 6).
+- [ ] `stream_logs(Store)` streams **real** store-startup output end-to-end — the slice's true NDJSON proof (needs a live Podman run, like the C6 e2e).
 
 ### C8 — T1 rootless bind-mount probe (de-risking spike) — `[ ]` *(independent; do early)*
 *As a contributor, I want to verify a rootless-podman container can reach a

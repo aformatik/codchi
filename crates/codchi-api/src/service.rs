@@ -95,7 +95,7 @@ pub trait CodchiService: Send + Sync {
     // ---- logs (R11) ----
     /// Stream a log source's durable log — the server, the store, or a machine.
     /// `stream_job_events` is the job-correlated view over this same store;
-    /// `opts.follow = false` does bounded tail/`since_seq` replay.
+    /// `opts.follow = false` does a bounded `tail` replay and then ends.
     async fn stream_logs(
         &self,
         source: LogSource,

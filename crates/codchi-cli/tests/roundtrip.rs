@@ -97,8 +97,18 @@ async fn empty_request_roundtrips() {
 async fn ndjson_stream_roundtrips() {
     let (client, _guard) = start_server().await;
 
+    // `follow: false` is a bounded replay: the server backfills the store's
+    // current log tail and ends the stream. (The default `follow: true` is
+    // genuinely infinite against the live `LogStore` — that's a `codchi logs -f`
+    // session, not a round-trip a `collect()` can ever finish.)
     let stream = client
-        .stream_logs(LogSource::Store, EventStreamOpts::default())
+        .stream_logs(
+            LogSource::Store,
+            EventStreamOpts {
+                tail: None,
+                follow: false,
+            },
+        )
         .await
         .expect("stream_logs");
     let events: Vec<_> = stream.collect().await;

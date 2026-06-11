@@ -5,7 +5,7 @@ mod store;
 #[cfg(unix)]
 mod podman;
 
-pub use store::{Store, StoreError, StorePlatformStatus};
+pub use store::{Store, StoreError, StoreLogStream, StorePlatformStatus};
 
 #[cfg(unix)]
 pub use podman::PodmanStore;
