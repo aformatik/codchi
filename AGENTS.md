@@ -34,14 +34,15 @@ The beta (CLI-owned-state) crates are retired under `crates/beta/` with a
 (workspace-excluded). Read them for orientation — especially the Podman store
 work in `beta-codchi-server` — but never link them.
 
-> Status: Phase 1 chunks **C0–C7** are complete. The beta crates are archived and
+> Status: Phase 1 is **complete (C0–C8)**. The beta crates are archived and
 > the five crates above are the complete active workspace. `codchi-server` serves
 > the full typed API over a per-user Unix socket; `codchi-cli` has a typed client
 > and a working `codchi status` that auto-spawns the daemon with a bounded,
 > non-hanging readiness wait (A1). The daemon owns the real Podman store
 > lifecycle (C6) and durable `Server`/`Store` source logs exposed through
-> `stream_logs` (C7); machine state remains mocked until Phase 7. C8 (rootless
-> bind-mount probe) is still open.
+> `stream_logs` (C7). The rootless socket bind-mount probe passed for both the
+> default and keep-id UID mappings (C8). Machine state remains mocked until the
+> `ServerCore` and SQLite phases; Phase 2 is next.
 
 ## Rules for agents
 

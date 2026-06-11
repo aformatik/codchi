@@ -4,6 +4,8 @@ Freezes the inputs for Phase 1. Changes require an explicit revision of this
 file (same rule as `00-contract-decisions.md`). Stable phase definition lives in
 [../PLAN.md](../PLAN.md); progress lives in [../STATUS.md](../STATUS.md).
 
+**Status:** complete (C0-C8, 2026-06-11).
+
 Phase goal (from PLAN): `axum` server, typed client, readiness, event stream,
 server-owned Podman store startup; **CLI does `status` end-to-end**.
 
@@ -66,7 +68,16 @@ server-owned Podman store startup; **CLI does `status` end-to-end**.
   - **T1 (Phase 1 task) — rootless-podman bind-mount reachability probe.** Before
     the socket choice is load-bearing, verify a process inside a rootless Podman
     container can actually open a bind-mounted host socket under the userns UID
-    mapping. Record the result here.
+    mapping. **Result (2026-06-11): works, with an ownership constraint.**
+    Podman 5.8.2 ran rootless with container ID 0 mapped to host UID 1000 and
+    subordinate IDs starting at host 100000. A host-owned `0600` Unix socket was
+    bind-mounted directly as `/run/codchi/server.sock`. A client running as
+    container root under the default mapping and a client running as UID
+    1000/GID 100 under `--userns=keep-id` both completed request/response; the
+    host observed peer credentials UID 1000/GID 100 in both cases. Therefore
+    the in-machine agent must run as an identity mapped to the host socket owner
+    (default container root or keep-id); an arbitrary subordinate UID cannot
+    connect to a `0600` socket.
 
 ## Vertical slice scope
 
@@ -305,17 +316,23 @@ can see what the daemon and store are doing.*
   NDJSON; the sentinel produced a subsequent line, and both matched the durable
   `store.jsonl`.
 
-### C8 — T1 rootless bind-mount probe (de-risking spike) — `[ ]` *(independent; do early)*
+### C8 — T1 rootless bind-mount probe (de-risking spike) — `[x]`
 *As a contributor, I want to verify a rootless-podman container can reach a
 bind-mounted host socket, so the Phase 8/13 in-machine transport is viable before
 it's load-bearing.*
-- [ ] Probe run; result (works / doesn't + constraints) recorded under **T1** above.
+- [x] Probe run; successful default + keep-id mappings and the socket-owner
+  identity constraint are recorded under **T1** above.
 
 ### Phase 1 Definition of Done
-- [ ] On a fresh Linux/Podman host, `codchi status` auto-starts the daemon, brings up the **real** Podman store, and prints lifecycle + store + (mock) machine state.
+- [x] On isolated fresh Codchi runtime/data state with no store container or
+  volume, the current Nix package's `codchi status` auto-starts the daemon,
+  creates and health-checks the **real** Podman store, reaches `Ready`/`Up` in
+  about one second, and prints the mock `demo` machine.
 - [x] `stream_logs(Store)` shows real store-startup output; `stream_job_events` proven via mock.
-- [ ] Hang-forever guard (A1) holds; T1 result recorded.
-- [ ] CI clippy+tests green for `codchi-api`/`codchi-server`/`codchi-cli`/`codchi-shared`; `oasdiff` R11 break acknowledged.
+- [x] Hang-forever guard (A1) holds; T1 result recorded.
+- [x] CI clippy+tests green for `codchi-api`/`codchi-server`/`codchi-cli`/`codchi-shared`;
+  formatting and OpenAPI snapshot checks pass; the pinned `oasdiff` reports the
+  intentional R11/R14 break set recorded in `phases/00`.
 
 ### Dependency graph
 ```
@@ -324,9 +341,9 @@ C0 ✅
  └─ C2 ✅─┴─ C3 ✅─┬─ C5 ✅ (status/spawn/A1)
         C4 ✅──────┘
         C3 ✅──── C6 ✅ (store) ──── C7 ✅ (logs)
-C8 (probe) — anytime, early
+C8 ✅ (probe)
 ```
 Critical path: **C2 → C3 → C6 → C7**. C1 ∥ C2; C4 ∥ C3; C5 and C6→C7 split along
 the `STATE` / `PLATFORM` seam once C3 lands. With C5 done, the `STATE` side of
-the slice is complete; the C6 → C7 platform path is also complete. The
-independent C8 probe remains.
+the slice is complete; the C6 → C7 platform path and independent C8 probe are
+also complete. Phase 1 is done.

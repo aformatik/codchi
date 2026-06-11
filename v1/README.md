@@ -88,7 +88,7 @@ inputs for that phase; changes require an explicit revision of the spec.
 
 ## Current Branch Context
 
-The current `server` branch has completed Phase 1 chunks C0-C7:
+The current `server` branch has completed Phase 1 (C0-C8):
 
 - The beta CLI-owned implementation and early remoc/Podman server are frozen
   under `crates/beta/`.
@@ -99,7 +99,9 @@ The current `server` branch has completed Phase 1 chunks C0-C7:
 - `codchi-cli` has the typed HTTP client and auto-spawning `codchi status`;
   machine data is still mocked until `ServerCore` lands.
 - Linux packaging builds both binaries and the Podman store image.
-- The socket bind-mount probe (C8) and server-owned machine state remain open.
+- The rootless Podman socket bind-mount probe passed under both default and
+  keep-id UID mappings.
+- Phase 2 (`ServerCore`) is next; server-owned machine state remains open.
 
 The v1 design remains a target architecture, not a description of behavior that
 already exists.

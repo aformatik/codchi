@@ -4,21 +4,21 @@ Tracks the current state of the v1 reimplementation. This file is expected to
 change often. Stable phase definitions live in [PLAN.md](PLAN.md); locked
 per-phase specs live under [phases/](phases/).
 
-**Last updated:** 2026-06-11 (Phase 1 **C7 source-log capture is complete**, including the live-Podman NDJSON proof. A fresh real `codchi-server` registered and started the self-contained store, reached `Ready` in about one second, and `stream_logs(Store)` returned genuine `nix-daemon` output from the startup health probe and sentinel through `Store::attach()` → `classify_store_line`. `stream_logs(Server)` returned the daemon lifecycle narrative from the tracing layer, both sources wrote matching durable JSONL, and bounded `follow:false` replay closed cleanly. The C7 implementation is a source-keyed `LogStore`: per-source in-memory ring + `broadcast` fan-out + append-only JSONL under `data_dir()/logs/`; `Server`/`Store` route to it while `Machine` remains mocked until Phase 7. Frozen-contract revision R14 reduced `EventStreamOpts` to `tail` + `follow`, with regenerated OpenAPI and an intentional `oasdiff` break. Unit/integration coverage includes five source-log tests; the active workspace tests and clippy were green when C7 landed. Remaining Phase 1 work: the independent **C8 rootless bind-mount probe** and the unchecked combined Definition of Done gates.)
+**Last updated:** 2026-06-11 (Phase 1 is **complete (C0-C8)**. C8 proved that a rootless Podman container can connect to a directly bind-mounted host Unix socket with a `0600` socket: both default container root (`uid=0`) and `--userns=keep-id` (`uid=1000`) mapped to the owning host user (`uid=1000`, `gid=100`) and completed a request/response. The current Nix package then passed an isolated fresh-state smoke: `codchi status` auto-spawned the daemon, created the real store container and `/nix` volume, reached `Ready`/store `Up` in about one second, printed the mock machine, and returned genuine `nix-daemon` startup output through bounded `stream_logs(Store)` with matching durable JSONL. The exact CI derivations `checks.codchi-api`, `checks.v1-crates`, and `checks.formatting` pass. The pinned `oasdiff` classifies the pre-R11 → current contract as the intentional R11/R14 break set (12 errors plus warnings for removed `machine`/`since_seq`), already recorded in the frozen contract revisions. Next: Phase 2, the `ServerCore` boundary.)
 
 ## Overall
 
 The repo is on the `server` branch. The beta CLI-owned implementation and the
 early remoc/Podman server skeleton are frozen under `crates/beta/` as reference.
-The active v1 server and CLI are clean scaffolds on `codchi-api`; end-user
-behavior has not yet been ported.
+The Phase 1 transport and Linux store slice is complete. Machine workflows and
+server-owned persistent state have not yet been ported.
 
 ## Phase Status
 
 | # | Phase | Status |
 |---|---|---|
 | 0 | Contract design (`codchi-api` crate) | Done — decisions locked + refined (R1–R14) in `phases/00-contract-decisions.md`. `codchi-api` provides the DTOs, IDs, error catalog, event model, semantic service trait, typed endpoint catalog, mock, and generated OpenAPI. It remains independently gated for clippy, tests, and OpenAPI drift. |
-| 1 | HTTP API + Linux/Podman vertical slice | In progress — **C0–C7 complete**. HTTP transport is end-to-end over the Unix socket; `codchi status` auto-spawns with a bounded readiness wait; the daemon brings up and monitors the real Podman store and captures real store output into durable source logs exposed through `stream_logs`, while machine data remains mocked. Remaining chunk: the independent **C8 rootless bind-mount probe**, plus the unchecked combined Definition of Done gates. |
+| 1 | HTTP API + Linux/Podman vertical slice | **Done — C0–C8 complete.** Typed HTTP transport, bounded daemon spawn/readiness, real Podman store lifecycle, durable `Server`/`Store` source logs, live NDJSON proof, fresh-state packaged smoke, CI gates, and the rootless socket bind-mount probe all pass. Machine data remains mocked by design until the next phases. |
 | 2 | `ServerCore` boundary | Not started |
 | 3 | SQLite foundation | Not started |
 | 4 | Machine state in SQLite | Not started |
@@ -78,6 +78,14 @@ behavior has not yet been ported.
   `Machine` to the mock service (Phase 7). Caveat for clients: a `follow:true`
   stream against the live server is infinite by design — `collect()` it only with
   `follow:false`.
+- **Rootless socket transport (C8/T1):** Podman 5.8.2 was confirmed rootless
+  with UID map `0 → host 1000`, subordinate IDs from host 100000. A host-owned
+  `0600` Unix socket was bind-mounted directly at
+  `/run/codchi/server.sock`. Both the default mapping (container root) and
+  `--userns=keep-id` connected successfully; host peer credentials were
+  `uid=1000`, `gid=100` in both cases. The in-machine agent must therefore run
+  as an identity mapped to the host socket owner; an arbitrary subordinate UID
+  cannot access a `0600` socket.
 - Machine state is not yet server-owned; no active v1 machine workflow exists.
   The archived beta CLI remains the reference for the old direct-ownership path.
 - Tray client is currently disabled.
