@@ -38,7 +38,11 @@ pub fn init(logs: LogStore) {
     });
 
     let _ = tracing_subscriber::registry()
-        .with(fmt::layer().with_writer(std::io::stderr).with_filter(console_filter))
+        .with(
+            fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_filter(console_filter),
+        )
         .with(ServerLogLayer::new(logs).with_filter(capture_filter))
         .try_init();
 }

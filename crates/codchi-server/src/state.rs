@@ -61,9 +61,12 @@ impl AppState {
         let state = Self::new(Arc::new(MockCodchiService::new()), LogStore::memory());
         state.infrastructure.store_up();
         state.lifecycle.set(codchi_api::dto::ServerLifecycle::Ready);
-        state
-            .logs
-            .append(LogSource::Server, LogLevel::Info, "main", "mock daemon ready");
+        state.logs.append(
+            LogSource::Server,
+            LogLevel::Info,
+            "main",
+            "mock daemon ready",
+        );
         state.logs.append(
             LogSource::Store,
             LogLevel::Info,

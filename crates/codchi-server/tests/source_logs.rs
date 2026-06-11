@@ -34,8 +34,7 @@ async fn drain(store: &LogStore, source: LogSource, opts: EventStreamOpts) -> Ve
 async fn tail_backfills_in_order_with_monotonic_seq() {
     let store = LogStore::memory();
     for n in 1..=3 {
-        store
-            .logs_append(LogSource::Store, format!("line {n}"));
+        store.logs_append(LogSource::Store, format!("line {n}"));
     }
 
     let events = drain(
@@ -51,7 +50,11 @@ async fn tail_backfills_in_order_with_monotonic_seq() {
     let messages: Vec<&str> = events.iter().map(message).collect();
     assert_eq!(messages, ["line 1", "line 2", "line 3"]);
     let seqs: Vec<u64> = events.iter().map(seq).collect();
-    assert_eq!(seqs, [1, 2, 3], "per-source seq starts at 1 and is monotonic");
+    assert_eq!(
+        seqs,
+        [1, 2, 3],
+        "per-source seq starts at 1 and is monotonic"
+    );
 }
 
 #[tokio::test]

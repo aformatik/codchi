@@ -199,7 +199,11 @@ impl LogStore {
 
     /// Stream a server-owned source per [`EventStreamOpts`] (`tail` backfill,
     /// then live `follow`). Errors only for a non-server-owned source.
-    pub fn stream(&self, source: LogSource, opts: EventStreamOpts) -> Result<EventStream, ApiError> {
+    pub fn stream(
+        &self,
+        source: LogSource,
+        opts: EventStreamOpts,
+    ) -> Result<EventStream, ApiError> {
         match self.source(&source) {
             Some(src) => Ok(src.stream(opts)),
             None => Err(ApiError::internal(format!(
@@ -217,7 +221,11 @@ fn open_jsonl(dir: &Path, name: &str) -> Option<BufWriter<File>> {
         );
         return None;
     }
-    match OpenOptions::new().create(true).append(true).open(dir.join(name)) {
+    match OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join(name))
+    {
         Ok(file) => Some(BufWriter::new(file)),
         Err(error) => {
             eprintln!(

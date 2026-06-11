@@ -88,18 +88,18 @@ inputs for that phase; changes require an explicit revision of the spec.
 
 ## Current Branch Context
 
-The current `server` branch has completed Phase 1 chunks C0-C6:
+The current `server` branch has completed Phase 1 chunks C0-C7:
 
 - The beta CLI-owned implementation and early remoc/Podman server are frozen
   under `crates/beta/`.
 - `codchi-api` is the active v1 contract.
 - `codchi-server` serves the typed API over the per-user Unix socket and owns
-  real Podman store startup, health, lifecycle, and the observe-only sentinel.
+  real Podman store startup, health, lifecycle, the observe-only sentinel, and
+  durable `Server`/`Store` source logs exposed through `stream_logs`.
 - `codchi-cli` has the typed HTTP client and auto-spawning `codchi status`;
   machine data is still mocked until `ServerCore` lands.
 - Linux packaging builds both binaries and the Podman store image.
-- Source-log capture (C7), the socket bind-mount probe (C8), and server-owned
-  machine state remain open.
+- The socket bind-mount probe (C8) and server-owned machine state remain open.
 
 The v1 design remains a target architecture, not a description of behavior that
 already exists.

@@ -293,13 +293,17 @@ machines have a running store without me managing containers.*
 - [x] Store-down → `Degraded` + `store.unavailable` finding; readiness reflects real state.
 - [x] No `linux-lxd` impl present in `codchi-server`.
 
-### C7 — Source-log capture + `stream_logs` (D9, D14) — *in progress (needs C3, C6)*
+### C7 — Source-log capture + `stream_logs` (D9, D14) — `[x]`
 *As a codchi user/contributor, I want to introspect server and store logs so I
 can see what the daemon and store are doing.*
 - [x] `Server` + `Store` source logs → append-only JSONL (`data_dir()/logs/*.jsonl`) + in-memory ring (`LogStore`, source-keyed; router branches `Server`/`Store` → real, `Machine` → mock).
 - [x] `stream_logs(Server|Store)` honors `tail` / `follow` (incl. bounded `follow:false`; `since_seq` dropped by R14) — backfill-then-follow over the ring + a `broadcast` fan-out, deduped by `seq` (`tests/source_logs.rs`).
 - [x] `Server` fed by a `tracing` layer (no duplicate call sites); `Store` fed by the `Store::attach()` supervised follower (`podman logs --follow`, `kill_on_drop`) → `classify_store_line` (the v1 `parse_container_log`; full nix-JSON parse deferred to Phase 6).
-- [ ] `stream_logs(Store)` streams **real** store-startup output end-to-end — the slice's true NDJSON proof (needs a live Podman run, like the C6 e2e).
+- [x] `stream_logs(Store)` streams **real** store-startup output end-to-end. A
+  fresh live-Podman run captured the startup health probe's genuine
+  `nix-daemon` output through `Store::attach()` and returned it as bounded
+  NDJSON; the sentinel produced a subsequent line, and both matched the durable
+  `store.jsonl`.
 
 ### C8 — T1 rootless bind-mount probe (de-risking spike) — `[ ]` *(independent; do early)*
 *As a contributor, I want to verify a rootless-podman container can reach a
@@ -309,7 +313,7 @@ it's load-bearing.*
 
 ### Phase 1 Definition of Done
 - [ ] On a fresh Linux/Podman host, `codchi status` auto-starts the daemon, brings up the **real** Podman store, and prints lifecycle + store + (mock) machine state.
-- [ ] `stream_logs(Store)` shows real store-startup output; `stream_job_events` proven via mock.
+- [x] `stream_logs(Store)` shows real store-startup output; `stream_job_events` proven via mock.
 - [ ] Hang-forever guard (A1) holds; T1 result recorded.
 - [ ] CI clippy+tests green for `codchi-api`/`codchi-server`/`codchi-cli`/`codchi-shared`; `oasdiff` R11 break acknowledged.
 
@@ -319,10 +323,10 @@ C0 ✅
  ├─ C1 ✅─┐
  └─ C2 ✅─┴─ C3 ✅─┬─ C5 ✅ (status/spawn/A1)
         C4 ✅──────┘
-        C3 ✅──── C6 (store) ──── C7 (logs)
+        C3 ✅──── C6 ✅ (store) ──── C7 ✅ (logs)
 C8 (probe) — anytime, early
 ```
 Critical path: **C2 → C3 → C6 → C7**. C1 ∥ C2; C4 ∥ C3; C5 and C6→C7 split along
 the `STATE` / `PLATFORM` seam once C3 lands. With C5 done, the `STATE` side of
-the slice is complete; the remaining critical path is **C6 → C7** (real store +
-source-log capture), plus the independent C8 probe.
+the slice is complete; the C6 → C7 platform path is also complete. The
+independent C8 probe remains.
