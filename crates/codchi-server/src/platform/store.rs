@@ -36,7 +36,7 @@ impl StoreError {
 /// Platform operations needed to own the store lifecycle.
 ///
 /// Most methods are synchronous because they wrap one-shot host subprocesses;
-/// the [`StoreManager`](crate::StoreManager) runs them on Tokio's blocking pool.
+/// the [`StoreSupervisor`](crate::StoreSupervisor) runs them on Tokio's blocking pool.
 /// [`attach`](Store::attach) is the exception: it opens a *long-lived* follower
 /// over the store's output and is consumed asynchronously.
 pub trait Store: Send + Sync + 'static {

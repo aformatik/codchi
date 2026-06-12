@@ -1,27 +1,35 @@
 //! `codchi-server` binary entry point.
 //!
-//! Binds the per-user Unix socket (D6), starts the server-owned Podman store
-//! manager (C6), and serves the v1 API. Machine data remains backed by
-//! [`MockCodchiService`](codchi_api::testing::MockCodchiService) until Phase 2,
-//! while lifecycle/store health are real infrastructure state.
+//! Binds the per-user Unix socket (D6), constructs the [`ServerCore`] over the
+//! store-condition channel, spawns the [`StoreSupervisor`] that owns the real
+//! Podman store lifecycle, serves the v1 API, and tears everything down in order
+//! on SIGINT/SIGTERM (SC8). Machine data remains backed by the internal mock
+//! until Phase 4.
 
 use std::error::Error;
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::serve;
-use codchi_api::dto::ServerLifecycle;
-use codchi_api::testing::MockCodchiService;
+use chrono::Utc;
 use codchi_server::{
-    AppState, LogStore, PodmanStore, StoreManager, StoreManagerConfig, build_router, logging,
+    AppState, LogStore, PodmanStore, ServerCore, StoreCondition, StoreSupervisor,
+    StoreSupervisorConfig, build_router, logging,
 };
 use codchi_shared::{logs_dir, server_socket_path};
 use tokio::net::UnixListener;
-use tracing::{error, info};
+use tokio::sync::{oneshot, watch};
+use tokio_util::sync::CancellationToken;
+use tracing::{error, info, warn};
+
+/// Overall shutdown budget bounding HTTP drain + supervisor teardown, so a hung
+/// `podman stop` cannot wedge the daemon (SC8 step 6).
+const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(40);
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Build the log store first: the tracing layer writes the `Server` source,
-    // and `AppState` serves it — both must share this one instance.
+    // and `ServerCore` serves it — both must share this one instance.
     let logs = LogStore::new(&logs_dir());
     logging::init(logs.clone());
 
@@ -35,32 +43,99 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if socket.exists() {
         std::fs::remove_file(&socket)?;
     }
-
-    let state = AppState::new(Arc::new(MockCodchiService::new()), logs);
     let listener = UnixListener::bind(&socket)?;
 
-    match PodmanStore::from_env() {
+    // The store-condition channel: the supervisor (sole writer, SC7) holds the
+    // sender; `ServerCore` (reader) holds the receiver and projects on read.
+    let (condition_tx, condition_rx) = watch::channel(StoreCondition::Starting);
+    let shutdown = CancellationToken::new();
+
+    let core = Arc::new(ServerCore::new(
+        logs.clone(),
+        condition_rx,
+        shutdown.clone(),
+    ));
+    let state = AppState::new(core);
+
+    // SIGINT/SIGTERM trip the token (SC8). Unix-only; Windows is Phase 12.
+    spawn_signal_handler(shutdown.clone());
+
+    // Bring the store up under the supervisor. If the driver is unavailable,
+    // publish a degraded condition and serve without a supervisor (the lifecycle
+    // projects `Degraded`, the `store.unavailable` finding appears).
+    let mut keepalive_tx = None;
+    let supervisor = match PodmanStore::from_env() {
         Ok(store) => {
-            let manager = StoreManager::new(
+            // `drained` gates the store teardown until HTTP has drained (SC8).
+            let (drained_tx, drained_rx) = oneshot::channel();
+            let supervisor = StoreSupervisor::new(
                 Arc::new(store),
-                state.clone(),
-                StoreManagerConfig::default(),
+                condition_tx,
+                logs.clone(),
+                StoreSupervisorConfig::default(),
             );
-            tokio::spawn(manager.run());
+            let handle = tokio::spawn(supervisor.run(shutdown.clone(), drained_rx));
+            Some((handle, drained_tx))
         }
         Err(error) => {
             error!(%error, "store driver unavailable; serving in a degraded state");
-            state.infrastructure.store_down(error.to_string());
-            state.lifecycle.set(ServerLifecycle::Degraded);
+            let _ = condition_tx.send(StoreCondition::Degraded {
+                reason: error.to_string(),
+                since: Utc::now(),
+            });
+            // Hold the sender so the receiver keeps projecting the last value.
+            keepalive_tx = Some(condition_tx);
+            None
+        }
+    };
+
+    info!(socket = %socket.display(), "codchi-server listening");
+
+    // Serve until the token trips, draining in-flight requests first (SC8 step 2).
+    let app = build_router(state);
+    let graceful = shutdown.clone();
+    serve(listener, app)
+        .with_graceful_shutdown(async move { graceful.cancelled().await })
+        .await?;
+
+    // HTTP drained. Release the teardown gate and await the supervisor's ordered
+    // store teardown (SC8 steps 4–6), bounded by the overall timeout.
+    if let Some((handle, drained_tx)) = supervisor {
+        let _ = drained_tx.send(());
+        if tokio::time::timeout(SHUTDOWN_TIMEOUT, handle)
+            .await
+            .is_err()
+        {
+            warn!("shutdown timed out; exiting without a clean store teardown");
         }
     }
-    info!(
-        socket = %socket.display(),
-        lifecycle = ?state.lifecycle.current(),
-        "codchi-server listening"
-    );
-
-    let app = build_router(state);
-    serve(listener, app).await?;
+    drop(keepalive_tx);
+    info!("codchi-server stopped");
     Ok(())
+}
+
+/// Trip `shutdown` on the first SIGINT or SIGTERM.
+fn spawn_signal_handler(shutdown: CancellationToken) {
+    tokio::spawn(async move {
+        use tokio::signal::unix::{SignalKind, signal};
+        let mut sigint = match signal(SignalKind::interrupt()) {
+            Ok(stream) => stream,
+            Err(error) => {
+                error!(%error, "cannot install SIGINT handler");
+                return;
+            }
+        };
+        let mut sigterm = match signal(SignalKind::terminate()) {
+            Ok(stream) => stream,
+            Err(error) => {
+                error!(%error, "cannot install SIGTERM handler");
+                return;
+            }
+        };
+        tokio::select! {
+            _ = sigint.recv() => info!("received SIGINT; shutting down"),
+            _ = sigterm.recv() => info!("received SIGTERM; shutting down"),
+        }
+        shutdown.cancel();
+    });
 }

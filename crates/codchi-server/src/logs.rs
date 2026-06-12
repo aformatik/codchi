@@ -261,7 +261,7 @@ impl<S: Subscriber> Layer<S> for ServerLogLayer {
             Level::DEBUG => LogLevel::Debug,
             Level::TRACE => LogLevel::Trace,
         };
-        // Topic = the emitting module's last segment (`store_manager`, `main`,
+        // Topic = the emitting module's last segment (`supervisor`, `main`,
         // …) — a coarse but useful grouping until jobs carry explicit topics.
         let topic = meta
             .target()

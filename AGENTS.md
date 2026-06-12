@@ -34,15 +34,19 @@ The beta (CLI-owned-state) crates are retired under `crates/beta/` with a
 (workspace-excluded). Read them for orientation — especially the Podman store
 work in `beta-codchi-server` — but never link them.
 
-> Status: Phase 1 is **complete (C0–C8)**. The beta crates are archived and
-> the five crates above are the complete active workspace. `codchi-server` serves
-> the full typed API over a per-user Unix socket; `codchi-cli` has a typed client
-> and a working `codchi status` that auto-spawns the daemon with a bounded,
-> non-hanging readiness wait (A1). The daemon owns the real Podman store
-> lifecycle (C6) and durable `Server`/`Store` source logs exposed through
-> `stream_logs` (C7). The rootless socket bind-mount probe passed for both the
-> default and keep-id UID mappings (C8). Machine state remains mocked until the
-> `ServerCore` and SQLite phases; Phase 2 is next.
+> Status: Phases 1 and 2 are **complete** (C0–C8, SC1–SC9). The beta crates are
+> archived and the five crates above are the complete active workspace.
+> `codchi-server` serves the full typed API over a per-user Unix socket via
+> `ServerCore`, the single `impl CodchiService`: it owns the store-condition
+> reader, the shutdown token, and the `LogStore`, and delegates every
+> still-unbacked domain to one quarantined internal mock (SC2). The store
+> lifecycle is owned by the single-writer `StoreSupervisor` over a
+> `watch<StoreCondition>`; `lifecycle`/store status/findings/startup-error are
+> pure projections of that condition (SC5). Graceful shutdown (SC8) trips a
+> `CancellationToken` on SIGINT/SIGTERM and runs an ordered, timeout-bounded
+> store teardown. `codchi-cli` auto-spawns the daemon with a bounded,
+> non-hanging readiness wait (A1). Machine/job/generation/secret/doctor/migration
+> data remains mocked until the SQLite phases; Phase 3 (SQLite) is next.
 
 ## Rules for agents
 

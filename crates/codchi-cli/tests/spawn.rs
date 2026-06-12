@@ -47,8 +47,9 @@ fn serve_with_lifecycle(lifecycle: ServerLifecycle, tag: &str) -> (HttpClient, S
     let socket = temp_socket(tag);
     let _ = std::fs::remove_file(&socket);
     let listener = UnixListener::bind(&socket).expect("bind socket");
-    let state = AppState::with_mock();
-    state.lifecycle.set(lifecycle);
+    // Phase 2 (SC8): the reported lifecycle is a pure projection with no setter,
+    // so a forced lifecycle is seeded via the underlying store condition.
+    let state = AppState::with_mock_lifecycle(lifecycle);
     let app = build_router(state);
     tokio::spawn(async move {
         let _ = axum::serve(listener, app).await;

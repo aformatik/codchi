@@ -28,6 +28,31 @@ The active v1 CLI crate (new, Phase 1+). Package name `codchi-cli`; ships the
 binary named `codchi` (the public compatibility surface). A `CodchiService`
 client over HTTP. Distinct from the retired `beta-codchi` crate.
 
+### ServerCore
+The single orchestration type inside [[codchi-server]] that implements
+`CodchiService` directly (the HTTP client implements the same trait over the
+wire). It owns server-owned state and *holds* the stateless platform drivers,
+calling them from domain-grouped internal methods — the `STATE`/`PLATFORM`
+boundary. Distinct from the [[store-supervisor]], which it reads from but does
+not contain. The router becomes a thin adapter over it. Spec:
+`v1/phases/02-server-core.md`.
+
+### Store supervisor
+The single task that owns the [[store-container]]'s observed runtime
+[[store-condition]] and the periodic health sentinel. It is the **sole writer**
+of that condition (holds the `watch` sender; [[ServerCore]] holds a receiver),
+so store status has no exposed mutators. Reshaped from the Phase-1
+`StoreManager`. A *supervisor* (mechanism/lifecycle), not a domain method.
+
+### Store condition
+The observed, ephemeral runtime state of the [[store-container]] as a single sum
+type (`Starting`/`Checking`/`Up`/`Degraded`), owned by the [[store-supervisor]].
+The server `lifecycle`, `StoreStatus`, any startup error, and the
+`store.unavailable` finding are **pure projections** of it — never stored
+separately — so illegal combinations are unrepresentable. Distinct from durable
+state (which lives in SQLite) and from a [[job]] (which is an operation, not a
+state).
+
 ### Log source
 A long-lived entity that emits a durable log stream: `Server` (the daemon),
 `Store` (the store container), or `Machine(id)` (a machine container). Each

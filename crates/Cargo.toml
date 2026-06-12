@@ -24,6 +24,7 @@ async-trait = "0.1"
 axum = "0.8"
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "signal", "time", "process"] }
+tokio-util = { version = "0.7", features = ["rt"] }
 hyper = { version = "1", features = ["client", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"

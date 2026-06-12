@@ -1,30 +1,29 @@
 //! `codchi-server` — the v1 daemon.
 //!
 //! Phase 1 (C3) serves the full typed `codchi-api` contract over a per-user Unix
-//! domain socket (D6). The HTTP plumbing is generic over the [`Endpoint`] catalog
-//! ([`mount`]); the routes are wired to a [`CodchiService`] trait object held in
-//! [`AppState`] — [`MockCodchiService`] for machine data in Phase 1 (D7), the
-//! real `ServerCore` from Phase 2 on. Store lifecycle and health are already
-//! real server infrastructure, maintained by [`store_manager`].
+//! domain socket (D6). Phase 2 (SC1–SC8) introduces [`ServerCore`], the single
+//! `impl CodchiService`: it owns the server-owned state (the store-condition
+//! reader, the shutdown flag, the [`LogStore`]) and delegates every
+//! still-unbacked domain to an internal mock. The store lifecycle is owned by
+//! the [`StoreSupervisor`], the sole writer of the observed
+//! [`StoreCondition`].
 //!
-//! [`Endpoint`]: codchi_api::Endpoint
 //! [`CodchiService`]: codchi_api::CodchiService
-//! [`MockCodchiService`]: codchi_api::testing::MockCodchiService
 
-pub mod lifecycle;
+pub mod core;
 pub mod logging;
 pub mod logs;
 pub mod mount;
 pub mod platform;
 pub mod router;
 pub mod state;
-pub mod store_manager;
+pub mod supervisor;
 
-pub use lifecycle::LifecycleHandle;
+pub use core::{ProbeOutcome, ServerCore, StoreCondition, step};
 pub use logs::LogStore;
 #[cfg(unix)]
 pub use platform::PodmanStore;
 pub use platform::{Store, StoreError, StoreLogStream, StorePlatformStatus};
 pub use router::build_router;
-pub use state::{AppState, InfrastructureHandle, InfrastructureSnapshot};
-pub use store_manager::{StoreManager, StoreManagerConfig};
+pub use state::AppState;
+pub use supervisor::{StoreSupervisor, StoreSupervisorConfig};
