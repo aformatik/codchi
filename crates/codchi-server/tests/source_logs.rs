@@ -4,7 +4,7 @@
 use std::time::Duration;
 
 use codchi_api::events::EventStreamOpts;
-use codchi_api::{Event, LogLevel, LogSource, MachineId};
+use codchi_api::{ApiError, Event, LogLevel, LogSource, MachineId};
 use codchi_server::LogStore;
 use futures::StreamExt;
 
@@ -149,7 +149,7 @@ async fn machine_source_is_not_server_owned_in_phase_1() {
     // service instead, so this branch is never hit in production).
     match result {
         Ok(_) => panic!("machine logs are not server-owned yet"),
-        Err(err) => assert_eq!(err.code(), "internal"),
+        Err(err) => assert!(matches!(err, ApiError::Internal { .. })),
     }
 }
 

@@ -205,7 +205,7 @@ fn json_response<T: Serialize>(status: u16, value: &T) -> Response {
 
 /// Serialize a typed [`ApiError`] to its mapped HTTP status + JSON body.
 pub fn error_response(err: &ApiError) -> Response {
-    let body = serde_json::to_vec(err).unwrap_or_else(|_| b"{\"code\":\"internal\"}".to_vec());
+    let body = serde_json::to_vec(err).expect("ApiError serialization is infallible");
     Response::builder()
         .status(err.http_status())
         .header(CONTENT_TYPE, JSON)

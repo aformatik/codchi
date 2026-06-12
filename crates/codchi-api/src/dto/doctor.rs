@@ -1,6 +1,6 @@
 //! Health / doctor / findings DTOs (P6, R10).
 //!
-//! Stable `code` strings are the contract; `message` may be edited freely.
+//! Stable [`FindingCode`] variants are the contract; `message` may be edited freely.
 //! `health` is derived once here so CLI, tray, and server agree.
 
 use chrono::{DateTime, Utc};
@@ -32,6 +32,32 @@ pub enum Component {
     Migration,
 }
 
+/// Stable machine-readable identity of a health finding.
+///
+/// Each variant declares its wire string explicitly so Rust refactors cannot
+/// silently change the contract.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub enum FindingCode {
+    #[serde(rename = "store.unavailable")]
+    StoreUnavailable,
+    #[serde(rename = "podman.container_missing")]
+    PodmanContainerMissing,
+    #[serde(rename = "podman.mount_missing")]
+    PodmanMountMissing,
+    #[serde(rename = "podman.gcroot_missing")]
+    PodmanGcrootMissing,
+    #[serde(rename = "wsl.distro_missing")]
+    WslDistroMissing,
+    #[serde(rename = "wsl.rootfs_missing")]
+    WslRootfsMissing,
+    #[serde(rename = "generation.store_path_missing")]
+    GenerationStorePathMissing,
+    #[serde(rename = "reconcile.probe_failed")]
+    ReconcileProbeFailed,
+    #[serde(rename = "create.failed")]
+    CreateFailed,
+}
+
 /// A single health finding produced by the reconciler or a `doctor_scan`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Finding {
@@ -43,8 +69,7 @@ pub struct Finding {
     /// `Some` for `doctor_scan` findings; `None` for background-reconcile.
     #[serde(default)]
     pub source_job: Option<JobId>,
-    /// Stable code, e.g. `"store.rootfs_missing"`.
-    pub code: String,
+    pub code: FindingCode,
     /// User-facing message; may evolve.
     pub message: String,
     #[serde(default)]

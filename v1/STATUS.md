@@ -4,7 +4,7 @@ Tracks the current state of the v1 reimplementation. This file is expected to
 change often. Stable phase definitions live in [PLAN.md](PLAN.md); locked
 per-phase specs live under [phases/](phases/).
 
-**Last updated:** 2026-06-11 (Phase 1 is **complete (C0-C8)**. C8 proved that a rootless Podman container can connect to a directly bind-mounted host Unix socket with a `0600` socket: both default container root (`uid=0`) and `--userns=keep-id` (`uid=1000`) mapped to the owning host user (`uid=1000`, `gid=100`) and completed a request/response. The current Nix package then passed an isolated fresh-state smoke: `codchi status` auto-spawned the daemon, created the real store container and `/nix` volume, reached `Ready`/store `Up` in about one second, printed the mock machine, and returned genuine `nix-daemon` startup output through bounded `stream_logs(Store)` with matching durable JSONL. The exact CI derivations `checks.codchi-api`, `checks.v1-crates`, and `checks.formatting` pass. The pinned `oasdiff` classifies the pre-R11 → current contract as the intentional R11/R14 break set (12 errors plus warnings for removed `machine`/`since_seq`), already recorded in the frozen contract revisions. Next: Phase 2, the `ServerCore` boundary.)
+**Last updated:** 2026-06-12 (Phase 0 R15 replaces duplicated/raw error and finding-code strings with explicit typed catalogs while preserving existing catalog values on the wire. The `Finding.code` OpenAPI tightening is recorded in the locked contract; pinned `oasdiff` reports 0 errors and response-enum warnings only. The exact `checks.codchi-api`, `checks.v1-crates`, and `checks.formatting` derivations pass. Phase 1 remains **complete (C0-C8)**. Next: Phase 2, the `ServerCore` boundary.)
 
 ## Overall
 
@@ -17,7 +17,7 @@ server-owned persistent state have not yet been ported.
 
 | # | Phase | Status |
 |---|---|---|
-| 0 | Contract design (`codchi-api` crate) | Done — decisions locked + refined (R1–R14) in `phases/00-contract-decisions.md`. `codchi-api` provides the DTOs, IDs, error catalog, event model, semantic service trait, typed endpoint catalog, mock, and generated OpenAPI. It remains independently gated for clippy, tests, and OpenAPI drift. |
+| 0 | Contract design (`codchi-api` crate) | Done — decisions locked + refined (R1–R15) in `phases/00-contract-decisions.md`. `codchi-api` provides the DTOs, IDs, typed error/finding-code catalogs, event model, semantic service trait, typed endpoint catalog, mock, and generated OpenAPI. It remains independently gated for clippy, tests, and OpenAPI drift. |
 | 1 | HTTP API + Linux/Podman vertical slice | **Done — C0–C8 complete.** Typed HTTP transport, bounded daemon spawn/readiness, real Podman store lifecycle, durable `Server`/`Store` source logs, live NDJSON proof, fresh-state packaged smoke, CI gates, and the rootless socket bind-mount probe all pass. Machine data remains mocked by design until the next phases. |
 | 2 | `ServerCore` boundary | Not started |
 | 3 | SQLite foundation | Not started |

@@ -85,8 +85,49 @@ fn api_error_codes_are_stable() {
             },
             "machine_not_found",
         ),
+        (
+            ApiError::MachineBusy {
+                machine: MachineId("x".into()),
+                job,
+            },
+            "machine_busy",
+        ),
         (ApiError::JobNotFound { job }, "job_not_found"),
+        (
+            ApiError::JobNotCancellable {
+                job,
+                state: JobState::Running,
+            },
+            "job_not_cancellable",
+        ),
+        (
+            ApiError::StoreUnavailable {
+                reason: "down".into(),
+            },
+            "store_unavailable",
+        ),
         (ApiError::StoreBusy { job }, "store_busy"),
+        (
+            ApiError::SchemaMigrationRequired {
+                current: 1,
+                required: 2,
+            },
+            "schema_migration_required",
+        ),
+        (
+            ApiError::ApiVersionMismatch {
+                client: 1,
+                server: 2,
+            },
+            "api_version_mismatch",
+        ),
+        (
+            ApiError::MissingRequiredSecrets {
+                machine: MachineId("x".into()),
+                keys: vec![],
+            },
+            "missing_required_secrets",
+        ),
         (
             ApiError::Validation {
                 field: "f".into(),
@@ -102,9 +143,33 @@ fn api_error_codes_are_stable() {
         ),
     ];
     for (err, code) in cases {
-        assert_eq!(err.code(), code);
         let json: serde_json::Value = serde_json::to_value(&err).unwrap();
-        assert_eq!(json["code"], code, "wire code must match code()");
+        assert_eq!(json["code"], code);
+    }
+}
+
+#[test]
+fn finding_codes_are_stable() {
+    let cases = [
+        (FindingCode::StoreUnavailable, "store.unavailable"),
+        (
+            FindingCode::PodmanContainerMissing,
+            "podman.container_missing",
+        ),
+        (FindingCode::PodmanMountMissing, "podman.mount_missing"),
+        (FindingCode::PodmanGcrootMissing, "podman.gcroot_missing"),
+        (FindingCode::WslDistroMissing, "wsl.distro_missing"),
+        (FindingCode::WslRootfsMissing, "wsl.rootfs_missing"),
+        (
+            FindingCode::GenerationStorePathMissing,
+            "generation.store_path_missing",
+        ),
+        (FindingCode::ReconcileProbeFailed, "reconcile.probe_failed"),
+        (FindingCode::CreateFailed, "create.failed"),
+    ];
+    for (code, wire) in cases {
+        assert_eq!(serde_json::to_value(code).unwrap(), wire);
+        roundtrip(code);
     }
 }
 
@@ -273,7 +338,7 @@ fn core_views_roundtrip() {
             component: Component::Machine,
             machine: Some(MachineId("demo".into())),
             source_job: None,
-            code: "podman.mount_missing".into(),
+            code: FindingCode::PodmanMountMissing,
             message: "mount gone".into(),
             suggested_action: Some("run doctor fix".into()),
             auto_fixable: true,
@@ -310,7 +375,7 @@ fn health_is_worst_severity() {
         component: Component::Machine,
         machine: None,
         source_job: None,
-        code: "x".into(),
+        code: FindingCode::ReconcileProbeFailed,
         message: "m".into(),
         suggested_action: None,
         auto_fixable: false,

@@ -1799,8 +1799,7 @@
             "type": "boolean"
           },
           "code": {
-            "description": "Stable code, e.g. `\"store.rootfs_missing\"`.",
-            "type": "string"
+            "$ref": "#/components/schemas/FindingCode"
           },
           "component": {
             "$ref": "#/components/schemas/Component"
@@ -1836,6 +1835,21 @@
             "nullable": true
           }
         }
+      },
+      "FindingCode": {
+        "description": "Stable machine-readable identity of a health finding.\n\nEach variant declares its wire string explicitly so Rust refactors cannot silently change the contract.",
+        "type": "string",
+        "enum": [
+          "store.unavailable",
+          "podman.container_missing",
+          "podman.mount_missing",
+          "podman.gcroot_missing",
+          "wsl.distro_missing",
+          "wsl.rootfs_missing",
+          "generation.store_path_missing",
+          "reconcile.probe_failed",
+          "create.failed"
+        ]
       },
       "FindingId": {
         "description": "Finding identifier (UUID v7).",

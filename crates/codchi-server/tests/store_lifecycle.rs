@@ -4,7 +4,7 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use codchi_api::ApiError;
-use codchi_api::dto::{DoctorReport, ServerLifecycle, ServerStatus, StoreState};
+use codchi_api::dto::{DoctorReport, FindingCode, ServerLifecycle, ServerStatus, StoreState};
 use codchi_api::testing::MockCodchiService;
 use codchi_server::{
     AppState, LogStore, Store, StoreError, StoreLogStream, StoreManager, StoreManagerConfig,
@@ -182,7 +182,7 @@ async fn unavailable_store_degrades_readiness_and_creates_a_finding() {
 
     let report: DoctorReport = get_json(state, "/v1/doctor").await;
     assert_eq!(report.findings.len(), 1);
-    assert_eq!(report.findings[0].code, "store.unavailable");
+    assert_eq!(report.findings[0].code, FindingCode::StoreUnavailable);
 }
 
 #[tokio::test]

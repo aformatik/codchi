@@ -3,7 +3,7 @@
 use std::sync::{Arc, RwLock};
 
 use chrono::Utc;
-use codchi_api::dto::{Component, Finding, Severity, StoreState, StoreStatus};
+use codchi_api::dto::{Component, Finding, FindingCode, Severity, StoreState, StoreStatus};
 use codchi_api::testing::MockCodchiService;
 use codchi_api::{ApiError, CodchiService, FindingId};
 
@@ -123,7 +123,7 @@ impl InfrastructureHandle {
         };
         state
             .findings
-            .retain(|finding| finding.code != "store.unavailable");
+            .retain(|finding| finding.code != FindingCode::StoreUnavailable);
         state.startup_error = None;
     }
 
@@ -141,7 +141,7 @@ impl InfrastructureHandle {
         if let Some(finding) = state
             .findings
             .iter_mut()
-            .find(|finding| finding.code == "store.unavailable")
+            .find(|finding| finding.code == FindingCode::StoreUnavailable)
         {
             finding.message = reason;
             return;
@@ -152,7 +152,7 @@ impl InfrastructureHandle {
             component: Component::Store,
             machine: None,
             source_job: None,
-            code: "store.unavailable".to_owned(),
+            code: FindingCode::StoreUnavailable,
             message: reason,
             suggested_action: Some("Run `codchi doctor` for details.".to_owned()),
             auto_fixable: false,
@@ -166,7 +166,7 @@ impl InfrastructureHandle {
             .expect("infrastructure lock poisoned")
             .findings
             .iter()
-            .any(|finding| finding.code == "store.unavailable")
+            .any(|finding| finding.code == FindingCode::StoreUnavailable)
     }
 }
 

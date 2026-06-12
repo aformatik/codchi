@@ -546,7 +546,7 @@ The only part retained verbatim is the resume-error behavior — ~~`410 Gone`
 
 - `404 Not Found` — job metadata was pruned.
 
-## Phase 0 Refinements — R1–R10 (Jobs, Exec, Secrets)
+## Phase 0 Refinements — R1–R15
 
 These refinements were derived by grilling the locked Q1–Q5 / P1–P8 against the
 beta implementation on `master`. They **revise** specific locked decisions
@@ -924,6 +924,40 @@ Consequences:
   the `oasdiff` gate. Annotated as an intentional Phase 0 revision, like R11.
   `openapi.json` regenerated.
 
+### R15 — Error and finding codes are typed catalogs
+
+Raised after Phase 1 exposed the first real infrastructure finding. The wire
+contract correctly used stable machine-readable strings, but Rust represented
+those identities in two inconsistent ways:
+
+- `ApiError` was typed, while `ApiError::code()` duplicated Serde's derived
+  discriminator in a second string-literal match.
+- `Finding.code` was a raw `String`, so construction, deduplication, clearing,
+  repair selection, and future boot-failure throttling all accepted typos.
+
+Decision:
+
+- Every `ApiError` variant declares its existing wire code with an explicit
+  `#[serde(rename = "...")]`. Remove `ApiError::code()`; callers match the
+  typed variant, while contract tests assert every serialized discriminator.
+- Introduce the closed `FindingCode` enum and change `Finding.code` from
+  `String` to `FindingCode`. Each variant has an explicit dotted wire name.
+  The initial catalog is the finding vocabulary already locked by P6/R9:
+  `store.unavailable`, `podman.container_missing`, `podman.mount_missing`,
+  `podman.gcroot_missing`, `wsl.distro_missing`, `wsl.rootfs_missing`,
+  `generation.store_path_missing`, `reconcile.probe_failed`, and
+  `create.failed`.
+- Adding a stable finding code requires adding a `FindingCode` variant and a
+  contract stability case. Free-form messages and suggested actions remain
+  strings and are not identities.
+
+Existing catalog values remain identical on the wire. The `ApiError` change is
+wire-neutral. The `Finding.code` schema narrows from any string to the catalog,
+which is an intentional OpenAPI tightening while v1 is still locked
+pre-release. The pinned `oasdiff` gate classifies this as response-enum
+warnings, not errors, so no API major bump is required. `openapi.json` is
+regenerated.
+
 ## Crate Structure
 
 ```
@@ -992,25 +1026,36 @@ pub struct FindingId(pub Uuid);
 ### Error Catalog
 
 ```rust
-#[serde(tag = "code", rename_all = "snake_case")]
+#[serde(tag = "code")]
 pub enum ApiError {
+    #[serde(rename = "machine_not_found")]
     MachineNotFound { machine: MachineId },
+    #[serde(rename = "machine_busy")]
     MachineBusy { machine: MachineId, job: JobId },
+    #[serde(rename = "job_not_found")]
     JobNotFound { job: JobId },
+    #[serde(rename = "job_not_cancellable")]
     JobNotCancellable { job: JobId, state: JobState },
+    #[serde(rename = "store_unavailable")]
     StoreUnavailable { reason: String },
+    #[serde(rename = "store_busy")]
     StoreBusy { job: JobId },
+    #[serde(rename = "schema_migration_required")]
     SchemaMigrationRequired { current: u32, required: u32 },
+    #[serde(rename = "api_version_mismatch")]
     ApiVersionMismatch { client: u32, server: u32 },
+    #[serde(rename = "missing_required_secrets")]
     MissingRequiredSecrets { machine: MachineId, keys: Vec<SecretKey> }, // R5
+    #[serde(rename = "validation")]
     Validation { field: String, message: String },
+    #[serde(rename = "internal")]
     Internal { message: String },
 }
 ```
 
-Variant names map directly to wire `code` strings. Codes are stable across
-non-breaking releases per Q5. This list is the authoritative catalog; new
-codes require an entry here.
+Each variant explicitly declares its wire `code` string (R15). Codes are stable
+across non-breaking releases per Q5. This list is the authoritative catalog;
+new codes require an entry here.
 
 ### Service Trait
 
@@ -1240,13 +1285,25 @@ reconciler / store manager.
 pub enum Severity { Info, Warning, Error, Critical }
 pub enum Component { Server, Store, Machine, Job, Migration }
 
+pub enum FindingCode {
+    StoreUnavailable,            // "store.unavailable"
+    PodmanContainerMissing,      // "podman.container_missing"
+    PodmanMountMissing,          // "podman.mount_missing"
+    PodmanGcrootMissing,         // "podman.gcroot_missing"
+    WslDistroMissing,            // "wsl.distro_missing"
+    WslRootfsMissing,            // "wsl.rootfs_missing"
+    GenerationStorePathMissing,  // "generation.store_path_missing"
+    ReconcileProbeFailed,        // "reconcile.probe_failed"
+    CreateFailed,                // "create.failed"
+}
+
 pub struct Finding {
     pub id: FindingId,
     pub severity: Severity,
     pub component: Component,
     pub machine: Option<MachineId>,
     pub source_job: Option<JobId>,
-    pub code: String,                  // stable, e.g. "store.rootfs_missing"
+    pub code: FindingCode,             // R15: explicit stable wire names
     pub message: String,               // user-facing, may evolve
     pub suggested_action: Option<String>,
     pub auto_fixable: bool,
@@ -1259,7 +1316,8 @@ pub struct DoctorReport {
 }
 ```
 
-Stable `code` strings are the contract; `message` may be edited freely.
+Stable `FindingCode` variants and their wire strings are the contract;
+`message` may be edited freely. Adding a code extends this catalog (R15).
 
 `auto_fixable` is **strictly defined**: a finding is `auto_fixable = true`
 only if its repair cannot touch **user data** and cannot rewrite the stored
@@ -1286,8 +1344,8 @@ background reconciler is observe-only and never repairs.
 - `MockCodchiService` lives in `codchi-api/src/testing.rs` and returns
   plausible data for every endpoint, so CLI and tray agents can develop
   against the trait without a running server.
-- The error catalog above is authoritative. Adding a code requires an entry
-  there.
+- The error and finding-code catalogs above are authoritative. Adding a code
+  requires a typed variant and contract stability case.
 
 ## Out of Scope for Phase 0
 
@@ -1310,7 +1368,7 @@ With these decisions locked, Phase 0 produces:
    variants, and the `CodchiService` trait.
 2. Committed `openapi.json` reflecting the above.
 3. `MockCodchiService` in-memory fake usable by downstream tracks.
-4. CI checks: serde roundtrip per DTO, error code stability, OpenAPI snapshot,
-   `oasdiff` breaking-change classification.
+4. CI checks: serde roundtrip per DTO, error/finding-code stability, OpenAPI
+   snapshot, `oasdiff` breaking-change classification.
 
 Phases 1, 2, 3, 4, 9, 14 may fan out in parallel once these deliverables land.
