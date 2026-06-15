@@ -14,7 +14,6 @@ use crate::error::ApiError;
 #[serde(rename_all = "snake_case")]
 pub enum ServerLifecycle {
     Starting,
-    Migrating,
     Healthcheck,
     Ready,
     Degraded,
@@ -41,12 +40,15 @@ pub struct StoreStatus {
     pub last_error: Option<String>,
 }
 
-/// SQLite schema status.
+/// SQLite schema status. The daemon migrates synchronously before it serves, so
+/// there is no observable mid-migration state to report (see
+/// `v1/phases/03-sqlite-foundation.md`, DB8); `current` and `required` are equal
+/// in steady state and differ only momentarily during the (un-served) startup
+/// migration.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SchemaStatus {
     pub current: u32,
     pub required: u32,
-    pub migrating: bool,
 }
 
 /// Server status (P5). `api_version` is also exposed as an HTTP response header

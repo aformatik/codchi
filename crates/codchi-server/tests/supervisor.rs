@@ -15,8 +15,9 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use codchi_api::dto::{DoctorReport, FindingCode, ServerLifecycle, ServerStatus, StoreState};
 use codchi_server::{
-    AppState, LogStore, ServerCore, Store, StoreCondition, StoreError, StoreLogStream,
-    StorePlatformStatus, StoreSupervisor, StoreSupervisorConfig, build_router,
+    AppState, LogStore, MAX_SCHEMA_VERSION, SchemaState, ServerCore, Store, StoreCondition,
+    StoreError, StoreLogStream, StorePlatformStatus, StoreSupervisor, StoreSupervisorConfig,
+    build_router,
 };
 use http_body_util::BodyExt;
 use tokio::sync::{oneshot, watch};
@@ -232,11 +233,15 @@ async fn bringup_failure_surfaces_finding_and_clears_on_recovery() {
     store.set_health_error(Some("nix daemon did not answer"));
     let (mut supervisor, rx) = supervise(store.clone());
 
-    // The ServerCore projects the same condition the supervisor publishes.
+    // The ServerCore projects the same condition the supervisor publishes; the
+    // schema is healthy so the lifecycle join reflects the store alone (DB8).
     let core = Arc::new(ServerCore::new(
         LogStore::memory(),
         rx,
         CancellationToken::new(),
+        None,
+        SchemaState::Ready,
+        MAX_SCHEMA_VERSION,
     ));
     let state = AppState::new(core);
 

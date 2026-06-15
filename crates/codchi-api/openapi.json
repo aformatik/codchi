@@ -3088,11 +3088,10 @@
         ]
       },
       "SchemaStatus": {
-        "description": "SQLite schema status.",
+        "description": "SQLite schema status. The daemon migrates synchronously before it serves, so there is no observable mid-migration state to report (see `v1/phases/03-sqlite-foundation.md`, DB8); `current` and `required` are equal in steady state and differ only momentarily during the (un-served) startup migration.",
         "type": "object",
         "required": [
           "current",
-          "migrating",
           "required"
         ],
         "properties": {
@@ -3100,9 +3099,6 @@
             "type": "integer",
             "format": "uint32",
             "minimum": 0.0
-          },
-          "migrating": {
-            "type": "boolean"
           },
           "required": {
             "type": "integer",
@@ -3139,7 +3135,6 @@
         "type": "string",
         "enum": [
           "starting",
-          "migrating",
           "healthcheck",
           "ready",
           "degraded",

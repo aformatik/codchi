@@ -45,6 +45,18 @@ pub enum ProbeOutcome {
     Unhealthy { reason: String },
 }
 
+/// The schema subsystem's condition — the second input to the lifecycle
+/// projection-**join** (DB8). Unlike [`StoreCondition`] this never changes after
+/// startup: the daemon migrates synchronously before it serves, so a client can
+/// never observe a mid-migration daemon (there is no `Migrating` lifecycle).
+/// `Failed` carries the structured open/migration/too-new error, which the join
+/// surfaces as `Degraded` + `startup_error` without ever wiping data (DB8).
+#[derive(Clone, Debug)]
+pub enum SchemaState {
+    Ready,
+    Failed(ApiError),
+}
+
 /// Advance the condition by one health-probe outcome (SC6).
 ///
 /// Pure and total. Its codomain is `{Up, Degraded}` only: a probe outcome never
@@ -73,13 +85,24 @@ pub fn step(current: &StoreCondition, outcome: ProbeOutcome, now: DateTime<Utc>)
     }
 }
 
-/// Project the server's headline lifecycle from the shutdown flag and the store
-/// condition (SC8). `shutdown` is the second input that forces `Stopping`,
-/// taking precedence over any store condition — the same multi-input shape
-/// Phase 3 extends for `Migrating`.
-pub fn lifecycle(shutdown: bool, store: &StoreCondition) -> ServerLifecycle {
+/// Project the server's headline lifecycle — the projection-**join** over all
+/// subsystem conditions (DB8, revising SC5). Precedence: `shutdown` forces
+/// `Stopping`; a failed schema (`SchemaState::Failed`) forces `Degraded` (a DB
+/// problem must not masquerade as `store.unavailable`); otherwise the store
+/// condition projects. There is no `Migrating` lifecycle — the daemon migrates
+/// synchronously before it serves (`v1/phases/03-sqlite-foundation.md`, DB8).
+///
+/// ```text
+/// lifecycle = Stopping            if shutdown
+///           = Degraded            if SchemaState::Failed
+///           = <StoreCondition projection>   otherwise
+/// ```
+pub fn lifecycle(shutdown: bool, schema: &SchemaState, store: &StoreCondition) -> ServerLifecycle {
     if shutdown {
         return ServerLifecycle::Stopping;
+    }
+    if matches!(schema, SchemaState::Failed(_)) {
+        return ServerLifecycle::Degraded;
     }
     match store {
         StoreCondition::Starting => ServerLifecycle::Starting,
@@ -110,10 +133,15 @@ pub fn store_status(store: &StoreCondition) -> StoreStatus {
     }
 }
 
-/// Project the startup error — `Some` only when the store is `Degraded` (the one
-/// recoverable-failure lifecycle in Phase 2), so an `Up` store can never carry
-/// one (SC5).
-pub fn startup_error(store: &StoreCondition) -> Option<ApiError> {
+/// Project the recoverable startup error — the same join as [`lifecycle`] (DB8).
+/// A failed schema takes precedence and reports its own structured error (never
+/// dressed up as `store.unavailable`); otherwise the store contributes one, and
+/// only when it is `Degraded` — so an `Up` store with a `Ready` schema can never
+/// carry one (SC5).
+pub fn startup_error(schema: &SchemaState, store: &StoreCondition) -> Option<ApiError> {
+    if let SchemaState::Failed(error) = schema {
+        return Some(error.clone());
+    }
     match store {
         StoreCondition::Degraded { reason, .. } => Some(ApiError::StoreUnavailable {
             reason: reason.clone(),
@@ -262,21 +290,23 @@ mod tests {
 
     #[test]
     fn lifecycle_projection_covers_every_condition() {
+        let schema = SchemaState::Ready;
         assert_eq!(
-            lifecycle(false, &StoreCondition::Starting),
+            lifecycle(false, &schema, &StoreCondition::Starting),
             ServerLifecycle::Starting
         );
         assert_eq!(
-            lifecycle(false, &StoreCondition::Checking),
+            lifecycle(false, &schema, &StoreCondition::Checking),
             ServerLifecycle::Healthcheck
         );
         assert_eq!(
-            lifecycle(false, &StoreCondition::Up { since: t(1) }),
+            lifecycle(false, &schema, &StoreCondition::Up { since: t(1) }),
             ServerLifecycle::Ready
         );
         assert_eq!(
             lifecycle(
                 false,
+                &schema,
                 &StoreCondition::Degraded {
                     reason: "x".into(),
                     since: t(1)
@@ -296,13 +326,36 @@ mod tests {
                 since: t(1),
             },
         ] {
-            assert_eq!(lifecycle(true, &store), ServerLifecycle::Stopping);
+            assert_eq!(
+                lifecycle(true, &SchemaState::Ready, &store),
+                ServerLifecycle::Stopping
+            );
         }
+    }
+
+    /// The Phase-3 join (DB8): a failed schema forces `Degraded` + a structured
+    /// `startup_error` over an otherwise-healthy store, and shutdown still wins.
+    #[test]
+    fn failed_schema_forces_degraded_over_a_healthy_store() {
+        let failed = SchemaState::Failed(ApiError::internal("schema migration failed: boom"));
+        let up = StoreCondition::Up { since: t(1) };
+
+        assert_eq!(lifecycle(false, &failed, &up), ServerLifecycle::Degraded);
+        assert!(matches!(
+            startup_error(&failed, &up),
+            Some(ApiError::Internal { .. })
+        ));
+
+        // Shutdown still takes precedence over a schema failure.
+        assert_eq!(lifecycle(true, &failed, &up), ServerLifecycle::Stopping);
     }
 
     #[test]
     fn up_can_never_carry_a_startup_error() {
-        assert_eq!(startup_error(&StoreCondition::Up { since: t(1) }), None);
+        assert_eq!(
+            startup_error(&SchemaState::Ready, &StoreCondition::Up { since: t(1) }),
+            None
+        );
         assert!(store_findings(&StoreCondition::Up { since: t(1) }).is_empty());
     }
 
@@ -326,9 +379,9 @@ mod tests {
             "id is deterministic, not freshly minted"
         );
 
-        // The startup error mirrors the finding's reason.
+        // The startup error mirrors the finding's reason (schema healthy).
         assert!(matches!(
-            startup_error(&store),
+            startup_error(&SchemaState::Ready, &store),
             Some(ApiError::StoreUnavailable { reason }) if reason == "nix daemon did not answer"
         ));
     }

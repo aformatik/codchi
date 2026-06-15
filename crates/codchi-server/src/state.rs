@@ -12,7 +12,7 @@ use codchi_api::dto::ServerLifecycle;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
-use crate::core::{ServerCore, StoreCondition};
+use crate::core::{SchemaState, ServerCore, StoreCondition};
 use crate::logs::LogStore;
 
 /// The single shared state handle threaded through every handler: just the
@@ -42,7 +42,7 @@ impl AppState {
     /// lifecycle *setter* (SC6); the projection is the only path.
     ///
     /// Only the lifecycles a `StoreCondition` can produce are supported;
-    /// `Migrating`/`Stopping` have no Phase-2 condition and panic.
+    /// `Stopping` has no store condition and panics.
     pub fn with_mock_lifecycle(lifecycle: ServerLifecycle) -> Self {
         let condition = match lifecycle {
             ServerLifecycle::Ready => StoreCondition::Up { since: Utc::now() },
@@ -52,7 +52,7 @@ impl AppState {
             },
             ServerLifecycle::Starting => StoreCondition::Starting,
             ServerLifecycle::Healthcheck => StoreCondition::Checking,
-            ServerLifecycle::Migrating | ServerLifecycle::Stopping => {
+            ServerLifecycle::Stopping => {
                 panic!("{lifecycle:?} is not representable as a StoreCondition in Phase 2")
             }
         };
@@ -81,7 +81,16 @@ impl AppState {
         );
         logs.append(LogSource::Store, LogLevel::Info, "gc", "store gc complete");
 
-        let core = ServerCore::new(logs, condition, CancellationToken::new());
+        // The mock path has no DB: report a healthy schema at the latest version
+        // so the lifecycle join falls through to the store condition (DB8).
+        let core = ServerCore::new(
+            logs,
+            condition,
+            CancellationToken::new(),
+            None,
+            SchemaState::Ready,
+            crate::db::MAX_SCHEMA_VERSION,
+        );
         AppState {
             core: Arc::new(core),
         }

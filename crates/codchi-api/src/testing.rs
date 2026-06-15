@@ -122,7 +122,6 @@ impl CodchiService for MockCodchiService {
             schema: SchemaStatus {
                 current: 1,
                 required: 1,
-                migrating: false,
             },
             last_reconciled_at: Some(fixed_time()),
             findings_summary: FindingsSummary::default(),

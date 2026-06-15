@@ -47,11 +47,15 @@ so store status has no exposed mutators. Reshaped from the Phase-1
 ### Store condition
 The observed, ephemeral runtime state of the [[store-container]] as a single sum
 type (`Starting`/`Checking`/`Up`/`Degraded`), owned by the [[store-supervisor]].
-The server `lifecycle`, `StoreStatus`, any startup error, and the
-`store.unavailable` finding are **pure projections** of it — never stored
-separately — so illegal combinations are unrepresentable. Distinct from durable
-state (which lives in SQLite) and from a [[job]] (which is an operation, not a
-state).
+`StoreStatus` and the `store.unavailable` finding are **pure projections** of it
+— never stored separately — so illegal combinations are unrepresentable. The
+server `lifecycle` and `startup_error` are **not** projections of the store
+condition alone; they are a projection-**join** over every server subsystem
+condition (DB/schema bring-up, the store condition, the shutdown flag, later the
+reconciler), of which the store condition is one input. The server has more
+moving parts than the store, so its headline lifecycle cannot hinge on the store
+alone. Distinct from durable state (which lives in SQLite) and from a [[job]]
+(which is an operation, not a state).
 
 ### Log source
 A long-lived entity that emits a durable log stream: `Server` (the daemon),
@@ -112,3 +116,21 @@ into the [[store-image]]**, never fetched. Not to be confused with a Nix
 (`git init` + `nix profile install`/`upgrade` from a host-written `flake.nix`).
 Deleted in v1 (`v1/phases/01-podman-store.md` S2): the store is image-defined, so
 there is nothing to provision at runtime.
+
+### Schema migration
+The forward evolution of the [[codchi-server]] SQLite schema: an ordered set of
+numbered DDL steps applied at daemon startup, tracked by `PRAGMA user_version`.
+A purely internal database-shape concern (Phase 3). Distinct from [[beta
+migration]] — these never touch user data, only table definitions.
+_Avoid:_ the bare word "migration" for this; always qualify as *schema
+migration*.
+
+### Beta migration
+The detection and import of a user's pre-v1 [[beta crates|beta]] installation
+(host `config.toml`, per-machine `config.json`, `flake.lock`, container
+metadata) into the v1 SQLite state, surfaced on the API as
+`migration_plan`/`migration_run` (Phase 11). A data-import operation over real
+user state; it preserves and backs up beta files, never deletes them. Distinct
+from a [[schema migration]].
+_Avoid:_ the bare word "migration" for this; always qualify as *beta
+migration*.

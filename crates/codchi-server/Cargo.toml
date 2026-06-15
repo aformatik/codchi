@@ -21,6 +21,9 @@ chrono.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+rusqlite.workspace = true
+tokio-rusqlite.workspace = true
+rusqlite_migration.workspace = true
 
 [dev-dependencies]
 tower.workspace = true

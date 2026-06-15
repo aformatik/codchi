@@ -61,3 +61,6 @@ work in `beta-codchi-server` — but never link them.
   acceptance criteria genuinely change, not for progress updates (use STATUS).
 - The v1 design is a target, not the current implementation. Don't assume a
   doc-described component exists in code without checking.
+- when grilling, no ADRs. Decisions go into v1/phases.
+- always make sure to understand what codchi beta (on the master branch) does
+  and what the v1 migration is trying to achieve

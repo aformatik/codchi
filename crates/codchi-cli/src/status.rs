@@ -73,7 +73,6 @@ fn print_text(status: &ServerStatus, machines: &[MachineView]) {
 fn lifecycle_str(lifecycle: ServerLifecycle) -> &'static str {
     match lifecycle {
         ServerLifecycle::Starting => "starting",
-        ServerLifecycle::Migrating => "migrating",
         ServerLifecycle::Healthcheck => "healthcheck",
         ServerLifecycle::Ready => "ready",
         ServerLifecycle::Degraded => "degraded",

@@ -325,7 +325,9 @@ pub struct ServerStatus {
     pub startup_error: Option<ApiError>,           // Some only when lifecycle indicates failure
 }
 
-pub enum ServerLifecycle { Starting, Migrating, Healthcheck, Ready, Degraded, Stopping }
+// `Migrating` removed in the Phase 3 R11 revision (synchronous-before-serve
+// migration is never observed); see `03-sqlite-foundation.md`, DB8.
+pub enum ServerLifecycle { Starting, Healthcheck, Ready, Degraded, Stopping }
 
 pub struct StoreStatus {
     pub state: StoreState,
@@ -334,7 +336,8 @@ pub struct StoreStatus {
 }
 pub enum StoreState { Up, Down, Recovering, Unknown }
 
-pub struct SchemaStatus { pub current: u32, pub required: u32, pub migrating: bool }
+// `migrating` removed alongside `ServerLifecycle::Migrating` (Phase 3 R11).
+pub struct SchemaStatus { pub current: u32, pub required: u32 }
 pub struct FindingsSummary { pub critical: u32, pub error: u32, pub warning: u32, pub info: u32 }
 ```
 

@@ -313,7 +313,6 @@ fn core_views_roundtrip() {
         schema: SchemaStatus {
             current: 1,
             required: 1,
-            migrating: false,
         },
         last_reconciled_at: None,
         findings_summary: FindingsSummary {

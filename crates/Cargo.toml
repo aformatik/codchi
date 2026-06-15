@@ -46,6 +46,13 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 futures = "0.3"
 proptest = "1"
 tempfile = "3"
+# SQLite access (Phase 3, DB1): synchronous rusqlite on a single background
+# actor thread via tokio-rusqlite; rusqlite_migration drives `PRAGMA
+# user_version`. Versions pinned so all three resolve to rusqlite 0.37.
+# `bundled` compiles SQLite from vendored C — no system lib, hermetic Nix build.
+rusqlite = { version = "0.37", features = ["bundled"] }
+tokio-rusqlite = "0.7"
+rusqlite_migration = "2.3"
 
 [profile.release]
 lto = true

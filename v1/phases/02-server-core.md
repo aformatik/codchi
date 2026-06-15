@@ -97,6 +97,14 @@ off to a heavier one.
   stable** across reads (no regenerated ids/timestamps). This is the proof that
   `since`-in-the-variant is correct.
 
+  > **Phase 3 generalization (see `03-sqlite-foundation.md`, DB8).** SC5 said
+  > `lifecycle`/`startup_error` are projections of `StoreCondition` *alone*. That
+  > was the singleton case. Phase 3 promotes them to a projection-**join** over
+  > every server subsystem condition — the DB/schema bring-up state *and* the
+  > store condition *and* the shutdown flag — because the server has more moving
+  > parts than the store. `StoreStatus` and the `store.unavailable` finding stay
+  > projections of `StoreCondition` only; the *headline* lifecycle does not.
+
 - **SC6 — Pure reducer + single-writer `watch` publish; no lock, no mailbox.**
   The transition logic is a pure, synchronous, unit-testable free function:
 
@@ -127,7 +135,9 @@ off to a heavier one.
   **SIGINT and SIGTERM** (`tokio::signal`; unix-only — Windows is Phase 12) and
   trips a `CancellationToken`. `Stopping` is server-level, not a `StoreCondition`,
   so it forces the lifecycle projection to take a **second input** one phase early
-  — the same multi-input shape Phase 3 extends for `Migrating`:
+  — the same multi-input shape Phase 3 extends with a schema-state input that
+  forces `Degraded` on a failed startup migration (there is no `Migrating`
+  lifecycle; see `03-sqlite-foundation.md`, DB8):
 
   ```rust
   fn lifecycle(shutdown: bool, store: &StoreCondition) -> ServerLifecycle {
@@ -288,7 +298,8 @@ realizations recorded so code and spec stay in sync (per the agent rules):
   now seeds the underlying `StoreCondition` instead, via a new test seam
   `AppState::with_mock_lifecycle(ServerLifecycle)` (the inverse of the SC5
   projection for the `Ready`/`Degraded`/`Starting`/`Healthcheck` it covers;
-  `Migrating`/`Stopping` have no Phase-2 condition and panic). `roundtrip.rs`
+  `Stopping` has no store condition and panics — as did `Migrating` until the
+  Phase 3 R11 revision removed that variant). `roundtrip.rs`
   remains **byte-identical, unmodified**. This is the chosen resolution of the
   locked-spec tension between SC9's "unmodified" and SC1/SC8 — keep SC1/SC8
   clean, adapt the test.

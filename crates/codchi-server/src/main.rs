@@ -14,9 +14,9 @@ use axum::serve;
 use chrono::Utc;
 use codchi_server::{
     AppState, LogStore, PodmanStore, ServerCore, StoreCondition, StoreSupervisor,
-    StoreSupervisorConfig, build_router, logging,
+    StoreSupervisorConfig, build_router, db, logging,
 };
-use codchi_shared::{logs_dir, server_socket_path};
+use codchi_shared::{data_dir, logs_dir, server_socket_path};
 use tokio::net::UnixListener;
 use tokio::sync::{oneshot, watch};
 use tokio_util::sync::CancellationToken;
@@ -45,6 +45,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     let listener = UnixListener::bind(&socket)?;
 
+    // Open + migrate the DB synchronously, between `bind` and `serve` and
+    // DB-before-store (DB8). A schema problem surfaces as `Degraded` +
+    // `startup_error` via the lifecycle projection-join; it never wipes data and
+    // never masquerades as `store.unavailable`. The store start below has no
+    // dependency on DB content yet (no machine/store tables until Phase 4).
+    let db_path = data_dir().join("state.db");
+    let startup = db::bring_up(&db_path).await;
+    if let codchi_server::SchemaState::Failed(error) = &startup.schema {
+        error!(%error, "database bring-up failed; serving in a degraded state");
+    } else {
+        info!(version = startup.current, "state database ready");
+    }
+
     // The store-condition channel: the supervisor (sole writer, SC7) holds the
     // sender; `ServerCore` (reader) holds the receiver and projects on read.
     let (condition_tx, condition_rx) = watch::channel(StoreCondition::Starting);
@@ -54,6 +67,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         logs.clone(),
         condition_rx,
         shutdown.clone(),
+        startup.db,
+        startup.schema,
+        startup.current,
     ));
     let state = AppState::new(core);
 

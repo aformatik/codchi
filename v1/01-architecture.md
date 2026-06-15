@@ -33,12 +33,17 @@ The server should have an explicit lifecycle state:
 
 ```text
 Starting
-Migrating
 Healthcheck
 Ready
 Degraded
 Stopping
 ```
+
+There is no `Migrating` state: the daemon runs its (sub-millisecond) schema
+migrations synchronously *before* it serves, so a client never observes a
+mid-migration daemon (`v1/phases/03-sqlite-foundation.md`, DB8). A failed or
+too-new schema surfaces as `Degraded` + a structured startup error, the same as
+a failed store start.
 
 Clients must not hang forever when startup fails. Startup failures should
 transition to `Degraded` or return a structured startup error.

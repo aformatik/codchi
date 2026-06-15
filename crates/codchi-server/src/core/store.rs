@@ -19,10 +19,14 @@ impl ServerCore {
         self.condition.borrow().clone()
     }
 
-    /// Project the headline lifecycle (SC5/SC8): `Stopping` when shutting down,
-    /// otherwise the store-condition projection.
+    /// Project the headline lifecycle — the projection-join over shutdown, the
+    /// schema condition, and the store condition (SC5/SC8/DB8).
     pub(crate) fn lifecycle(&self) -> ServerLifecycle {
-        condition::lifecycle(self.shutdown.is_cancelled(), &self.store_condition())
+        condition::lifecycle(
+            self.shutdown.is_cancelled(),
+            &self.schema,
+            &self.store_condition(),
+        )
     }
 
     /// Project the wire [`StoreStatus`].
@@ -35,9 +39,9 @@ impl ServerCore {
         condition::store_findings(&self.store_condition())
     }
 
-    /// Project the recoverable startup error, if any.
+    /// Project the recoverable startup error, if any — the schema/store join (DB8).
     pub(crate) fn startup_error(&self) -> Option<ApiError> {
-        condition::startup_error(&self.store_condition())
+        condition::startup_error(&self.schema, &self.store_condition())
     }
 
     pub(crate) async fn list_store_generations(

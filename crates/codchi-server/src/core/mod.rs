@@ -31,7 +31,7 @@ mod secrets;
 mod server;
 mod store;
 
-pub use condition::{ProbeOutcome, StoreCondition, step};
+pub use condition::{ProbeOutcome, SchemaState, StoreCondition, step};
 
 use async_trait::async_trait;
 use codchi_api::dto::*;
@@ -43,6 +43,7 @@ use codchi_api::testing::MockCodchiService;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
+use crate::db::Db;
 use crate::logs::LogStore;
 
 /// The single orchestration type that implements [`CodchiService`] directly.
@@ -59,22 +60,40 @@ pub struct ServerCore {
     condition: watch::Receiver<StoreCondition>,
     /// Tripped on SIGINT/SIGTERM; projects `Stopping` over the condition (SC8).
     shutdown: CancellationToken,
+    /// The SQLite handle (DB7). `None` only when DB open itself failed — the
+    /// daemon still serves a `Degraded` status so `codchi doctor`/`status` work
+    /// (DB8). Phase 4+ domains read machine/job/secret state through it.
+    db: Option<Db>,
+    /// The schema subsystem's condition, fed to the lifecycle projection-join
+    /// (DB8). Fixed after startup: migration is synchronous-before-serve.
+    schema: SchemaState,
+    /// `PRAGMA user_version` captured at startup — the `current` reported by
+    /// `server_status` when the live DB cannot be read (absent/failed).
+    schema_current: u32,
     /// The quarantined placeholder backing every still-unbacked domain (SC2).
     mock: MockCodchiService,
 }
 
 impl ServerCore {
-    /// Build the core over the supervisor's condition receiver and the daemon's
-    /// shutdown token (the real `main` path).
+    /// Build the core over the supervisor's condition receiver, the daemon's
+    /// shutdown token, and the already-opened+migrated DB (the real `main`
+    /// path). A non-migrated DB can never reach the core: `main` opens and
+    /// migrates before calling this (DB7).
     pub fn new(
         logs: LogStore,
         condition: watch::Receiver<StoreCondition>,
         shutdown: CancellationToken,
+        db: Option<Db>,
+        schema: SchemaState,
+        schema_current: u32,
     ) -> Self {
         Self {
             logs,
             condition,
             shutdown,
+            db,
+            schema,
+            schema_current,
             mock: MockCodchiService::new(),
         }
     }

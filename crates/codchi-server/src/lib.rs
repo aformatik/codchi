@@ -11,6 +11,7 @@
 //! [`CodchiService`]: codchi_api::CodchiService
 
 pub mod core;
+pub mod db;
 pub mod logging;
 pub mod logs;
 pub mod mount;
@@ -19,7 +20,8 @@ pub mod router;
 pub mod state;
 pub mod supervisor;
 
-pub use core::{ProbeOutcome, ServerCore, StoreCondition, step};
+pub use core::{ProbeOutcome, SchemaState, ServerCore, StoreCondition, step};
+pub use db::{Db, MAX_SCHEMA_VERSION};
 pub use logs::LogStore;
 #[cfg(unix)]
 pub use platform::PodmanStore;
