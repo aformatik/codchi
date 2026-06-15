@@ -83,3 +83,17 @@ Flow:
 This gives confidence in the Linux v1 platform and exercises shared daemon/job
 behavior, but it is lower priority than Windows WSL migration because it does not
 protect existing users yet.
+
+## 6. Podman Argument-Set Version Matrix
+
+A lower-level companion to §5: `nix/tests/podman-machine-args.sh` pins the empirical
+`podman run` contract for machines (`phases/07-podman-machine.md` M5/M7/M13) against
+Podman and nixpkgs drift. It runs as a **matrix over NixOS versions** (`NIXPKGS_REFS`,
+built via `--override-input nixpkgs …`) and asserts both **sufficiency** (the
+documented args boot a healthy machine) and **necessity** (dropping each required
+arg still breaks boot — otherwise it reports DRIFT). Records `podman --version` per
+run so a cross-version failure is attributable, and is the source of truth for the
+M13 support matrix codchi uses to warn users on unsupported versions.
+
+Scheduled/manual like the WSL suites (needs rootless podman + systemd; not a
+`nix flake check`). Run it on every Podman bump and every nixpkgs bump.

@@ -6,6 +6,7 @@ in
   imports = [
     ./lxd
     ./wsl
+    ./podman
     ./secrets.nix
     ./host-integration.nix
     ./init.nix
@@ -13,7 +14,7 @@ in
 
   options.codchi.driver = {
     name = mkOption {
-      type = types.enum [ "wsl" "lxd" "none" ];
+      type = types.enum [ "wsl" "lxd" "podman" "none" ];
       internal = true;
       default = "none";
     };
@@ -76,36 +77,8 @@ in
     }
 
     (mkIf (config.codchi.driver.name != "none") {
-      system.build.codchi.container = (import ../../container
-        {
-          inherit pkgs lib;
-          inputs.nixpkgs = __codchi-inputs.nixpkgs;
-        }
-        {
-          config = lib.recursiveUpdate
-            config.codchi.driver.containerCfg
-            {
-              machine = {
-                enable = true;
-                driver.${config.codchi.driver.name}.enable = true;
-              };
-            };
-        }).config.build.tarball;
-
       systemd = {
         services = {
-          # Create files required by the driver
-          "create-files" = {
-            after = [ "network.target" ];
-            wantedBy = [ "multi-user.target" ];
-            serviceConfig.Type = "oneshot";
-            script = /* bash */ ''
-              ( cd / &&
-                ${lib.getExe config.system.build.codchi.container.passthru.createFiles}
-              )
-            '';
-          };
-
           nix-daemon.enable = mkForce false;
           nix-gc.enable = mkForce false;
           nix-optimize.enable = mkForce false;
@@ -192,6 +165,40 @@ in
         if lib.versionAtLeast config.system.stateVersion "24.11"
         then { graphics.enable = lib.mkDefault true; }
         else { opengl.enable = lib.mkDefault true; };
+    })
+
+    # Model-B drivers (LXD/WSL) boot from an imported bootstrap rootfs tarball
+    # (the `nix/container/machine` module) whose static files are re-materialized
+    # on each boot by `create-files`. Podman boots the NixOS system's own /init
+    # directly off the shared store (Model A) and needs neither — so this is
+    # gated to lxd/wsl rather than every non-`none` driver.
+    (mkIf (lib.elem config.codchi.driver.name [ "lxd" "wsl" ]) {
+      system.build.codchi.container = (import ../../container
+        {
+          inherit pkgs lib;
+          inputs.nixpkgs = __codchi-inputs.nixpkgs;
+        }
+        {
+          config = lib.recursiveUpdate
+            config.codchi.driver.containerCfg
+            {
+              machine = {
+                enable = true;
+                driver.${config.codchi.driver.name}.enable = true;
+              };
+            };
+        }).config.build.tarball;
+
+      systemd.services."create-files" = {
+        after = [ "network.target" ];
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig.Type = "oneshot";
+        script = /* bash */ ''
+          ( cd / &&
+            ${lib.getExe config.system.build.codchi.container.passthru.createFiles}
+          )
+        '';
+      };
     })
   ];
 

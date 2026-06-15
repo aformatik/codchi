@@ -61,7 +61,7 @@
         ];
         config.allowUnfree = true;
       };
-      drivers = [ "wsl" "lxd" ];
+      drivers = [ "wsl" "lxd" "podman" ];
 
       inherit (nixpkgs.lib) foldl' recursiveUpdate;
       mergeAttrList = foldl' recursiveUpdate { };

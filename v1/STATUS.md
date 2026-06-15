@@ -4,7 +4,7 @@ Tracks the current state of the v1 reimplementation. This file is expected to
 change often. Stable phase definitions live in [PLAN.md](PLAN.md); locked
 per-phase specs live under [phases/](phases/).
 
-**Last updated:** 2026-06-12 (Phase 2, the `ServerCore` boundary, is **complete (SC1–SC9)**. `AppState` collapsed to `{ core: Arc<ServerCore> }`; `ServerCore` is the single `impl CodchiService`, owning the store-condition reader, the shutdown token, and the `LogStore`, with every still-unbacked domain delegating to one quarantined internal mock (SC2). The store condition is now a `StoreCondition` sum type advanced by a pure `step` reducer and published over a single-writer `watch` by the reshaped `StoreSupervisor` (SC5–SC7); `lifecycle`/`StoreStatus`/`startup_error`/`store.unavailable` are pure projections. Graceful shutdown (SC8) lands with SIGINT/SIGTERM → `CancellationToken`, `axum` `with_graceful_shutdown`, and a `oneshot`-gated ordered store teardown bounded by a timeout. Tests: 9 pure `step`/projection units + 7 supervisor invariants (D8 no-hang, P6 observe-only, no-orphans, SC8 stop, diagnosability); the SC2 gate passes (`roundtrip.rs` unmodified, `spawn.rs` one line). `cargo clippy -p codchi-server -p codchi-cli -p codchi-shared --all-targets -- -D warnings`, the crate tests, and `cargo fmt --check` all pass. Next: Phase 3, the SQLite foundation.)
+**Last updated:** 2026-06-12 (Phase 2, the `ServerCore` boundary, is **complete (SC1–SC9)**. `AppState` collapsed to `{ core: Arc<ServerCore> }`; `ServerCore` is the single `impl CodchiService`, owning the store-condition reader, the shutdown token, and the `LogStore`, with every still-unbacked domain delegating to one quarantined internal mock (SC2). The store condition is now a `StoreCondition` sum type advanced by a pure `step` reducer and published over a single-writer `watch` by the reshaped `StoreSupervisor` (SC5–SC7); `lifecycle`/`StoreStatus`/`startup_error`/`store.unavailable` are pure projections. Graceful shutdown (SC8) lands with SIGINT/SIGTERM → `CancellationToken`, `axum` `with_graceful_shutdown`, and a `oneshot`-gated ordered store teardown bounded by a timeout. Tests: 9 pure `step`/projection units + 7 supervisor invariants (D8 no-hang, P6 observe-only, no-orphans, SC8 stop, diagnosability); the SC2 gate passes (`roundtrip.rs` unmodified, `spawn.rs` one line). `cargo clippy -p codchi-server -p codchi-cli -p codchi-shared --all-targets -- -D warnings`, the crate tests, and `cargo fmt --check` all pass. A **Phase-7 design spike** also landed out-of-band — the Podman machine-container contract is locked and empirically verified ahead of implementation: Model A (boot the NixOS system's own `/init` off the shared store, no base image/tarball), a new `podman` NixOS driver, `--cap-add SYS_ADMIN` as the key boot arg, codchi-owned persistent rootfs, and a Podman×NixOS version-matrix regression suite (all in `phases/07-podman-machine.md` + `nix/tests/podman-machine-args.sh`); not yet wired into `codchi-server`. Next: Phase 3, the SQLite foundation.)
 
 ## Overall
 
@@ -24,7 +24,7 @@ server-owned persistent state have not yet been ported.
 | 4 | Machine state in SQLite | Not started |
 | 5 | Job system MVP | Not started |
 | 6 | Build/update generation model | Not started |
-| 7 | Linux/Podman machines | Not started |
+| 7 | Linux/Podman machines | **Design spike done; not implemented.** Machine-container decisions M1–M13 locked in `phases/07-podman-machine.md`; the `podman` NixOS driver added (`nix/nixos/driver/podman/`, Model-B tarball gated to lxd/wsl); the `podman run` arg contract + a Podman×NixOS version matrix verified by `nix/tests/podman-machine-args.sh`. Server-side register/start/stop/exec/persistence wiring not started. |
 | 8 | Exec/session model | Not started |
 | 9 | Logs/events | Not started |
 | 10 | Doctor + recovery findings | Not started |
@@ -88,6 +88,19 @@ server-owned persistent state have not yet been ported.
   `uid=1000`, `gid=100` in both cases. The in-machine agent must therefore run
   as an identity mapped to the host socket owner; an arbitrary subordinate UID
   cannot access a `0600` socket.
+- **Podman machine spike (Phase 7, design-only):** a hands-on bring-up locked the
+  Linux machine-container contract before implementation — `phases/07-podman-machine.md`
+  (M1–M13). A v1 machine is **Model A**: a NixOS config built in the store and run
+  via `podman run … --cap-add SYS_ADMIN --rootfs <codchi-owned dir>
+  <system>/init` off the shared store volume (read-only `subpath=store`) — no base
+  image, no bootstrap tarball (that stays lxd/wsl). The new `podman` NixOS driver
+  lives at `nix/nixos/driver/podman/`. `SYS_ADMIN` is the one non-obvious required
+  arg (fixes dbus-broker + lets activation mount its own specialfs). Persistence =
+  a codchi-owned rootfs dir, **not** a named-volume mountpoint (verified unreliable:
+  podman doesn't ref-count it, `volume rm`/`prune` destroys a running machine). The
+  `podman run` arg contract and a Podman×NixOS support matrix are guarded by
+  `nix/tests/podman-machine-args.sh` (scheduled/manual; PASS 26/0/0 on NixOS
+  25.05 + 26.11, podman 5.8.2). Not yet wired into `codchi-server`.
 - Machine state is not yet server-owned; no active v1 machine workflow exists.
   The archived beta CLI remains the reference for the old direct-ownership path.
 - Tray client is currently disabled.
