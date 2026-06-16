@@ -11,7 +11,8 @@ SQLite owns:
 - module definitions and ordering
 - plaintext secrets for v1
 - flake lock content
-- store and machine schema versions
+- per-store and per-machine `state_version` (state-format version; **not** a
+  schema version — DB schema migration is global, see Phase 4 MS12/MS15)
 - migration state
 - jobs
 - health findings
@@ -36,10 +37,11 @@ Generated artifacts are not authoritative:
 
 ## Build and Update Flow
 
-Machine rebuild/update uses a temporary flake directory:
+Machine rebuild/update uses a temporary flake directory inside the store
+environment:
 
 ```text
-$RUNTIME/codchi/jobs/<job-id>/flake/
+/nix/var/codchi/jobs/<job-id>/flake/
   flake.nix
   flake.lock
 ```
@@ -52,14 +54,20 @@ Flow:
 4. Write `flake.lock` from SQLite if present.
 5. Run `nix flake lock` or `nix flake update` only if requested.
 6. Build from the temp flake.
-7. If build and switch succeed, store the resulting lock in SQLite.
-8. Record a new generation.
-9. Update the active generation pointer.
+7. If build and switch succeed, atomically store the resulting lock, record the
+   generation, and update the active generation pointer.
+8. Publish the committed state to in-memory projections.
+9. Enqueue targeted reconciliation.
 10. Remove temp files on success.
 
-Failed updates do not advance the stored lock. Candidate locks may be preserved
-in job logs or preserved temp directories for inspection, but they are not
-committed as machine state.
+Failed create/rebuild/update jobs do not advance the stored lock, generation,
+or active-generation pointer. Candidate locks may be preserved in job logs or
+retained workspaces for inspection, but they are not committed as machine
+state. The detailed commit boundary is defined by
+[Phase 4 MS9](phases/04-machine-state.md#ms9--flake-lock-state-commits-only-with-a-successful-generation).
+
+For `create_machine`, workspace retention and the artifact-production boundary
+are defined by [Phase 4 MS1](phases/04-machine-state.md#ms1--a-machine-is-the-intended-persistent-development-environment).
 
 ## Generations
 

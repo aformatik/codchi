@@ -81,6 +81,24 @@ the older machine-only coupling (the beta `JobView.machine: Option<MachineId>`).
 Makes "what is the store/server currently doing" answerable via
 `list_jobs(filter)`.
 
+### Job artifact
+External diagnostic material produced by a [[job]], owned and cleaned
+independently from the job's [[machine]]. A retained diagnostic flake workspace
+is a job artifact; SQLite job or machine rows are not.
+
+### Machine
+A named, persistent NixOS development environment defined by desired
+configuration and retaining user data across rebuilds. A durable machine row
+always has an active generation (it is born only at its first successful
+generation); a machine still being created exists only as an in-flight [[job]],
+not a durable row. Its [[platform realization]] is separate and may be absent
+(stopped/never-started) while the machine still exists.
+
+### Platform realization
+The runtime artifact through which a [[machine]] executes, such as a Podman
+container/rootfs or WSL distro. Its current presence and runtime state are owned
+by the platform, not by durable Codchi state.
+
 ### topic
 A sub-classifier *within* a source's log stream (e.g. `build`, `gc`), carried on
 `Event::Log`. Not a source — a source can emit many topics.
@@ -133,4 +151,18 @@ metadata) into the v1 SQLite state, surfaced on the API as
 user state; it preserves and backs up beta files, never deletes them. Distinct
 from a [[schema migration]].
 _Avoid:_ the bare word "migration" for this; always qualify as *beta
+migration*.
+
+### State migration
+The forward evolution of a [[machine]]'s or [[store-image|store]]'s **realized
+state/content** across codchi upgrades — mount scheme, init format, on-disk store
+layout, and similar facts that are not SQLite rows. **Per-machine / per-store**:
+each carries a stored state-format version (`state_version`, Phase 4 MS15),
+unlike the **global** [[schema migration]] of the database shape. New machines
+start at the current baseline (≥1); **beta-migrated machines are version 0** —
+they predate the v1 state format, so [[beta migration]] sets that baseline — and
+post-v1 state migrations bump the version. So the field has three writers (create,
+beta migration, state migrations) and lets a migration tell a beta (0) from a v1
+(≥1) machine. Distinct from the removed per-machine `schema_version` wire field.
+_Avoid:_ the bare word "migration" for this; always qualify as *state
 migration*.

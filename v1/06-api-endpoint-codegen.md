@@ -108,7 +108,7 @@ async fn call<E: Endpoint>(&self, path_args: …, query: E::Query, body: E::Body
 ```
 
 behind a hand-written `impl CodchiService for HttpClient` whose methods are
-one-liners: `self.call::<CloneMachineEp>(…)`. The `ApiError` default-response
+one-liners: `self.call::<DuplicateMachineEp>(…)`. The `ApiError` default-response
 shape and the `JobView<O>` typing flow through unchanged.
 
 **`CodchiService` and the mock stay hand-written.** They are the readable

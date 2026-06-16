@@ -65,7 +65,10 @@ inputs for that phase; changes require an explicit revision of the spec.
 - Long-running operations are jobs with cancellation and log streaming.
 - Conflicting mutating jobs are rejected, not queued.
 - Explicit cancellation cleans up immediately.
-- Failed or crashed jobs preserve data/artifacts for inspection and recovery.
+- Failed or crashed jobs preserve useful produced artifacts for inspection and
+  recovery unless that operation has an explicit cleanup policy. Failed machine
+  creation follows
+  [Phase 4 MS1](phases/04-machine-state.md#ms1--a-machine-is-the-intended-persistent-development-environment).
 - User data must never be deleted or corrupted by any operation, except when the user explicitly requests it (e.g. when deleting a machine).
 
 ## Non-Negotiable Invariants

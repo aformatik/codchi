@@ -9,14 +9,15 @@ The authoritative `JobKind` catalog lives in
 carries a `subject: LogSource` (R11) — `Machine(id)`, `Store`, or `Server`.
 Examples:
 
-- init, clone, rebuild, update, delete (machine subject)
+- init, duplicate, rebuild, update, delete (machine subject)
 - activate generation (machine subject)
 - garbage collection (store subject)
 - store start, store recover (store subject, R11)
 - migration, doctor scan, doctor fix (server subject)
 
 Module and secret mutations are **sync**, not jobs (see Q4). Changing modules
-marks the machine `NeedsRebuild`; the user starts a rebuild job explicitly.
+changes the derived `ConfigurationStatus` to `NeedsRebuild`; the user starts a
+rebuild job explicitly (Phase 4 MS11).
 
 Conflicting jobs are rejected, not queued.
 
@@ -56,7 +57,10 @@ Rules:
 - `Ctrl+C` in the CLI sends a cancel request.
 - Cancelled jobs run operation-specific cleanup immediately.
 - Cleanup must not delete user data.
-- Failed or crashed jobs preserve artifacts for inspection.
+- Failed or crashed jobs preserve useful produced artifacts for inspection,
+  subject to the operation's explicit cleanup policy. In particular,
+  `create_machine` follows
+  [Phase 4 MS1](phases/04-machine-state.md#ms1--a-machine-is-the-intended-persistent-development-environment).
 - If cleanup fails, create a recovery finding.
 
 If the terminal is closed or the client disconnects without sending cancel, the

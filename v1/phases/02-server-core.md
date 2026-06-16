@@ -226,7 +226,7 @@ generalize across v1 — but only as part of the taxonomy above:
 - **`server_status` is the singleton of a general projection-join**:
   `durable (SQLite) ⋈ observed (watch) ⋈ in-flight (job)`. `MachineView` for N
   machines is the same join at scale — it already carries all three tributaries
-  (`active_generation`/`schema_version`; `run_status`/`last_reconciled_at`/
+  (`active_generation`; `run_status`/`last_reconciled_at`/
   `snapshot_stale`; `busy_with`). The projection discipline is the backbone of
   the whole machine surface, not a store-only trick.
 - **The pure `step` reducer is the reusable core of every state machine** —

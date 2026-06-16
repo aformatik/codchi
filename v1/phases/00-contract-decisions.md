@@ -24,9 +24,13 @@ Rules:
   (`codchi-machine-<id>` machines, store/server their own fixed names),
   mirroring the `LogSource` taxonomy (R11) and avoiding the beta's
   `codchistore`-style collision dodge.
-- Machine names are **stable identities** and **cannot be renamed**.
-- Renaming a machine is unsupported. The supported path is
-  `codchi clone foo bar`, which creates a new machine.
+- Machine names are **stable identities** and **cannot be renamed** (the id is
+  baked into platform resource names, gcroots, and store-visible paths).
+- Renaming is unsupported, and **duplication is not a rename**: `duplicate`
+  yields a *second* independent machine with a fresh generation history and a
+  full filesystem copy — not the same machine under a new name.
+  Duplicate-then-delete is at best a manual, lossy workaround (it copies all
+  user data and drops history), not a supported rename path.
 - Beta migration imports each beta machine's existing name as its `MachineId`.
   Note the platform scheme **differs** from the beta (beta named containers
   `codchi-<name>`, v1 uses `codchi-machine-<name>`), so migration must
@@ -52,8 +56,15 @@ Validation:
 API consequences:
 
 - No `rename_machine` endpoint.
-- `clone_machine(source: MachineId, target: MachineId)` exists and is a job.
-- `MachineId` collisions during create/clone return `ApiError::Validation`.
+- `duplicate_machine(source, target)` (renamed from `clone_machine`) is the
+  machine-duplication job — config + lock + secrets copy plus a platform
+  filesystem copy — and is **deferred to Phase 7** (the filesystem copy is
+  platform work; born-at-commit and stopped-source-only, see Phase 4 MS13).
+- `clone` is a separate **git convenience** (beta `Clone`): `create_machine` +
+  `git clone` via exec (+ optional local-URL rewrite via `set_modules`). It is
+  CLI-orchestrated over existing operations, **not** a server job, and adds no
+  new contract surface.
+- `MachineId` collisions during create/duplicate return `ApiError::Validation`.
 
 ## Q2 — Event stream transport
 
@@ -113,10 +124,12 @@ Rules:
   - `set_secret(machine, key, value)` — validates `key` against the cached
     schema (`ApiError::Validation` on unknown keys); SQLite write; marks
     pending restart/rebuild if needed.
-  - `get_secret(machine, key) -> String` — returns plaintext.
-  - `list_secrets(machine) -> Vec<SecretKey>` — keys only;
-    `SecretKey { name, description, has_value }`.
-  - `delete_secret(machine, key)` — sync.
+  - `get_secret(machine, key) -> String` — returns plaintext for declared or
+    obsolete stored values (Phase 4 MS10).
+  - `list_secrets(machine) -> Vec<SecretKey>` — keys only; Phase 4 MS10 extends
+    each entry with typed declared/obsolete status.
+  - `delete_secret(machine, key)` — deletes either a declared or obsolete
+    stored value; sync.
 - Plaintext is acceptable for v1. Encryption at rest is out of scope.
 - Access control is by the transport boundary: anyone who can reach the
   per-user socket is the user who owns the secrets.
@@ -160,7 +173,7 @@ recovery.
 | `server_status` | Sync | Returns lifecycle state, including `Starting`. Never waits for readiness. |
 | `list_machines` | Sync | Returns DB state plus daemon snapshot. |
 | `get_machine` | Sync | Same, for one machine. |
-| `set_modules` | Sync | Writes desired config; marks `needs_rebuild`. No implicit rebuild. |
+| `set_modules` | Sync | Writes desired config; `configuration_status` is derived per Phase 4 MS11. No implicit rebuild. |
 | `set_secret` | Sync | Writes desired secret state; marks pending restart/rebuild if needed. |
 | `get_secret` | Sync | SQLite read. |
 | `list_secrets` | Sync | SQLite read (keys only). |
@@ -168,8 +181,10 @@ recovery.
 | `list_generations` | Sync | SQLite read. |
 | `doctor` (read) | Sync | Returns cached findings / last check result. |
 | `migration_plan` | Sync | Pure plan/read view. |
+| `prepare_job_debug` | Sync | Returns the native diagnostic exec plan defined by Phase 5 (JS-D2). |
+| `delete_job_artifacts` | Sync | Bounded cleanup defined by Phase 5/6 (JS-D2, GM-W1). |
 | `create_machine` | Job | Nix + platform creation. |
-| `clone_machine` | Job | Platform copy + state write. |
+| `duplicate_machine` | Job | Machine duplication (renamed from `clone_machine`): state + filesystem copy, fresh generation; **deferred to Phase 7** (MS13). |
 | `rebuild` | Job | Nix build + activation. |
 | `update` | Job | Lock + update + build + activation. |
 | `delete_machine` | Job | Platform cleanup; needs logs/recovery. |
@@ -377,11 +392,13 @@ last_reconcile_attempt_at: Option<DateTime<Utc>>,
 snapshot_stale: bool,
 ```
 
-Keep the last known good snapshot on probe failure. Do **not** synchronously
-probe from read endpoints. A confirmed broken artifact (missing
-container/rootfs/store path) updates the snapshot — possibly to `Failed`. A
-failed probe alone does not flip a machine to `Failed`; it sets
-`snapshot_stale = true` and creates a finding.
+Keep the last known good snapshot on probe failure. Before the first successful
+probe, `run_status` is `Reconciling`; an initial probe failure leaves it there,
+sets `snapshot_stale = true`, and creates a finding. Do **not** synchronously
+probe from read endpoints. A successfully confirmed missing platform
+realization updates `run_status` to `Absent`; broken mounts, rootfs, store
+paths, or projections are represented by findings rather than a runtime
+`Failed` state.
 
 **Probes.**
 
@@ -389,7 +406,7 @@ Podman, preferably batched:
 
 - Container presence/state: one `podman ps -a` / inspect inventory over
   Codchi-labeled containers; map running/exited/missing to
-  `Running`/`Stopped`/`Failed`.
+  `Running`/`Stopped`/`Absent`.
 - Mount correctness: expected store mount present; expected machine root/data
   mount present; mount source paths exist on host.
 - Gcroot/profile projections: active and protected generation gcroots exist;
@@ -448,7 +465,8 @@ snapshots.
 completion, explicit `doctor_scan`. Additional: store lifecycle transition
 (unavailable/recovered); machine boot failure reported through hostctl;
 machine agent heartbeat/health report; config mutations affecting desired
-state (e.g. `set_modules` flips `NeedsRebuild` immediately); optional Podman
+state (e.g. `set_modules` changes derived `ConfigurationStatus` immediately);
+optional Podman
 event stream if cheap/reliable, used only to enqueue reconcile.
 
 **Failure handling.** Persistent deduped findings, examples:
@@ -462,13 +480,15 @@ wsl.distro_missing
 wsl.rootfs_missing
 generation.store_path_missing
 reconcile.probe_failed
+secret.obsolete_value
 ```
 
 Rules:
 
-- Confirmed missing artifact: update snapshot and finding.
-- Probe failed/timed out: keep last known snapshot, set
-  `snapshot_stale = true`.
+- Confirmed missing realization: set `run_status = Absent`; create or refresh
+  the corresponding finding.
+- Probe failed/timed out: retain the last successful status, or
+  `Reconciling` if none exists; set `snapshot_stale = true`.
 - `last_reconcile_attempt_at` updates on every attempt.
 - `last_reconciled_at` updates only after required probes succeed.
 - Background-reconcile findings have `source_job = None`.
@@ -477,7 +497,7 @@ Rules:
 **Interaction with mutating jobs.** Mutating jobs own the machine.
 
 - Background reconciliation for a machine is skipped while
-  `rebuild`/`update`/`clone`/`delete`/`activate_generation` is running.
+  `rebuild`/`update`/`duplicate`/`delete`/`activate_generation` is running.
 - The reconciler uses a non-blocking try-lock; busy machines record no
   persistent finding and are retried later.
 - Store-level checks may continue during machine jobs.
@@ -576,8 +596,9 @@ This makes the success type visible at the call site. Kind-specific service
 methods return a narrowed view — `rebuild -> JobView<Rebuilt>`,
 `resolve_config -> JobView<ConfigResolution>`, `prepare_exec -> JobView<ExecPlan>`,
 `doctor_scan -> JobView<DoctorReport>`, `migration_run -> JobView<MigrationSummary>`,
-`update -> JobView<Updated>` — and kinds with no payload return `JobView<()>`
-(`create`/`clone`/`delete`/`activate_generation`/`doctor_fix`). The kind-erased
+`update -> JobView<Updated>`, `duplicate -> JobView<Duplicated>` — and kinds with no
+payload return `JobView<()>`
+(`create`/`delete`/`activate_generation`/`doctor_fix`). The kind-erased
 `get_job` returns the default `JobView` = `JobView<JobOutput>`, where `JobOutput`
 is a `#[serde(tag = "kind")]` enum with one **newtype** variant per producing
 `JobKind`, each wrapping that kind's payload type (`Rebuilt`, `Updated`,
@@ -590,7 +611,7 @@ type is additive (Q5).
 
 Rationale: for most jobs the real payload is data, not just a side effect —
 `doctor_scan` → `DoctorReport`, `update` → new generation + lock diff,
-`garbage_collect` → bytes freed, `migration_run` → summary, `rebuild`/`clone`
+`garbage_collect` → bytes freed, `migration_run` → summary, `rebuild`/`duplicate`
 → new `GenerationId`, `resolve_config` → `ConfigResolution`, `prepare_exec`
 → `ExecPlan`. This also removes the awkward "run `doctor_scan`, then call sync
 `doctor` to read what it cached" round-trip (sync `doctor` remains, as the
@@ -606,15 +627,23 @@ events, no server→client requests).
 
 ### R3 — `resolve_config` is a read-only job (revises the Q4 endpoint set)
 
-Module resolution (which module(s)? follow which nixpkgs?) is discoverable only
-by fetching and evaluating a flake — external reality, slow, fallible, worth
-streaming. It is a **read-only job**
+Module resolution — which module attrs does a flake expose? does it carry a
+`nixpkgs` input a machine may follow? what is the canonical codchi flake-url
+form? — is **discoverable only by fetching and evaluating a flake**: external
+reality, slow, fallible, worth streaming. It is a **read-only job**
 `resolve_config(ResolveConfigRequest) -> JobView` whose typed output is
-`ConfigResolution`. Used by `init`, `clone`, `module add`, `module set` (every
-flow that introduces/changes a module pointing at a flake URL); **not** by
-`rebuild`/`update` (those never re-choose modules — they only refresh the
-secret schema, which is R4 state). Chosen over carrying the choice in a typed
-error because the resolution payload is rich and reused by four flows.
+`ConfigResolution`. It is the single authority for everything that needs Nix
+evaluation; `create_machine`/`set_modules` consume its canonical `ModuleSpec`s.
+There is **no resolution token** (Phase 4 MS14): `create_machine` and
+`set_modules` carry a plain ordered `Vec<ModuleSpec>` and the server re-validates
+every pure invariant on the complete list itself, so a config never gated by
+`resolve_config` simply fails the same checks (or, for a bogus module attr, the
+create/rebuild job's own eval). `rebuild`/`update` do not re-resolve
+already-committed modules.
+
+Phase 4 MS8 revises `ModuleSpec` to remove the beta-derived user-visible
+`name`; v1 module identity is its ordered URL entry, while generated flake-input
+aliases remain private artifacts.
 
 ### R4 — Secrets are NixOS-declared; schema cached in SQLite (refines Q3)
 
@@ -625,9 +654,10 @@ build/eval**, so the four secret endpoints stay genuine **sync** SQLite ops
 (honoring the P6 no-probe invariant). The schema is refreshed only by a build
 (rebuild) job.
 
-`SecretKey { name: SecretName, description, has_value }` (R12). `set_secret`
-validates the key against the cached schema → `ApiError::Validation` on unknown
-keys; `SecretName` adds a syntactic boundary guard ahead of that (R12).
+`SecretKey { name: SecretName, description, has_value, status }` (R12 and Phase
+4 MS10). `set_secret` validates the key against the cached schema →
+`ApiError::Validation` on unknown or obsolete keys; `SecretName` adds a
+syntactic boundary guard ahead of that (R12).
 
 ### R5 — All secrets required; enforced at start, never at build (refines Q3/Q4)
 
@@ -639,7 +669,7 @@ enforcement point moves to **start**:
 - Build jobs (`create`/`rebuild`) **succeed** with unset secrets; they become
   state (`has_value == false`). No prompt, no failure.
 - The **implicit start** (inside `prepare_exec` / `rebuild`-with-local-modules
-  / `clone`) fails with `MissingRequiredSecrets { machine, keys }` if any
+  / `duplicate`) fails with `MissingRequiredSecrets { machine, keys }` if any
   declared secret is unset. The CLI prompts (masked), calls `set_secret`, and
   retries the start. This is the **only** place secrets are gathered — there is
   no proactive post-build prompt.
@@ -647,7 +677,7 @@ enforcement point moves to **start**:
 ### R6 — No `Start`/`Stop`/`Restart` job
 
 Starting a machine is never its own job (beta has no `start` command either).
-It is a **step** inside `rebuild` (local modules), `clone`, and `prepare_exec`.
+It is a **step** inside `rebuild` (local modules), `duplicate`, and `prepare_exec`.
 
 ### R7 — `prepare_exec` is a job (revises Q4: previously unclassified)
 
@@ -732,7 +762,7 @@ The former open item was mis-framed as "idempotency / resumability." Resolved:
     `flake.lock` (upholds the invariant that failed updates don't advance the
     lock);
   - each `JobKind` is individually responsible for skip-if-already-done on its
-    non-Nix steps (e.g. `clone` skips an existing target container).
+    non-Nix steps (e.g. `duplicate` skips an existing target container).
 
 Because R3 made module resolution a separate read-only job and R5 made build
 jobs succeed with unset secrets (enforced at start), **`create_machine` never
@@ -740,24 +770,48 @@ pauses for input mid-flight** — it receives all inputs up front and runs to
 success or fails. The beta "cancelled-for-input mid-`build` leaves artifacts"
 case **cannot occur in v1**.
 
-**No "partially installed" limbo.** A machine is exactly one of:
+**No "partially installed" limbo, and no durable creating/failed row** (revised
+by Phase 4 MS1). A **durable** machine has exactly one form: *valid* —
+`active_generation == Some(_)`. A machine row is born only at its first
+successful generation (MS9 commit); there is no generation-less durable row.
+*Creating* is an in-flight **job**, surfaced only as a synthesized read-model
+view (`active_generation == None` ⇒ this synthesized in-flight create), never a
+stored row.
 
-- *valid* — `active_generation == Some(_)`;
-- *creating* — `active_generation == None` **and** `busy_with == Some(<create job>)`;
-- *failed create* — `active_generation == None` **and** `busy_with == None`.
+A failed / cancelled `create_machine` therefore leaves **no machine**, only a
+create job:
 
-A failed / cancelled `create_machine`:
-
-- **default:** the create job's own failure-cleanup tears the machine down
-  completely (beta behavior, as the deliberate rule) — no row, no artifacts;
+- **default (`keep_on_fail = false`):** the create job's failure-cleanup tears
+  down everything it produced — no row, no workspace, no platform resources
+  (beta behavior, as the deliberate rule).
 - **`keep_on_fail: bool`** (additive field on `CreateMachineRequest`, default
-  `false`): retains the failed machine row + artifacts + a `create.failed`
-  finding for introspection. Such a machine permits only `get` / `doctor` /
-  `delete`; it is not execable or rebuildable. Retry is `delete` then `create`.
+  `false`): the failed **create job** retains its artifacts — the diagnostic
+  workspace and the partial `codchi-machine-<id>` platform resources — plus a
+  `create.failed` finding, for inspection/debug. There is no retained machine
+  row. Inspection/debug and cleanup are job-scoped (`prepare_job_debug` /
+  `delete_job_artifacts`, Phase 5 JS-D2); `delete_job_artifacts` on a create job
+  removes both the workspace and the retained platform resources. Retry is
+  `delete_job_artifacts` (if anything was retained) then `create`.
 
-A failed `rebuild` / `update` of an **already-valid** machine never turns it into
-a failed machine: it stays `Running` / `Stopped` on its prior generation, the
-failure is a job error (+ optional finding), and `flake.lock` is not advanced.
+To stop a retry from overwriting a retained failed create, the machine-id
+namespace is **{committed machine rows} ∪ {retained failed-create jobs}**: a
+`create` is rejected if the id names a committed machine, a running create job,
+or a terminal-failed create job that still has retained artifacts. The last is a
+typed `CreateArtifactsRetained { machine, job }` (409) carrying the retained job
+so the client can inspect or clear it. The same set bounds the platform-GC sweep,
+which removes a `codchi-machine-*` resource only when it is neither a committed
+machine nor owned by a retained failed-create job.
+
+A failed `rebuild` / `update` of an **already-valid** machine never corrupts it:
+it stays `Running` / `Stopped` on its prior generation, the failure is a job
+error (+ optional finding), and `flake.lock` is not advanced.
+
+The job contract is revised with retained diagnostic workspaces,
+`JobView.has_diagnostic_workspace`, and the
+`prepare_job_debug`/`delete_job_artifacts` endpoints. The workspace artifact is
+specified in [06-generation-model.md](06-generation-model.md) (GM-W1..GM-W3) and
+the job-side API in [05-job-system.md](05-job-system.md) (JS-D1/JS-D2), which are
+the authorities for their behavior.
 
 ### R10 — MachineView status axes (replaces the flat `MachineStatus`)
 
@@ -767,12 +821,19 @@ conflated independent axes and could not express the *normal* post-edit state
 (`PlatformStatus` and `ConfigStatus` in `machine.rs`). v1 uses **three
 orthogonal axes** plus the active findings, all on `MachineView`:
 
-- `run_status: RunStatus` — `Stopped | Running` (platform liveness; from the
-  reconciler snapshot, P6).
-- `update_status: UpdateStatus` — `UpToDate | NeedsRebuild | UpdatesAvailable`
-  (desired-vs-built; beta's `ConfigStatus`).
+- `run_status: RunStatus` — `Reconciling | Absent | Stopped | Running`
+  (platform observation; from the in-memory reconciler snapshot, P6 and Phase
+  4 MS2).
+- `configuration_status: ConfigurationStatus` — `Unbuilt | Applied |
+  NeedsRebuild` (pure desired-versus-active projection; Phase 4 MS11).
 - `findings: Vec<Finding>` — the machine's **active** findings, carried on the
   view and **authoritative** for health.
+
+Beta's `UpdatesAvailable` is intentionally **not** an axis here: update
+availability requires fetching remote inputs, so it is not a pure read. It is
+out of scope for Phase 4 and, later, becomes a **separate in-memory field**
+refreshed by a scheduled (~daily) background job — never part of
+`configuration_status` (Phase 4 MS11).
 
 `health` is **not stored state**. It is a pure function
 `fn health(&[Finding]) -> Severity` (worst active severity; `Ok` when empty),
@@ -1035,10 +1096,17 @@ pub enum ApiError {
     MachineNotFound { machine: MachineId },
     #[serde(rename = "machine_busy")]
     MachineBusy { machine: MachineId, job: JobId },
+    // create rejected: id reserved by a retained failed-create job (R9 / Phase 5 JS-D3)
+    #[serde(rename = "create_artifacts_retained")]
+    CreateArtifactsRetained { machine: MachineId, job: JobId },
     #[serde(rename = "job_not_found")]
     JobNotFound { job: JobId },
     #[serde(rename = "job_not_cancellable")]
     JobNotCancellable { job: JobId, state: JobState },
+    #[serde(rename = "job_not_terminal")]
+    JobNotTerminal { job: JobId, state: JobState },
+    #[serde(rename = "job_artifacts_not_found")]
+    JobArtifactsNotFound { job: JobId },
     #[serde(rename = "store_unavailable")]
     StoreUnavailable { reason: String },
     #[serde(rename = "store_busy")]
@@ -1049,6 +1117,9 @@ pub enum ApiError {
     ApiVersionMismatch { client: u32, server: u32 },
     #[serde(rename = "missing_required_secrets")]
     MissingRequiredSecrets { machine: MachineId, keys: Vec<SecretKey> }, // R5
+    // get_secret on a declared-but-unset key (Phase 4 MS10); unknown keys are Validation
+    #[serde(rename = "secret_not_set")]
+    SecretNotSet { machine: MachineId, key: SecretName },
     #[serde(rename = "validation")]
     Validation { field: String, message: String },
     #[serde(rename = "internal")]
@@ -1073,7 +1144,8 @@ pub trait CodchiService: Send + Sync {
     async fn get_machine(&self, id: &MachineId) -> Result<MachineDetail, ApiError>;
     async fn create_machine(&self, req: CreateMachineRequest) -> Result<JobView<()>, ApiError>;
     // source is the {id} path segment; req carries only the new name
-    async fn clone_machine(&self, source: &MachineId, req: CloneMachineRequest) -> Result<JobView<()>, ApiError>;
+    // renamed from clone_machine; machine duplication, deferred to Phase 7 (MS13)
+    async fn duplicate_machine(&self, source: &MachineId, req: DuplicateMachineRequest) -> Result<JobView<Duplicated>, ApiError>;
     async fn delete_machine(&self, id: &MachineId) -> Result<JobView<()>, ApiError>;
 
     // modules / config / secrets
@@ -1103,6 +1175,8 @@ pub trait CodchiService: Send + Sync {
     async fn list_jobs(&self, filter: JobFilter) -> Result<Vec<JobView>, ApiError>;       // R11
     async fn get_job(&self, id: &JobId) -> Result<JobView, ApiError>;
     async fn cancel_job(&self, id: &JobId) -> Result<(), ApiError>;
+    async fn prepare_job_debug(&self, id: &JobId) -> Result<JobDebugPlan, ApiError>;
+    async fn delete_job_artifacts(&self, id: &JobId) -> Result<(), ApiError>;
     async fn stream_job_events(&self, id: &JobId, opts: EventStreamOpts)
         -> Result<BoxStream<'static, Result<Event, ApiError>>, ApiError>;
 
@@ -1131,17 +1205,20 @@ method, path, and `Body`/`Query`/`Response` types), the single source of truth
 reused by the `axum` router, the typed client, and OpenAPI. Endpoints are matched
 by type, not by stringly-typed `operation_id`. Example mapping:
 `POST /v1/machines` → `create_machine`, `GET /v1/machines/{id}` → `get_machine`,
-`GET /v1/jobs/{id}/events` → `stream_job_events`. The `01-architecture.md`
-sketch of `CodchiService` is illustrative and superseded by this trait. The
-catalog mechanism and the Phase 1 generic router/client are specified in
+`GET /v1/jobs/{id}/events` → `stream_job_events`,
+`POST /v1/jobs/{id}/debug` → `prepare_job_debug`, and
+`DELETE /v1/jobs/{id}/artifacts` → `delete_job_artifacts`. Phase 5 (JS-D2)
+revises the catalog from 28 to 30 routes. The `01-architecture.md` sketch of
+`CodchiService` is illustrative and superseded by this trait. The catalog
+mechanism and the Phase 1 generic router/client are specified in
 [../06-api-endpoint-codegen.md](../06-api-endpoint-codegen.md).
 
 **Path is the canonical identity; request bodies never repeat a path
 parameter.** A resource addressed by `{id}` (or `{key}`, `{generation}`) takes
 that value only from the path — the body carries only data that is not already
 in the URL. So `rebuild`/`update` (`POST /machines/{id}/rebuild|update`) take no
-body; `clone_machine` (`POST /machines/{id}/clone`) takes the source from `{id}`
-and only `{ target }` in the body; `prepare_exec` (`POST /machines/{id}/exec`)
+body; `duplicate_machine` (`POST /machines/{id}/duplicate`) takes the source from
+`{id}` and only `{ target }` in the body; `prepare_exec` (`POST /machines/{id}/exec`)
 takes the machine from `{id}` and only `{ command }` in the body. `create_machine`
 is the one place a `MachineId` lives in the body (`POST /machines` has no path
 id, because the resource does not exist yet). This avoids the
@@ -1156,7 +1233,7 @@ pub enum JobState {
 }
 
 pub enum JobKind {
-    Init, Clone, Rebuild, Update, Delete,
+    Init, Duplicate, Rebuild, Update, Delete,
     ActivateGeneration, GarbageCollect,
     Migration, DoctorScan, DoctorFix,
     Resolve,       // R3: read-only flake fetch+eval -> ConfigResolution
@@ -1177,10 +1254,12 @@ pub struct JobView<O = JobOutput> {
     pub error: Option<ApiError>, // R1/R2: Some iff terminal Failed
     pub output: Option<O>,       // R1/R2: Some iff terminal Succeeded (kinds with output)
     pub last_event_seq: EventSeq,
+    pub has_diagnostic_workspace: bool,            // Phase 5 JS-D1 (durable job state)
 }
 
 // Per-kind payload structs the typed views carry.
 pub struct Rebuilt          { generation: GenerationId }
+pub struct Duplicated       { generation: GenerationId }
 pub struct Updated          { generation: GenerationId, input_changes: Vec<LockInputChange> }
 pub struct GarbageCollected { freed_bytes: u64 }
 // ConfigResolution, MigrationSummary, DoctorReport, ExecPlan are defined in their dto modules.
@@ -1191,6 +1270,7 @@ pub struct GarbageCollected { freed_bytes: u64 }
 pub enum JobOutput {
     ConfigResolution(ConfigResolution),
     Rebuilt(Rebuilt),
+    Duplicated(Duplicated),
     Updated(Updated),
     GarbageCollected(GarbageCollected),
     Migrated(MigrationSummary),
@@ -1230,20 +1310,20 @@ durable, replayable tier.
 // R10: orthogonal axes; `health` is derived, not stored. No flat MachineStatus.
 pub struct MachineView {
     pub id: MachineId,
-    pub run_status: RunStatus,                    // Stopped | Running
-    pub update_status: UpdateStatus,              // UpToDate | NeedsRebuild | UpdatesAvailable
-    pub active_generation: Option<GenerationId>,  // None => creating or failed-create (R9)
+    pub run_status: RunStatus,                    // Reconciling | Absent | Stopped | Running
+    pub configuration_status: ConfigurationStatus,// Unbuilt | Applied | NeedsRebuild; derived, MS11
+    pub active_generation: Option<GenerationId>,  // None => synthesized in-flight create only; no durable row is None (R9/MS1)
     pub findings: Vec<Finding>,                   // active; health = health(&findings)
     pub busy_with: Option<JobId>,
-    pub schema_version: u32,
+    // no per-machine schema_version: schema migration is global (Phase 4 MS12)
     // P6 snapshot freshness:
     pub last_reconciled_at: Option<DateTime<Utc>>,
     pub last_reconcile_attempt_at: Option<DateTime<Utc>>,
     pub snapshot_stale: bool,
 }
 
-pub enum RunStatus { Stopped, Running }
-pub enum UpdateStatus { UpToDate, NeedsRebuild, UpdatesAvailable }
+pub enum RunStatus { Reconciling, Absent, Stopped, Running }
+pub enum ConfigurationStatus { Unbuilt, Applied, NeedsRebuild }
 
 // health is derived once in codchi-api; not a wire field of its own state.
 // fn health(findings: &[Finding]) -> Severity  // worst active severity, Ok if empty
@@ -1251,8 +1331,8 @@ pub enum UpdateStatus { UpToDate, NeedsRebuild, UpdatesAvailable }
 pub struct MachineDetail {
     pub view: MachineView,                        // carries active findings (R10)
     pub modules: Vec<ModuleSpec>,
-    pub secrets: Vec<SecretKey>, // SecretKey { name: SecretName, description, has_value }; R4/R5/R12
-    pub flake_lock_hash: String,
+    pub secrets: Vec<SecretKey>, // includes declared/obsolete status; R4/R5/R12, Phase 4 MS10
+    pub flake_lock_hash: Option<String>,          // None until first successful generation; Phase 4 MS9
     pub generations: Vec<GenerationView>,
 }
 
@@ -1298,6 +1378,7 @@ pub enum FindingCode {
     GenerationStorePathMissing,  // "generation.store_path_missing"
     ReconcileProbeFailed,        // "reconcile.probe_failed"
     CreateFailed,                // "create.failed"
+    SecretObsoleteValue,         // "secret.obsolete_value"
 }
 
 pub struct Finding {
