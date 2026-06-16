@@ -393,12 +393,13 @@ snapshot_stale: bool,
 ```
 
 Keep the last known good snapshot on probe failure. Before the first successful
-probe, `run_status` is `Reconciling`; an initial probe failure leaves it there,
-sets `snapshot_stale = true`, and creates a finding. Do **not** synchronously
-probe from read endpoints. A successfully confirmed missing platform
-realization updates `run_status` to `Absent`; broken mounts, rootfs, store
-paths, or projections are represented by findings rather than a runtime
-`Failed` state.
+probe, `run_status` is `None` (rolled up as `lifecycle = Reconciling`); an
+initial probe failure leaves it there, sets `snapshot_stale = true`, and creates
+a finding. Do **not** synchronously probe from read endpoints. A successfully
+confirmed missing platform realization sets `run_status = Some(Absent)` (this is
+an out-of-band container removal, since a machine is born only at a successful
+install, MS1); broken mounts, rootfs, store paths, or projections are
+represented by findings rather than a runtime `Failed` state.
 
 **Probes.**
 
@@ -485,10 +486,11 @@ secret.obsolete_value
 
 Rules:
 
-- Confirmed missing realization: set `run_status = Absent`; create or refresh
-  the corresponding finding.
-- Probe failed/timed out: retain the last successful status, or
-  `Reconciling` if none exists; set `snapshot_stale = true`.
+- Confirmed missing realization: set `run_status = Some(Absent)`; create or
+  refresh the corresponding finding.
+- Probe failed/timed out: retain the last successful status, or leave
+  `run_status = None` (`lifecycle = Reconciling`) if none exists; set
+  `snapshot_stale = true`.
 - `last_reconcile_attempt_at` updates on every attempt.
 - `last_reconciled_at` updates only after required probes succeed.
 - Background-reconcile findings have `source_job = None`.
@@ -818,14 +820,26 @@ the authorities for their behavior.
 The flat `MachineStatus { Stopped, Running, Building, NeedsRebuild, Failed }`
 conflated independent axes and could not express the *normal* post-edit state
 "Running **and** NeedsRebuild." Beta already kept these separate
-(`PlatformStatus` and `ConfigStatus` in `machine.rs`). v1 uses **three
-orthogonal axes** plus the active findings, all on `MachineView`:
+(`PlatformStatus` and `ConfigStatus` in `machine.rs`). v1 uses **orthogonal
+axes** plus the active findings, all on `MachineView`:
 
-- `run_status: RunStatus` — `Reconciling | Absent | Stopped | Running`
-  (platform observation; from the in-memory reconciler snapshot, P6 and Phase
-  4 MS2).
+- `run_status: Option<RunStatus>` — `Absent | Stopped | Running`, the raw
+  platform **container** observation from the in-memory reconciler snapshot (P6,
+  Phase 4 MS2). `None` ⇒ no observation reported yet. `Absent` means the
+  container is confirmed gone — and since a machine is born only at a successful
+  platform install (MS1), the only way a born machine reaches `Absent` is an
+  out-of-band removal (e.g. `podman rm`).
+- `lifecycle: Lifecycle` — `Creating | Reconciling | Absent | Stopped | Running`,
+  the **server-derived** display rollup of `run_status` + `active_generation`
+  (Phase 4 MS2). It folds the two non-container states (`Creating` = synthesized
+  in-flight create, no row yet, MS1; `Reconciling` = born machine, `run_status`
+  is `None`) onto the container observation so every client renders one
+  consistent label. `run_status` is kept as the raw axis alongside it.
 - `configuration_status: ConfigurationStatus` — `Unbuilt | Applied |
   NeedsRebuild` (pure desired-versus-active projection; Phase 4 MS11).
+- `state_version: u32` — the per-machine **state**-format version for state
+  migration (Phase 4 MS12/MS15): `0` for beta-migrated machines, `>= 1`
+  otherwise. Distinct from the global DB schema version (`PRAGMA user_version`).
 - `findings: Vec<Finding>` — the machine's **active** findings, carried on the
   view and **authoritative** for health.
 
@@ -839,10 +853,13 @@ refreshed by a scheduled (~daily) background job — never part of
 `fn health(&[Finding]) -> Severity` (worst active severity; `Ok` when empty),
 defined **once** in `codchi-api` so CLI, tray, and server agree.
 
-`Building`, `Creating`, and `Failed` are **not** status variants — they are
-derived (see R9) from `active_generation` + `busy_with`; `busy_with: Some(job)`
-plus the job's `JobKind` describes any in-flight transition. The updated
-`MachineView` / `MachineDetail` sketch is in *Machine + Generation Views* below.
+`Building`/`Creating`, `Reconciling`, and `Failed` are **not** `run_status`
+variants. `Creating` and `Reconciling` are surfaced through the server-derived
+`lifecycle` rollup above (computed from `active_generation` + `run_status`, see
+R9 and Phase 4 MS2); `Failed` stays a derived job notion — `busy_with: Some(job)`
+plus the job's `JobKind`/state describes any in-flight or failed transition. The
+updated `MachineView` / `MachineDetail` sketch is in *Machine + Generation Views*
+below.
 
 ### R11 — Logs are source-keyed; jobs are subject-tagged (adds log sources; revises the Job/Event model)
 
@@ -1310,19 +1327,21 @@ durable, replayable tier.
 // R10: orthogonal axes; `health` is derived, not stored. No flat MachineStatus.
 pub struct MachineView {
     pub id: MachineId,
-    pub run_status: RunStatus,                    // Reconciling | Absent | Stopped | Running
+    pub run_status: Option<RunStatus>,            // raw container obs; None => not yet observed (MS2)
+    pub lifecycle: Lifecycle,                     // server-derived rollup of run_status + active_generation (MS2)
     pub configuration_status: ConfigurationStatus,// Unbuilt | Applied | NeedsRebuild; derived, MS11
     pub active_generation: Option<GenerationId>,  // None => synthesized in-flight create only; no durable row is None (R9/MS1)
+    pub state_version: u32,                        // per-machine state-format version; 0 = beta-migrated (MS12/MS15)
     pub findings: Vec<Finding>,                   // active; health = health(&findings)
     pub busy_with: Option<JobId>,
-    // no per-machine schema_version: schema migration is global (Phase 4 MS12)
     // P6 snapshot freshness:
     pub last_reconciled_at: Option<DateTime<Utc>>,
     pub last_reconcile_attempt_at: Option<DateTime<Utc>>,
     pub snapshot_stale: bool,
 }
 
-pub enum RunStatus { Reconciling, Absent, Stopped, Running }
+pub enum RunStatus { Absent, Stopped, Running }                       // raw platform container observation
+pub enum Lifecycle { Creating, Reconciling, Absent, Stopped, Running } // server-derived display rollup
 pub enum ConfigurationStatus { Unbuilt, Applied, NeedsRebuild }
 
 // health is derived once in codchi-api; not a wire field of its own state.
@@ -1332,8 +1351,9 @@ pub struct MachineDetail {
     pub view: MachineView,                        // carries active findings (R10)
     pub modules: Vec<ModuleSpec>,
     pub secrets: Vec<SecretKey>, // includes declared/obsolete status; R4/R5/R12, Phase 4 MS10
-    pub flake_lock_hash: Option<String>,          // None until first successful generation; Phase 4 MS9
     pub generations: Vec<GenerationView>,
+    // fn flake_lock_hash(&self) -> Option<&str> — derived: active generation's lock;
+    //   None until first successful generation; not a field (Phase 4 MS9/MS15)
 }
 
 pub struct GenerationView {

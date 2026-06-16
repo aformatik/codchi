@@ -116,12 +116,12 @@ impl CodchiService for ServerCore {
     async fn create_machine(&self, req: CreateMachineRequest) -> Result<JobView<()>, ApiError> {
         self.create_machine(req).await
     }
-    async fn clone_machine(
+    async fn duplicate_machine(
         &self,
         source: &MachineId,
-        req: CloneMachineRequest,
-    ) -> Result<JobView<()>, ApiError> {
-        self.clone_machine(source, req).await
+        req: DuplicateMachineRequest,
+    ) -> Result<JobView<Duplicated>, ApiError> {
+        self.duplicate_machine(source, req).await
     }
     async fn delete_machine(&self, id: &MachineId) -> Result<JobView<()>, ApiError> {
         self.delete_machine(id).await

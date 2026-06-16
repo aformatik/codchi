@@ -44,8 +44,8 @@ pub fn build_router(state: AppState) -> Router {
     let router = mount_json::<DeleteMachineEp, _, _>(router, |s, p, _q, _b| async move {
         s.core.delete_machine(&p.0).await
     });
-    let router = mount_json::<CloneMachineEp, _, _>(router, |s, p, _q, body| async move {
-        s.core.clone_machine(&p.0, body).await
+    let router = mount_json::<DuplicateMachineEp, _, _>(router, |s, p, _q, body| async move {
+        s.core.duplicate_machine(&p.0, body).await
     });
 
     // ---- modules / config / secrets ----

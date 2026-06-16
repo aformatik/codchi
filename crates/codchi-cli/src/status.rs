@@ -6,7 +6,7 @@
 //! already holds (P6).
 
 use codchi_api::dto::{
-    MachineView, RunStatus, ServerLifecycle, ServerStatus, StoreState, UpdateStatus,
+    ConfigurationStatus, Lifecycle, MachineView, ServerLifecycle, ServerStatus, StoreState,
 };
 use codchi_api::{ApiError, CodchiService};
 
@@ -63,8 +63,8 @@ fn print_text(status: &ServerStatus, machines: &[MachineView]) {
         println!(
             "  {:<width$}  {:<8} {}{busy}",
             m.id.0,
-            run_str(m.run_status),
-            update_str(m.update_status),
+            run_str(m.lifecycle),
+            config_str(m.configuration_status),
             width = width,
         );
     }
@@ -89,17 +89,20 @@ fn store_str(state: StoreState) -> &'static str {
     }
 }
 
-fn run_str(status: RunStatus) -> &'static str {
-    match status {
-        RunStatus::Stopped => "stopped",
-        RunStatus::Running => "running",
+fn run_str(lifecycle: Lifecycle) -> &'static str {
+    match lifecycle {
+        Lifecycle::Creating => "creating",
+        Lifecycle::Reconciling => "reconciling",
+        Lifecycle::Absent => "absent",
+        Lifecycle::Stopped => "stopped",
+        Lifecycle::Running => "running",
     }
 }
 
-fn update_str(status: UpdateStatus) -> &'static str {
+fn config_str(status: ConfigurationStatus) -> &'static str {
     match status {
-        UpdateStatus::UpToDate => "up-to-date",
-        UpdateStatus::NeedsRebuild => "needs-rebuild",
-        UpdateStatus::UpdatesAvailable => "updates-available",
+        ConfigurationStatus::Unbuilt => "unbuilt",
+        ConfigurationStatus::Applied => "applied",
+        ConfigurationStatus::NeedsRebuild => "needs-rebuild",
     }
 }

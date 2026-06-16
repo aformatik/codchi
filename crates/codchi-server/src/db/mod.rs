@@ -17,6 +17,7 @@
 //! secret values onto the wire (DB7).
 
 pub mod config;
+pub mod machines;
 pub mod metadata;
 
 use std::path::Path;
@@ -32,13 +33,16 @@ use crate::core::SchemaState;
 /// The highest schema version this build knows how to produce — the number of
 /// entries in [`migrations`]. `PRAGMA user_version` equals this in steady state
 /// (DB4/DB8). Bumped by one with each new numbered `.sql` migration.
-pub const MAX_SCHEMA_VERSION: u32 = 1;
+pub const MAX_SCHEMA_VERSION: u32 = 2;
 
 /// The forward-only migration list (DB4). Numbered `.sql` files included via
 /// `include_str!` for clean diffs and readable DDL; each step runs in its own
 /// transaction (all-or-nothing). The runner drives `PRAGMA user_version`.
 fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(include_str!("migrations/0001_init.sql"))])
+    Migrations::new(vec![
+        M::up(include_str!("migrations/0001_init.sql")),
+        M::up(include_str!("migrations/0002_machines.sql")),
+    ])
 }
 
 /// The async SQLite handle (DB7). `Clone` (the underlying connection is an

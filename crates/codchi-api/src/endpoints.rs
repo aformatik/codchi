@@ -420,8 +420,8 @@ endpoints! {
         path (MachineId,), body (), query (), Json MachineDetail;
     DeleteMachineEp = Delete "/machines/{id}" "delete_machine" "Delete a machine (job)",
         path (MachineId,), body (), query (), Json JobView<()>;
-    CloneMachineEp = Post "/machines/{id}/clone" "clone_machine" "Clone a machine (job)",
-        path (MachineId,), body CloneMachineRequest, query (), Json JobView<()>;
+    DuplicateMachineEp = Post "/machines/{id}/duplicate" "duplicate_machine" "Duplicate a machine (job)",
+        path (MachineId,), body DuplicateMachineRequest, query (), Json JobView<Duplicated>;
 
     SetModulesEp = Post "/machines/{id}/modules" "set_modules" "Set a machine's modules",
         path (MachineId,), body SetModulesRequest, query (), Empty ();

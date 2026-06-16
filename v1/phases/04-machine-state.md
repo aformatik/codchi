@@ -65,13 +65,34 @@ copying that observation into durable machine state would create a second source
 of truth. Runtime presence/liveness is the in-memory reconciler snapshot, which
 resets on daemon restart.
 
-The `run_status` semantics that snapshot exposes (`Reconciling | Absent |
-Stopped | Running`, with integrity failures represented as findings rather than a
-runtime `Failed` state) are part of the wire contract and are specified in the
-reconcile section of [00-contract-decisions.md](00-contract-decisions.md); the
-reconciler that produces them is implemented in the job/platform phases (Phase
-5/7), not here. This revises Phase-0 P6/R10 rather than using `Stopped` as a
-placeholder or persisting stale observations.
+`run_status` is the **raw platform-container observation** that snapshot exposes:
+`Option<RunStatus>` where `RunStatus = Absent | Stopped | Running` and `None`
+means the reconciler has not reported an observation yet. Integrity failures are
+represented as findings rather than a runtime `Failed` state. Because a machine is
+born only at a successful platform install (MS1), the only way a born machine
+observes `Absent` is its container being removed out-of-band (e.g. `podman rm`).
+
+The two states that are *not* container observations — **creating** (no machine
+row yet, MS1) and **reconciling** (born, no observation yet) — are surfaced
+through a **server-derived** `lifecycle: Lifecycle` rollup
+(`Creating | Reconciling | Absent | Stopped | Running`), computed once from
+`run_status` + `active_generation` so every client renders one consistent label
+without re-deriving:
+
+```text
+active_generation is None   => Creating     (synthesized in-flight create, MS1)
+run_status is None          => Reconciling  (born, no observation yet)
+run_status is Some(Absent)  => Absent       (container removed out-of-band)
+run_status is Some(Stopped) => Stopped
+run_status is Some(Running) => Running
+```
+
+These wire shapes are part of the contract and are specified in the reconcile
+section and R10 of [00-contract-decisions.md](00-contract-decisions.md); the
+reconciler that produces `run_status` is implemented in the job/platform phases
+(Phase 5/7), not here. This revises Phase-0 P6/R10 (which had a flat
+`run_status: RunStatus` with a `Reconciling` variant) rather than using `Stopped`
+as a placeholder or persisting stale observations.
 
 ### MS3 — Diagnostic workspaces belong to jobs *(relocated)*
 
@@ -201,14 +222,19 @@ pointer. Failure before that transaction leaves durable state unchanged. A
 retained failed-create job's workspace may therefore contain a candidate
 `flake.lock` that is useful for debugging but is not machine state.
 
-The API represents this honestly:
+The API represents this honestly as a **derived getter, not a stored field** on
+`MachineDetail`:
 
 ```rust
-pub flake_lock_hash: Option<String>
+impl MachineDetail {
+    pub fn flake_lock_hash(&self) -> Option<&str> // active generation's lock
+}
 ```
 
-It is `None` exactly when the machine has never committed a successful
-generation.
+It reads the active generation's `flake_lock_hash` out of `generations` (keyed by
+`view.active_generation`), so it is `None` exactly when the machine has never
+committed a successful generation. There is no duplicated `flake_lock_hash` field
+that could drift from the active generation (MS15).
 
 ### MS10 — Secret declarations commit with generations; obsolete values survive
 
@@ -243,22 +269,31 @@ pub struct SecretKey {
 }
 ```
 
-**Data model.** Declaration membership and descriptions come from the active
-generation's schema; plaintext values are a separate, durable user-state table
-keyed by `(machine, key)`. `list_secrets` is the **union** of {active-generation
-declared keys} ∪ {keys with a stored value}, and the pair `(declared?,
-has_value?)` derives the entry:
+**Data model.** Declaration *membership* comes from the active generation's
+schema; plaintext values are a separate, durable user-state table keyed by
+`(machine, key)`. `list_secrets` is the **union** of {active-generation declared
+keys} ∪ {keys with a stored value}, and the pair `(declared?, has_value?)`
+derives the entry:
 
 | declared? | has_value? | status | description source |
 |---|---|---|---|
 | yes | yes | `Declared` | active generation schema |
 | yes | no | `Declared` (unset) | active generation schema |
-| no | yes | `Obsolete` | last-declared description (below) |
+| no | yes | `Obsolete` | value row's stored `description` (below) |
 | no | no | — (does not exist) | — |
 
-**Obsolete description.** When a key drops out of the schema, its
-last-declared `description` is **snapshotted onto the value row** so an obsolete
-entry still shows what the dangling value was, rather than a generic placeholder.
+**Stored description.** The value row carries the key's `description` directly
+(column `description`, MS15). It is **refreshed on every config eval**
+(create/rebuild/update — every generation commit) for keys that are still
+declared, and set when the value is created (`set_secret` writes the current
+declared description). It is **not** special-cased to obsolete entries: once a key
+drops out of the schema the eval simply stops refreshing its row, so the column
+naturally freezes at the last-declared description and an obsolete entry still
+shows what the dangling value was, rather than a generic placeholder. For
+`Declared` entries the live description still comes from the active generation's
+schema (the stored copy equals it, having just been refreshed); the stored copy is
+what backs an `Obsolete` entry and any declared key whose value row pre-dates the
+current eval.
 
 `get_secret(machine, key)`:
 
@@ -367,13 +402,17 @@ everything else is derived rather than stored:
   activation timestamp; storing a second copy would only risk drift.
 - **Per-machine state version, not a schema version.** *Schema* migration is
   **global** — one DB schema version (Phase 3, PRAGMA `user_version`); there is
-  no `MachineView.schema_version`. Separately, each machine carries a stored
-  state-format version (`state_version`, MS15) for **state migration** —
-  migrating realized state/content (mounts, init format, store layout) across
-  codchi upgrades. New machines start at the current baseline (≥1);
+  no `MachineView.schema_version` (that name is dead). Separately, each machine
+  carries a stored state-format version (`state_version`, MS15) for **state
+  migration** — migrating realized state/content (mounts, init format, store
+  layout) across codchi upgrades. New machines start at the current baseline (≥1);
   **beta-migrated machines are 0** (set by beta migration; they predate the v1
-  state format); state migrations bump it. It is distinct from the removed
-  `schema_version` and from the global DB schema version.
+  state format); state migrations bump it. It is distinct from the global DB
+  schema version. Unlike `created_at`/lock/platform metadata, `state_version` is a
+  genuinely durable, non-derived machine fact, so it **is surfaced on the wire** as
+  `MachineView.state_version: u32` (a consumer — the state-migration UX — needs
+  it; the MS15 "DB-only until needed" default is now resolved in favor of
+  exposing it).
 - **Deterministic list order.** `list_machines` returns machines **ascending by
   `MachineId`** (the case-sensitive stored spelling, MS6), with synthesized
   in-flight-create views (MS1) interleaved by their target id. Matches beta's
@@ -475,8 +514,12 @@ the generation commit, Phase 6) or the job table (Phase 5).
 
 - **`machines`** — `id TEXT PRIMARY KEY` (case-sensitive spelling, MS6); a
   `UNIQUE INDEX ON machines(id COLLATE NOCASE)` for the case-insensitive
-  collision rule (MS6); `active_generation_id` FK to the (Phase-6) generations
-  table; `state_version INTEGER NOT NULL` — the per-machine *state*-format
+  collision rule (MS6); a nullable `active_generation_id INTEGER` column whose
+  `REFERENCES generations(id)` constraint is **added in Phase 6** with the
+  generations table (it cannot be declared now: with `foreign_keys=ON` SQLite
+  resolves an FK parent at prepare time, so any insert into `machines` would fail
+  against the absent parent — and Phase 4 inserts none anyway, born-at-commit
+  being Phase 6); `state_version INTEGER NOT NULL` — the per-machine *state*-format
   version for state migration (MS12), set to the current baseline (≥1) by create
   and to 0 by beta migration. No lock column, no `created_at`, no
   `schema_version` (that is the global DB version), no platform/runtime columns —
@@ -485,19 +528,25 @@ the generation commit, Phase 6) or the job table (Phase 5).
   is_nixpkgs_source BOOLEAN)`, `UNIQUE(machine_id, position)` and
   `UNIQUE(machine_id, url)` (ordering + duplicate rejection, MS7/MS8), read
   ordered by `position`.
-- **`secret_values`** — `(machine_id FK, key, plaintext,
-  last_declared_description)` keyed by `(machine, key)` (MS10). There is no
-  stored declarations table: declaration membership and live descriptions for
-  *declared* keys are projected from the active generation's schema; the stored
-  `last_declared_description` only backs *obsolete* entries (MS10).
+- **`secret_values`** — `(machine_id FK, key, plaintext, description)` keyed by
+  `(machine, key)` (MS10), `description TEXT NOT NULL`. There is no stored
+  declarations table: declaration *membership* for *declared* keys is projected
+  from the active generation's schema. `description` is the key's last-declared
+  description, refreshed on every config eval while the key stays declared
+  (`refresh_secret_descriptions`) and frozen once it drops out — so it is the live
+  description for a stored declared value and the salvaged one for an *obsolete*
+  value (MS10). It is not nullable: a value row is born via `set_secret`, which
+  writes the current declared description.
 
 Boundary calls:
 
-- **The flake lock is derived, not a `machines` column.** Each generation stores
-  its own `flake.lock` content/hash; the machine's current lock *is* the active
-  generation's lock, so `MachineDetail.flake_lock_hash` reads from the active
-  generation (`None` only on the synthesized creating view). MS9's "the machine's
-  stored lock" therefore means "the active generation's lock."
+- **The flake lock is derived, not a `machines` column — nor a `MachineDetail`
+  field.** Each generation stores its own `flake.lock` content/hash; the machine's
+  current lock *is* the active generation's lock, so `flake_lock_hash` is a
+  **getter** `MachineDetail::flake_lock_hash(&self) -> Option<&str>` that looks up
+  `view.active_generation` in `generations` (`None` only on the synthesized
+  creating view), not a stored field that could drift. MS9's "the machine's stored
+  lock" therefore means "the active generation's lock."
 - **The `generations` table, lock/config-snapshot storage, and the atomic
   birth/commit transaction are Phase 6.** Phase 4 defines the `active_generation_id`
   FK *shape* but cannot create a machine row (birth = the Phase-6 commit). Phase
@@ -506,19 +555,25 @@ Boundary calls:
 
 ## `codchi-api` contract revision (first implementation task)
 
-The Phase-4 decisions above are the explicit `codchi-api` revisions R11 requires,
-but the frozen contract crate **has not been edited yet** — it still carries the
-pre-grill shape. Applying these edits (plus the `testing.rs` mock and the OpenAPI
-snapshot) is the first implementation task of Phase 4, before any SQLite work.
-Locked divergences, with the frozen-code anchor:
+The Phase-4 decisions above are the explicit `codchi-api` revisions R11 requires.
+Applying these edits (plus the `testing.rs` mock and the OpenAPI snapshot) is the
+first implementation task of Phase 4, before any SQLite work. Locked divergences:
 
-- **Drop `MachineView.schema_version: u32`** (`dto/machine.rs:51`,
-  `testing.rs:73`). Schema migration is global (MS12); the per-machine version
-  that survives is the **`state_version` column** on the `machines` table
-  (MS15) — a DB column, *not* re-added as a wire field unless a later phase needs
-  it. This is the "keeping schema_version" answer: the *name* dies, the
-  *per-machine versioning idea* lives on as `state_version`.
-- **Fix `MachineView.active_generation` doc comment** (`dto/machine.rs:42`):
+- **Rename `MachineView.schema_version: u32` → `state_version: u32`.** Schema
+  migration is global (MS12); the *name* `schema_version` dies. The per-machine
+  *state*-format version lives on as `state_version` and **is surfaced on the
+  wire** as `MachineView.state_version: u32` (MS12/MS15) — `0` for beta-migrated
+  machines, `>= 1` otherwise.
+- **`MachineView.run_status: RunStatus` → `Option<RunStatus>` with
+  `RunStatus = Absent | Stopped | Running`** (drop the `Reconciling` variant), and
+  **add `MachineView.lifecycle: Lifecycle`** (`Creating | Reconciling | Absent |
+  Stopped | Running`), the server-derived rollup (MS2). `run_status` is the raw
+  container observation (`None` = not yet observed); `lifecycle` folds in
+  `Creating`/`Reconciling`. Revises R10's flat `run_status`.
+- **`MachineDetail.flake_lock_hash: Option<String>` field → getter**
+  `MachineDetail::flake_lock_hash(&self) -> Option<&str>` derived from the active
+  generation (MS9/MS15) — no stored field that could drift.
+- **Fix `MachineView.active_generation` doc comment**:
   `None ⇒ creating or failed-create (R9)` → `None ⇒ synthesized in-flight-create
   view only` — there is no durable failed-create row (R9 revised, MS1).
 - **`clone_machine` → `duplicate_machine`** returning `JobView<Duplicated>`
@@ -530,9 +585,14 @@ Locked divergences, with the frozen-code anchor:
 - **Add error variants**: `CreateArtifactsRetained { machine, job }`,
   `SecretNotSet { machine, key }`, `JobNotTerminal`, `JobArtifactsNotFound`
   (00-contract error catalog; MS10/JS-D2/JS-D3).
-- **Add routes** `prepare_job_debug` and `delete_job_artifacts` (JS-D2) — these
-  land with the **Phase 5** job system, listed here only so the contract bump is
-  tracked in one place.
+- **Add routes** `prepare_job_debug` and `delete_job_artifacts` plus the
+  `JobView.has_diagnostic_workspace` field (JS-D2/JS-D1) — these are **Phase 5**,
+  not Phase 4. They are listed here only so the whole contract bump is tracked in
+  one place. **Phase 4 must not add them**: the typed route catalog stays at 28
+  in Phase 4 (`ROUTES.len() == 28`) and reaches 30 in Phase 5. Adding the four
+  error variants above is Phase 4 (the catalog is one declarative unit and they
+  are additive); adding the two *routes/methods* is Phase 5, when the job table
+  that backs them exists.
 
 Open (not yet locked — do **not** edit blindly):
 
@@ -541,8 +601,9 @@ Open (not yet locked — do **not** edit blindly):
   canonical `url` format, are pending the flake-URL normalizer decision
   (`v1/todo/flake-url-canonical-form.md`, MS8/MS14). Settle that before touching
   `ModuleSpec`.
-- **Whether `state_version` surfaces on the wire** at all. MS15 only mandates the
-  column; default to DB-only until a consumer needs it.
+
+(The earlier "whether `state_version` surfaces on the wire" question is now
+resolved — it does, as `MachineView.state_version`, MS12.)
 
 ## Acceptance criteria
 
@@ -552,11 +613,27 @@ Open (not yet locked — do **not** edit blindly):
 - `ConfigurationStatus` derives correctly without a build: `Unbuilt` only on a
   synthesized in-flight-create view; `Applied`/`NeedsRebuild` by config-snapshot
   compare (MS11).
-- `list_secrets` derives the four `(declared?, has_value?)` states, and
-  `get_secret` / `set_secret` / `delete_secret` honor the MS10 matrix including
-  `SecretNotSet` and obsolete-key handling.
-- Request validation rejects at the boundary (id rules, NOCASE collision,
-  canonical-form URLs, duplicate URLs, ordering, nixpkgs cardinality) with
-  `ApiError::Validation`.
+- `lifecycle` derives as the total rollup of `active_generation` + `run_status`
+  (MS2): `Creating` (no active generation) / `Reconciling` (`run_status` None) /
+  `Absent`/`Stopped`/`Running` (the container observation).
+- The MS10 secret logic is implemented and unit-tested as **pure**
+  derivation/classifiers: `list_secrets`' four `(declared?, has_value?)` states,
+  and the `get_secret` (`SecretNotSet`/unknown), `set_secret` (reject
+  obsolete/unknown), and `delete_secret` (obsolete-key) matrices, plus the
+  `secret_values` accessors (including `refresh_secret_descriptions`, which an
+  eval calls to refresh declared keys' descriptions, MS10). **Wiring these into
+  the live endpoints is Phase 6**,
+  not Phase 4: the *declared schema* (key names + descriptions) is the active
+  generation's, and a machine — hence a generation — does not exist until the
+  Phase-6 born-at-commit write path. Until then the live secret endpoints
+  delegate to the mock; the Phase-4 deliverable is the matrix logic ready for that
+  wiring.
+- Request validation rejects at the boundary with `ApiError::Validation`: id
+  rules, `#attr`-bearing module URLs (the full canonical normalizer is Phase 6),
+  duplicate URLs, nixpkgs cardinality, and the **committed-row** NOCASE collision
+  (wired into `create_machine`/`duplicate_machine`; the `machines_id_nocase`
+  unique index is only a backstop behind it). The other half of the create-id
+  namespace — a retained failed-create **job** (MS1/R9) → `CreateArtifactsRetained`
+  — needs the job table and is checked in **Phase 5**.
 - No create/duplicate write path and no job/generation tables — those land in
   Phases 5/6; Phase 4 ships schema + pure read/derivation only.

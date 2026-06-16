@@ -177,10 +177,10 @@
         }
       }
     },
-    "/v1/machines/{id}/clone": {
+    "/v1/machines/{id}/duplicate": {
       "post": {
-        "summary": "Clone a machine (job)",
-        "operationId": "clone_machine",
+        "summary": "Duplicate a machine (job)",
+        "operationId": "duplicate_machine",
         "parameters": [
           {
             "in": "path",
@@ -196,7 +196,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CloneMachineRequest"
+                "$ref": "#/components/schemas/DuplicateMachineRequest"
               }
             }
           },
@@ -214,11 +214,11 @@
             }
           },
           "200": {
-            "description": "Clone a machine (job)",
+            "description": "Duplicate a machine (job)",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JobView_for_Null"
+                  "$ref": "#/components/schemas/JobView_for_Duplicated"
                 }
               }
             }
@@ -1226,6 +1226,29 @@
             }
           },
           {
+            "description": "`create` rejected: the id is reserved by a terminal-failed create job that still has retained artifacts (R9 / Phase 5 JS-D3). The client can inspect or clear `job` to free the id.",
+            "type": "object",
+            "required": [
+              "code",
+              "job",
+              "machine"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "create_artifacts_retained"
+                ]
+              },
+              "job": {
+                "$ref": "#/components/schemas/JobId"
+              },
+              "machine": {
+                "type": "string"
+              }
+            }
+          },
+          {
             "description": "No job with this id exists, or its metadata was pruned.",
             "type": "object",
             "required": [
@@ -1264,6 +1287,48 @@
               },
               "state": {
                 "$ref": "#/components/schemas/JobState"
+              }
+            }
+          },
+          {
+            "description": "An operation that requires a finished job (e.g. `prepare_job_debug`, `delete_job_artifacts`) was called on a still-running job (Phase 5 JS-D2).",
+            "type": "object",
+            "required": [
+              "code",
+              "job",
+              "state"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "job_not_terminal"
+                ]
+              },
+              "job": {
+                "$ref": "#/components/schemas/JobId"
+              },
+              "state": {
+                "$ref": "#/components/schemas/JobState"
+              }
+            }
+          },
+          {
+            "description": "The job has no retained artifacts to debug or delete (Phase 5 JS-D2).",
+            "type": "object",
+            "required": [
+              "code",
+              "job"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "job_artifacts_not_found"
+                ]
+              },
+              "job": {
+                "$ref": "#/components/schemas/JobId"
               }
             }
           },
@@ -1386,6 +1451,29 @@
             }
           },
           {
+            "description": "`get_secret` on a key that is declared but has no stored value (MS10), so the CLI can say \"declared, set it\" rather than \"no such secret\". Unknown keys are `Validation`, not this.",
+            "type": "object",
+            "required": [
+              "code",
+              "key",
+              "machine"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "secret_not_set"
+                ]
+              },
+              "key": {
+                "type": "string"
+              },
+              "machine": {
+                "type": "string"
+              }
+            }
+          },
+          {
             "description": "A request field failed validation (P4). `field` is the request field path (e.g. `id`, `source`, `target`).",
             "type": "object",
             "required": [
@@ -1429,18 +1517,6 @@
           }
         ]
       },
-      "CloneMachineRequest": {
-        "description": "Clone an existing machine into a new one (job). The source is the `{id}` path segment of `POST /machines/{id}/clone`; only the new name travels in the body.",
-        "type": "object",
-        "required": [
-          "target"
-        ],
-        "properties": {
-          "target": {
-            "type": "string"
-          }
-        }
-      },
       "Component": {
         "description": "The subsystem a finding pertains to.",
         "type": "string",
@@ -1473,6 +1549,32 @@
           }
         }
       },
+      "ConfigurationStatus": {
+        "description": "Pure desired-versus-active configuration projection (Phase 4 MS11); replaces beta's `UpdateStatus`. Never stored — derived on every machine read. Update-availability (\"a newer remote input exists\") is deliberately **not** on this axis (MS11): it requires fetching remote inputs and is a future separate in-memory field.",
+        "oneOf": [
+          {
+            "description": "Only on the synthesized in-flight-create view (active_generation `None`).",
+            "type": "string",
+            "enum": [
+              "unbuilt"
+            ]
+          },
+          {
+            "description": "Active generation's configuration snapshot equals the desired config.",
+            "type": "string",
+            "enum": [
+              "applied"
+            ]
+          },
+          {
+            "description": "Desired config differs from the active generation's snapshot.",
+            "type": "string",
+            "enum": [
+              "needs_rebuild"
+            ]
+          }
+        ]
+      },
       "CreateMachineRequest": {
         "description": "Create a new machine (job). All inputs are supplied up front; the job runs to success or fails (R9).",
         "type": "object",
@@ -1485,7 +1587,7 @@
             "type": "string"
           },
           "keep_on_fail": {
-            "description": "Retain the failed machine row + artifacts on failure for introspection (R9). Defaults to `false` (tear down completely).",
+            "description": "On failure, retain the failed **create job**'s artifacts (its diagnostic workspace + partial platform resources) for introspection, reserving the machine id until cleared (R9/MS1 — there is no durable machine row to retain). Defaults to `false` (tear down completely).",
             "default": false,
             "type": "boolean"
           },
@@ -1526,6 +1628,30 @@
           "generated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "DuplicateMachineRequest": {
+        "description": "Duplicate an existing machine into a new, independent one (job, MS13). The source is the `{id}` path segment of `POST /machines/{id}/duplicate`; only the new name travels in the body. Not a rename: the source is untouched and the result has its own fresh generation history. The filesystem copy and the source-stopped requirement are Phase 7.",
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "type": "string"
+          }
+        }
+      },
+      "Duplicated": {
+        "description": "Typed success payload of a `duplicate` job (MS13): the new machine's first generation.",
+        "type": "object",
+        "required": [
+          "generation"
+        ],
+        "properties": {
+          "generation": {
+            "$ref": "#/components/schemas/GenerationId"
           }
         }
       },
@@ -2002,7 +2128,7 @@
             "type": "string",
             "enum": [
               "init",
-              "clone",
+              "duplicate",
               "rebuild",
               "update",
               "delete",
@@ -2089,6 +2215,25 @@
                 "type": "string",
                 "enum": [
                   "rebuilt"
+                ]
+              }
+            }
+          },
+          {
+            "description": "Typed success payload of a `duplicate` job (MS13): the new machine's first generation.",
+            "type": "object",
+            "required": [
+              "generation",
+              "kind"
+            ],
+            "properties": {
+              "generation": {
+                "$ref": "#/components/schemas/GenerationId"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "duplicated"
                 ]
               }
             }
@@ -2352,6 +2497,64 @@
           "output": {
             "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
             "$ref": "#/components/schemas/DoctorReport",
+            "nullable": true
+          },
+          "started_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "state": {
+            "$ref": "#/components/schemas/JobState"
+          },
+          "subject": {
+            "description": "The log source this job acts on (R11). Machine-less operations (`resolve_config`, `doctor_*`, `migration`) are `Server`-subject; store operations are `Store`-subject.",
+            "$ref": "#/components/schemas/LogSource"
+          }
+        }
+      },
+      "JobView_for_Duplicated": {
+        "description": "The canonical view of a job, generic over its typed success output `O`.\n\nA terminal job is exactly one of: `Failed` with `error: Some(_)`, or `Succeeded` with `output` set — or `output: None` for kinds with no output (R1). The type parameter makes the success payload visible at the call site: kind-specific methods return e.g. `JobView<Rebuilt>` or `JobView<()>` (no output), while the kind-erased [`crate::service::CodchiService::get_job`] returns the default `JobView` = `JobView<JobOutput>`.",
+        "type": "object",
+        "required": [
+          "created_at",
+          "id",
+          "kind",
+          "last_event_seq",
+          "state",
+          "subject"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "description": "`Some` iff terminal `Failed` (R1/R2).",
+            "default": null,
+            "$ref": "#/components/schemas/ApiError",
+            "nullable": true
+          },
+          "finished_at": {
+            "default": null,
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "id": {
+            "$ref": "#/components/schemas/JobId"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/JobKind"
+          },
+          "last_event_seq": {
+            "description": "Highest event sequence emitted so far.",
+            "$ref": "#/components/schemas/EventSeq"
+          },
+          "output": {
+            "description": "`Some` iff terminal `Succeeded` for kinds that produce output (R1/R2).",
+            "$ref": "#/components/schemas/Duplicated",
             "nullable": true
           },
           "started_at": {
@@ -2717,6 +2920,39 @@
           }
         }
       },
+      "Lifecycle": {
+        "description": "Server-derived display rollup of where a machine is in its lifecycle (R10). Computed once from `active_generation` + `run_status` so every client renders the same label without re-deriving the orthogonal axes; never stored.\n\nDerivation (total):\n\n```text active_generation is None   => Creating     (synthesized in-flight create, MS1) run_status is None          => Reconciling  (born, no observation yet) run_status is Some(Absent)  => Absent       (container removed out-of-band) run_status is Some(Stopped) => Stopped run_status is Some(Running) => Running ```",
+        "oneOf": [
+          {
+            "type": "string",
+            "enum": [
+              "stopped",
+              "running"
+            ]
+          },
+          {
+            "description": "Synthesized in-flight-create view: the create job is running and no durable machine row exists yet (`active_generation == None`, MS1).",
+            "type": "string",
+            "enum": [
+              "creating"
+            ]
+          },
+          {
+            "description": "Born machine with no reconciler observation yet (e.g. just after daemon restart, or an initial probe in flight).",
+            "type": "string",
+            "enum": [
+              "reconciling"
+            ]
+          },
+          {
+            "description": "Container confirmed removed out-of-band (`run_status == Some(Absent)`).",
+            "type": "string",
+            "enum": [
+              "absent"
+            ]
+          }
+        ]
+      },
       "LockInputChange": {
         "description": "One changed flake input in an `update` job's lock diff.",
         "type": "object",
@@ -2820,16 +3056,12 @@
         "description": "The detail view of a machine.",
         "type": "object",
         "required": [
-          "flake_lock_hash",
           "generations",
           "modules",
           "secrets",
           "view"
         ],
         "properties": {
-          "flake_lock_hash": {
-            "type": "string"
-          },
           "generations": {
             "type": "array",
             "items": {
@@ -2857,14 +3089,14 @@
         "description": "The list view of a machine. Returned from the daemon-maintained snapshot; read endpoints must not probe synchronously (P6).",
         "type": "object",
         "required": [
+          "configuration_status",
           "id",
-          "run_status",
-          "schema_version",
-          "update_status"
+          "lifecycle",
+          "state_version"
         ],
         "properties": {
           "active_generation": {
-            "description": "`None` ⇒ creating or failed-create (R9).",
+            "description": "`None` ⇒ synthesized in-flight-create view only; no durable machine row is ever `None` (R9/MS1 — a machine is born at its first generation commit).",
             "default": null,
             "$ref": "#/components/schemas/GenerationId",
             "nullable": true
@@ -2874,6 +3106,9 @@
             "default": null,
             "$ref": "#/components/schemas/JobId",
             "nullable": true
+          },
+          "configuration_status": {
+            "$ref": "#/components/schemas/ConfigurationStatus"
           },
           "findings": {
             "description": "Active findings; `health = health(&findings)` (R10).",
@@ -2898,20 +3133,25 @@
             "format": "date-time",
             "nullable": true
           },
-          "run_status": {
-            "$ref": "#/components/schemas/RunStatus"
+          "lifecycle": {
+            "description": "Server-derived lifecycle rollup for display (R10) — folds `run_status` + `active_generation` into one label.",
+            "$ref": "#/components/schemas/Lifecycle"
           },
-          "schema_version": {
-            "type": "integer",
-            "format": "uint32",
-            "minimum": 0.0
+          "run_status": {
+            "description": "Raw platform-container observation; `None` until the reconciler reports one (MS2). For the display rollup use `lifecycle`.",
+            "default": null,
+            "$ref": "#/components/schemas/RunStatus",
+            "nullable": true
           },
           "snapshot_stale": {
             "default": false,
             "type": "boolean"
           },
-          "update_status": {
-            "$ref": "#/components/schemas/UpdateStatus"
+          "state_version": {
+            "description": "Per-machine **state**-format version for state migration (MS12/MS15): `0` for beta-migrated machines, `>= 1` otherwise. This is the per-machine state version (the renamed `schema_version` idea), distinct from the global DB schema version (`PRAGMA user_version`).",
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
           }
         }
       },
@@ -2999,24 +3239,19 @@
         }
       },
       "ModuleSpec": {
-        "description": "A single module a machine pulls in. `url` is the codchi flake-url form (`<scheme>://<host>/<repo>?<query>#<attr>`, see beta `FlakeUrl`); `name` is the local handle used in CLI/config.",
+        "description": "A single module a machine pulls in (Phase 4 MS8). The complete canonical Codchi flake URL — including its `#attr` module attribute path — is the module's whole durable identity; modules have **no** user-visible name (beta's mutable map-key handles are not domain identity). The canonical URL form and its normalizer are tracked in `v1/todo/flake-url-canonical-form.md` and locked with the Phase-6 generated-`flake.nix` normalizer.",
         "type": "object",
         "required": [
-          "name",
           "url"
         ],
         "properties": {
           "is_nixpkgs_source": {
-            "description": "Whether this module supplies the machine's `nixpkgs` input (beta `nixpkgs_from`).",
+            "description": "Whether this module supplies the machine's `nixpkgs` input (beta `nixpkgs_from`). At most one module per machine may set this (MS8).",
             "default": false,
             "type": "boolean"
           },
-          "name": {
-            "description": "Local handle for the module (the map key in beta `MachineConfig`).",
-            "type": "string"
-          },
           "url": {
-            "description": "Codchi flake-url including the module attribute path.",
+            "description": "Canonical Codchi flake URL including the module attribute path. The whole durable identity of the module (MS8).",
             "type": "string"
           }
         }
@@ -3080,11 +3315,22 @@
         }
       },
       "RunStatus": {
-        "description": "Platform liveness, from the reconciler snapshot (P6).",
-        "type": "string",
-        "enum": [
-          "stopped",
-          "running"
+        "description": "Raw platform-container observation, from the in-memory reconciler snapshot (P6, Phase 4 MS2): the status of the realized container *itself*. Carried as `Option<RunStatus>` on `MachineView`, where `None` means the reconciler has not reported an observation yet — surfaced to users as `Lifecycle::Reconciling`, not a `RunStatus` variant. Integrity failures are represented as `findings`, not a runtime `Failed` state. The reconciler that produces these is Phase 5/7; SQLite never stores them (MS2).",
+        "oneOf": [
+          {
+            "type": "string",
+            "enum": [
+              "stopped",
+              "running"
+            ]
+          },
+          {
+            "description": "The container is confirmed gone. A machine is born only at a successful platform install (MS1), so the only way a born machine observes `Absent` is its container being removed out-of-band (e.g. `podman rm`).",
+            "type": "string",
+            "enum": [
+              "absent"
+            ]
+          }
         ]
       },
       "SchemaStatus": {
@@ -3108,27 +3354,51 @@
         }
       },
       "SecretKey": {
-        "description": "A declared secret key. Values are never carried on this type.",
+        "description": "A secret key as surfaced by `list_secrets` — the union of {active-generation declared keys} ∪ {keys with a stored value} (MS10). Values are never carried on this type.",
         "type": "object",
         "required": [
           "description",
           "has_value",
-          "name"
+          "name",
+          "status"
         ],
         "properties": {
           "description": {
-            "description": "Human-readable description from the NixOS declaration.",
+            "description": "Human-readable description: from the active generation's declaration for `Declared` keys, or the value row's stored `description` — refreshed on every config eval, frozen once the key drops out — for `Obsolete` ones (MS10).",
             "type": "string"
           },
           "has_value": {
-            "description": "Whether a value is currently stored for this key.",
+            "description": "Whether a plaintext value is currently stored for this key.",
             "type": "boolean"
           },
           "name": {
-            "description": "Declared key name (matches the `codchi.secrets.env` attribute).",
+            "description": "Key name (matches the `codchi.secrets.env` attribute).",
             "type": "string"
+          },
+          "status": {
+            "description": "Whether the key is still declared or a dangling obsolete value (MS10).",
+            "$ref": "#/components/schemas/SecretStatus"
           }
         }
+      },
+      "SecretStatus": {
+        "description": "Whether a secret key is still declared by the active generation, or a dangling value left behind after its declaration dropped out (Phase 4 MS10).",
+        "oneOf": [
+          {
+            "description": "Declared by the active generation's secret schema.",
+            "type": "string",
+            "enum": [
+              "declared"
+            ]
+          },
+          {
+            "description": "No longer declared, but a stored value survives (not projected into the machine env; surfaces a `secret.obsolete_value` finding).",
+            "type": "string",
+            "enum": [
+              "obsolete"
+            ]
+          }
+        ]
       },
       "ServerLifecycle": {
         "description": "Headline daemon lifecycle state.",
@@ -3305,15 +3575,6 @@
             "$ref": "#/components/schemas/StoreState"
           }
         }
-      },
-      "UpdateStatus": {
-        "description": "Desired-vs-built config status (beta's `ConfigStatus`).",
-        "type": "string",
-        "enum": [
-          "up_to_date",
-          "needs_rebuild",
-          "updates_available"
-        ]
       },
       "Updated": {
         "description": "Typed success payload of an `update` job: the new generation plus the `flake.lock` diff.",

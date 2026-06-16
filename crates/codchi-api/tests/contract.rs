@@ -60,6 +60,7 @@ fn api_error_variants_roundtrip() {
                 name: SecretName("TOKEN".to_owned()),
                 description: "desc".to_owned(),
                 has_value: false,
+                status: SecretStatus::Declared,
             }],
         },
         ApiError::Validation {
@@ -178,7 +179,6 @@ fn job_output_variants_roundtrip() {
     let outputs = vec![
         JobOutput::ConfigResolution(ConfigResolution {
             available_modules: vec![ModuleSpec {
-                name: "base".into(),
                 url: "github://github.com/aformatik/codchi?#nixosModules.base".into(),
                 is_nixpkgs_source: true,
             }],
@@ -328,9 +328,11 @@ fn core_views_roundtrip() {
 
     let view = MachineView {
         id: MachineId("demo".into()),
-        run_status: RunStatus::Running,
-        update_status: UpdateStatus::NeedsRebuild,
+        run_status: Some(RunStatus::Running),
+        lifecycle: Lifecycle::Running,
+        configuration_status: ConfigurationStatus::NeedsRebuild,
         active_generation: Some(GenerationId(1)),
+        state_version: 1,
         findings: vec![Finding {
             id: FindingId::new(),
             severity: Severity::Warning,
@@ -344,7 +346,6 @@ fn core_views_roundtrip() {
             created_at: ts(),
         }],
         busy_with: None,
-        schema_version: 1,
         last_reconciled_at: Some(ts()),
         last_reconcile_attempt_at: Some(ts()),
         snapshot_stale: false,
@@ -355,7 +356,6 @@ fn core_views_roundtrip() {
         view,
         modules: vec![],
         secrets: vec![],
-        flake_lock_hash: "h".into(),
         generations: vec![],
     });
 
@@ -529,7 +529,12 @@ fn every_route_path_round_trips() {
     // Single `{id}` machine routes.
     check!(GetMachineEp, (m(),), &["demo"], "/v1/machines/demo");
     check!(DeleteMachineEp, (m(),), &["demo"], "/v1/machines/demo");
-    check!(CloneMachineEp, (m(),), &["demo"], "/v1/machines/demo/clone");
+    check!(
+        DuplicateMachineEp,
+        (m(),),
+        &["demo"],
+        "/v1/machines/demo/duplicate"
+    );
     check!(SetModulesEp, (m(),), &["demo"], "/v1/machines/demo/modules");
     check!(
         ListSecretsEp,
@@ -693,9 +698,9 @@ fn mock_serves_every_endpoint() {
         })
         .await
         .unwrap();
-        svc.clone_machine(
+        svc.duplicate_machine(
             &id,
-            CloneMachineRequest {
+            DuplicateMachineRequest {
                 target: MachineId("demo2".into()),
             },
         )

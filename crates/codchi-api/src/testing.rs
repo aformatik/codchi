@@ -36,7 +36,6 @@ fn fixed_time() -> DateTime<Utc> {
 
 fn sample_module() -> ModuleSpec {
     ModuleSpec {
-        name: "base".to_owned(),
         url: "github://github.com/aformatik/codchi?#nixosModules.base".to_owned(),
         is_nixpkgs_source: true,
     }
@@ -47,6 +46,7 @@ fn sample_secret() -> SecretKey {
         name: SecretName("GITHUB_TOKEN".to_owned()),
         description: "Token used to fetch private flakes".to_owned(),
         has_value: true,
+        status: SecretStatus::Declared,
     }
 }
 
@@ -65,12 +65,13 @@ fn sample_generation(id: u64) -> GenerationView {
 fn sample_machine_view(id: MachineId) -> MachineView {
     MachineView {
         id,
-        run_status: RunStatus::Running,
-        update_status: UpdateStatus::UpToDate,
+        run_status: Some(RunStatus::Running),
+        lifecycle: Lifecycle::Running,
+        configuration_status: ConfigurationStatus::Applied,
         active_generation: Some(GenerationId(1)),
+        state_version: 1,
         findings: Vec::new(),
         busy_with: None,
-        schema_version: 1,
         last_reconciled_at: Some(fixed_time()),
         last_reconcile_attempt_at: Some(fixed_time()),
         snapshot_stale: false,
@@ -138,7 +139,6 @@ impl CodchiService for MockCodchiService {
             view: sample_machine_view(id.clone()),
             modules: vec![sample_module()],
             secrets: vec![sample_secret()],
-            flake_lock_hash: "sha256-0000000000000000000000000000000000000000000=".to_owned(),
             generations: vec![sample_generation(1)],
         })
     }
@@ -148,14 +148,14 @@ impl CodchiService for MockCodchiService {
         Ok(accepted_job(JobKind::Init, Some(req.id)))
     }
 
-    async fn clone_machine(
+    async fn duplicate_machine(
         &self,
         source: &MachineId,
-        req: CloneMachineRequest,
-    ) -> Result<JobView<()>, ApiError> {
+        req: DuplicateMachineRequest,
+    ) -> Result<JobView<Duplicated>, ApiError> {
         source.validate("id")?;
         req.target.validate("target")?;
-        Ok(accepted_job(JobKind::Clone, Some(req.target)))
+        Ok(accepted_job(JobKind::Duplicate, Some(req.target)))
     }
 
     async fn delete_machine(&self, id: &MachineId) -> Result<JobView<()>, ApiError> {

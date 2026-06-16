@@ -84,15 +84,34 @@ impl FromStr for SecretName {
     }
 }
 
-/// A declared secret key. Values are never carried on this type.
+/// Whether a secret key is still declared by the active generation, or a
+/// dangling value left behind after its declaration dropped out (Phase 4 MS10).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SecretStatus {
+    /// Declared by the active generation's secret schema.
+    Declared,
+    /// No longer declared, but a stored value survives (not projected into the
+    /// machine env; surfaces a `secret.obsolete_value` finding).
+    Obsolete,
+}
+
+/// A secret key as surfaced by `list_secrets` — the union of {active-generation
+/// declared keys} ∪ {keys with a stored value} (MS10). Values are never carried
+/// on this type.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SecretKey {
-    /// Declared key name (matches the `codchi.secrets.env` attribute).
+    /// Key name (matches the `codchi.secrets.env` attribute).
     pub name: SecretName,
-    /// Human-readable description from the NixOS declaration.
+    /// Human-readable description: from the active generation's declaration for
+    /// `Declared` keys, or the value row's stored `description` — refreshed on
+    /// every config eval, frozen once the key drops out — for `Obsolete` ones
+    /// (MS10).
     pub description: String,
-    /// Whether a value is currently stored for this key.
+    /// Whether a plaintext value is currently stored for this key.
     pub has_value: bool,
+    /// Whether the key is still declared or a dangling obsolete value (MS10).
+    pub status: SecretStatus,
 }
 
 /// Body for `set_secret` — the plaintext value (the key is in the path).

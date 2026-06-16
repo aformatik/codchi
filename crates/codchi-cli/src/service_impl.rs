@@ -34,12 +34,12 @@ impl CodchiService for HttpClient {
         self.call_json::<CreateMachineEp>((), (), req).await
     }
 
-    async fn clone_machine(
+    async fn duplicate_machine(
         &self,
         source: &MachineId,
-        req: CloneMachineRequest,
-    ) -> Result<JobView<()>, ApiError> {
-        self.call_json::<CloneMachineEp>((source.clone(),), (), req)
+        req: DuplicateMachineRequest,
+    ) -> Result<JobView<Duplicated>, ApiError> {
+        self.call_json::<DuplicateMachineEp>((source.clone(),), (), req)
             .await
     }
 

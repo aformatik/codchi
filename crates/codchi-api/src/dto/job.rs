@@ -45,7 +45,7 @@ impl JobState {
 #[serde(rename_all = "snake_case")]
 pub enum JobKind {
     Init,
-    Clone,
+    Duplicate,
     Rebuild,
     Update,
     Delete,
@@ -83,6 +83,13 @@ pub struct Rebuilt {
     pub generation: GenerationId,
 }
 
+/// Typed success payload of a `duplicate` job (MS13): the new machine's first
+/// generation.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Duplicated {
+    pub generation: GenerationId,
+}
+
 /// Typed success payload of an `update` job: the new generation plus the
 /// `flake.lock` diff.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -111,6 +118,7 @@ pub struct GarbageCollected {
 pub enum JobOutput {
     ConfigResolution(ConfigResolution),
     Rebuilt(Rebuilt),
+    Duplicated(Duplicated),
     Updated(Updated),
     GarbageCollected(GarbageCollected),
     Migrated(MigrationSummary),
@@ -131,6 +139,7 @@ macro_rules! job_output_from {
 job_output_from! {
     ConfigResolution => ConfigResolution,
     Rebuilt => Rebuilt,
+    Duplicated => Duplicated,
     Updated => Updated,
     GarbageCollected => GarbageCollected,
     Migrated => MigrationSummary,

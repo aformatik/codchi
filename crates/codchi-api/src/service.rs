@@ -34,11 +34,12 @@ pub trait CodchiService: Send + Sync {
     async fn get_machine(&self, id: &MachineId) -> Result<MachineDetail, ApiError>;
     async fn create_machine(&self, req: CreateMachineRequest) -> Result<JobView<()>, ApiError>;
     /// `source` is the `{id}` path segment; `req` carries only the new name.
-    async fn clone_machine(
+    /// Duplicates the source into a new independent machine (MS13); not a rename.
+    async fn duplicate_machine(
         &self,
         source: &MachineId,
-        req: CloneMachineRequest,
-    ) -> Result<JobView<()>, ApiError>;
+        req: DuplicateMachineRequest,
+    ) -> Result<JobView<Duplicated>, ApiError>;
     async fn delete_machine(&self, id: &MachineId) -> Result<JobView<()>, ApiError>;
 
     // ---- modules / config / secrets ----
