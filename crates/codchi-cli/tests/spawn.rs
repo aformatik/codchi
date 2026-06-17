@@ -6,6 +6,9 @@
 //! so the guard's behavior is pinned: a stalled server, a never-bound socket, a
 //! degraded server, and the happy path all resolve **within the bound** — none
 //! hang.
+//!
+//! Unix-only: drives the Unix-socket transport and spawns `codchi-server`.
+#![cfg(unix)]
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};

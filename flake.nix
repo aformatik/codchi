@@ -38,6 +38,11 @@
               inherit (inputs) self;
             };
             codchi = self.callPackage ./crates { targetPlatform = "linux"; };
+            # Windows cross-build (xwin/MSVC). Dev-only for now: the daemon's host
+            # transport and store driver are unported (Phase 12/13), so the
+            # Windows binary serves a mock store. Keeps the windows-msvc target
+            # building so it can be developed.
+            codchi-windows = self.callPackage ./crates { targetPlatform = "windows"; };
             codchi-container-utils = self.callPackage ./crates/codchi-container-utils { };
 
             mkContainer = type: driver: (import ./nix/container
@@ -134,6 +139,12 @@
 
           devShells.${system} = {
             default = pkgs.callPackage ./crates/shell.nix { targetPlatform = "linux"; };
+            # `use flake ".#windows"` (see .envrc) when developing the Windows
+            # build under WSL: the xwin/MSVC toolchain + Wine runner.
+            windows = pkgs.callPackage ./crates/shell.nix {
+              targetPlatform = "windows";
+              codchi = pkgs.codchi-windows;
+            };
           };
 
           checks.${system} = {

@@ -10,10 +10,13 @@ use codchi_api::dto::{
 };
 use codchi_api::{ApiError, CodchiService};
 
-use crate::client::HttpClient;
-
 /// Fetch and render daemon + store + machine status.
-pub async fn run(client: &HttpClient, json: bool) -> Result<(), ApiError> {
+///
+/// Generic over the service so the CLI can dispatch against the real
+/// [`HttpClient`](crate::client::HttpClient) on Unix or the in-process
+/// [`MockCodchiService`](codchi_api::testing::MockCodchiService) on Windows
+/// (dev-only, until the host daemon/transport land in Phase 12).
+pub async fn run<S: CodchiService + ?Sized>(client: &S, json: bool) -> Result<(), ApiError> {
     let status = client.server_status().await?;
     let machines = client.list_machines().await?;
 

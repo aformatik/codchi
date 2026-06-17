@@ -2,6 +2,9 @@
 //! over a real Unix socket, exercising all three catalog response shapes (JSON,
 //! NDJSON, empty) plus the typed-error path — proving the generic `call<E>` /
 //! `mount<E>` plumbing and `impl CodchiService for HttpClient` end to end.
+//!
+//! Unix-only: round-trips over a real Unix socket.
+#![cfg(unix)]
 
 use std::path::PathBuf;
 

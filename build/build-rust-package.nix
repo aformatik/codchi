@@ -150,7 +150,9 @@ let
         nativeBuildInputs = [
           llvmPackages.llvm
           llvmPackages.bintools
-          llvmPackages.clang
+          # Unwrapped clang: cc-rs invokes `clang-cl` for the MSVC target, and the
+          # nix cc-wrapper (multi-target-unaware) breaks the `/imsvc` SDK includes.
+          llvmPackages.clang-unwrapped
           llvmPackages.lld
           cargo-xwin
           nix-git

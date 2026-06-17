@@ -25,6 +25,8 @@ pub use db::{Db, MAX_SCHEMA_VERSION};
 pub use logs::LogStore;
 #[cfg(unix)]
 pub use platform::PodmanStore;
+#[cfg(not(unix))]
+pub use platform::MockStore;
 pub use platform::{Store, StoreError, StoreLogStream, StorePlatformStatus};
 pub use router::build_router;
 pub use state::AppState;

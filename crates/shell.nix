@@ -40,14 +40,17 @@ let
         CODCHI_WSL_VERSION_MIN
         CODCHI_WSL_VERSION_MAX
         ;
-      shellHook = codchi.passthru.setupXWin "$(git rev-parse --show-toplevel)";
-      packages = [
-        (writeShellScriptBin "msvc-fetch-manifest" ''
-          CACHE="$(mktemp -d)"
-          ${codchi.passthru.xwin}/bin/xwin --accept-license --cache-dir "$CACHE" download
-          cat "$CACHE"/dl/manifest*.json
-        '')
-      ];
+      # `cargo xwin` (the cargo wrapper in codchi.passthru.rust) downloads and
+      # splats the MSVC CRT + Windows SDK on first build into ~/.cache/cargo-xwin.
+      # The old bespoke, pre-splatted hermetic SDK (passthru.{xwin,splatted,
+      # setupXWin}) is only needed by the offline package build, which returns in
+      # Phase 12/13; the dev shell has network, so let cargo-xwin manage it.
+      XWIN_ACCEPT_LICENSE = "1";
+      # cc-rs builds bundled C (rusqlite's sqlite3) for the MSVC target. Pin the
+      # *unwrapped* clang-cl: the nix cc-wrapper is not multi-target aware and
+      # mangles the MSVC `/imsvc` include flags.
+      CC_x86_64_pc_windows_msvc = "clang-cl";
+      CXX_x86_64_pc_windows_msvc = "clang-cl";
     };
     linux = {
       inherit (codchi) CODCHI_PODMAN_STORE_IMAGE;

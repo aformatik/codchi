@@ -23,9 +23,11 @@ use hyper::Request;
 use hyper::body::Incoming;
 use hyper::client::conn::http1;
 use hyper::header::{CONTENT_TYPE, HOST};
+#[cfg(unix)]
 use hyper_util::rt::TokioIo;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+#[cfg(unix)]
 use tokio::net::UnixStream;
 
 /// A typed client for a `codchi-server` listening on a Unix socket.
@@ -149,13 +151,27 @@ impl HttpClient {
         }
         .map_err(|e| ApiError::internal(format!("could not build request: {e}")))?;
 
+        let mut sender = self.open_sender().await?;
+        sender
+            .send_request(request)
+            .await
+            .map_err(|e| ApiError::internal(format!("request failed: {e}")))
+    }
+
+    /// Open a fresh connection to the server and return its request sender.
+    ///
+    /// Unix dials the per-user Unix socket (D6). Other platforms (Windows,
+    /// dev-only) have no host transport yet (Phase 12), so this fails with a
+    /// structured error rather than silently doing nothing.
+    #[cfg(unix)]
+    async fn open_sender(&self) -> Result<http1::SendRequest<Full<Bytes>>, ApiError> {
         let stream = UnixStream::connect(&self.socket).await.map_err(|e| {
             ApiError::internal(format!(
                 "could not connect to codchi-server at {}: {e}",
                 self.socket.display()
             ))
         })?;
-        let (mut sender, conn) = http1::handshake(TokioIo::new(stream))
+        let (sender, conn) = http1::handshake(TokioIo::new(stream))
             .await
             .map_err(|e| ApiError::internal(format!("connection handshake failed: {e}")))?;
         // Drive the connection in the background so a streaming body keeps
@@ -163,11 +179,14 @@ impl HttpClient {
         tokio::spawn(async move {
             let _ = conn.await;
         });
+        Ok(sender)
+    }
 
-        sender
-            .send_request(request)
-            .await
-            .map_err(|e| ApiError::internal(format!("request failed: {e}")))
+    #[cfg(not(unix))]
+    async fn open_sender(&self) -> Result<http1::SendRequest<Full<Bytes>>, ApiError> {
+        Err(ApiError::internal(
+            "codchi-server has no Windows host transport yet (Phase 12)",
+        ))
     }
 }
 
