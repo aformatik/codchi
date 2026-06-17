@@ -17,4 +17,5 @@
     enable = true;
     nix-direnv.enable = true;
   };
+  networking.resolvconf.enable = false;
 }
